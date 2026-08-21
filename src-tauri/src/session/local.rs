@@ -11,6 +11,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use tauri::AppHandle;
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 use which::which;
 
 pub struct LocalSession {

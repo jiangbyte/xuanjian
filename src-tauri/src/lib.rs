@@ -15,6 +15,39 @@ use network::NetworkState;
 use session::{AppState, SharedState};
 use std::sync::Arc;
 
+/// 构建 prevent-default 插件；Windows 额外关闭 WebView2 加速键与默认菜单。
+fn build_prevent_default_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
+    use tauri_plugin_prevent_default::Flags;
+    let flags = Flags::CONTEXT_MENU
+        | Flags::PRINT
+        | Flags::DOWNLOADS
+        | Flags::FIND
+        | Flags::RELOAD
+        | Flags::SOURCE
+        | Flags::OPEN
+        | Flags::DEV_TOOLS
+        | Flags::CARET_BROWSING;
+
+    #[cfg(windows)]
+    {
+        tauri_plugin_prevent_default::Builder::new()
+            .with_flags(flags)
+            .platform(
+                tauri_plugin_prevent_default::PlatformOptions::new()
+                    .browser_accelerator_keys(false)
+                    .dev_tools(false)
+                    .default_context_menus(false),
+            )
+            .build()
+    }
+    #[cfg(not(windows))]
+    {
+        tauri_plugin_prevent_default::Builder::new()
+            .with_flags(flags)
+            .build()
+    }
+}
+
 /// 启动 Tauri 应用：挂载插件、注入状态、注册 invoke handler。
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -25,29 +58,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(
-            // 拦截部分浏览器快捷键；刻意不拦截 Ctrl+Shift+C/V，保证终端复制粘贴可用
-            tauri_plugin_prevent_default::Builder::new()
-                .with_flags({
-                    use tauri_plugin_prevent_default::Flags;
-                    Flags::CONTEXT_MENU
-                        | Flags::PRINT
-                        | Flags::DOWNLOADS
-                        | Flags::FIND
-                        | Flags::RELOAD
-                        | Flags::SOURCE
-                        | Flags::OPEN
-                        | Flags::DEV_TOOLS
-                        | Flags::CARET_BROWSING
-                })
-                .platform(
-                    tauri_plugin_prevent_default::PlatformOptions::new()
-                        .browser_accelerator_keys(false)
-                        .dev_tools(false)
-                        .default_context_menus(false),
-                )
-                .build(),
-        )
+        // 拦截部分浏览器快捷键；刻意不拦截 Ctrl+Shift+C/V，保证终端复制粘贴可用
+        .plugin(build_prevent_default_plugin())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations("sqlite:xuanjian.db", db::migrations())
