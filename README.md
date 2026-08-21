@@ -34,26 +34,88 @@
 
 ## 界面预览
 
-> 预览图仅使用演示环境数据（如 `1.1.1.1` / `127.0.0.1` / 私网示例网段），不含真实主机与会话信息。
-
-### 网络工具
+### 主机与网络
 
 <table>
   <tr>
+    <td width="50%"><img src="docs/images/hosts.png" alt="主机操作台" /></td>
     <td width="50%"><img src="docs/images/network-ping.png" alt="连通性 Ping" /></td>
-    <td width="50%"><img src="docs/images/network-traceroute.png" alt="路由追踪" /></td>
   </tr>
   <tr>
+    <td align="center">主机操作台</td>
     <td align="center">连通性 · Ping</td>
-    <td align="center">连通性 · 路由追踪</td>
   </tr>
   <tr>
+    <td width="50%"><img src="docs/images/network-traceroute.png" alt="路由追踪" /></td>
     <td width="50%"><img src="docs/images/network-ipcalc.png" alt="IP 计算与子网拓扑" /></td>
-    <td width="50%"><img src="docs/images/network-ports.png" alt="端口探测" /></td>
   </tr>
   <tr>
+    <td align="center">连通性 · 路由追踪</td>
     <td align="center">IP 计算 · 子网拓扑</td>
-    <td align="center">端口探测</td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><img src="docs/images/network-ports.png" alt="端口探测" width="70%" /></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center">端口探测</td>
+  </tr>
+</table>
+
+### Docker · 脚本 · 笔记 · 日志
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/docker-compose.png" alt="Docker Compose" /></td>
+    <td width="50%"><img src="docs/images/docker-full.png" alt="Compose + Dockerfile" /></td>
+  </tr>
+  <tr>
+    <td align="center">Docker · Compose</td>
+    <td align="center">Docker · Compose + Dockerfile</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/docker-dockerfile.png" alt="Dockerfile 可视化" /></td>
+    <td width="50%"><img src="docs/images/scripts.png" alt="脚本库" /></td>
+  </tr>
+  <tr>
+    <td align="center">Docker · Dockerfile</td>
+    <td align="center">脚本库</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/notes.png" alt="笔记" /></td>
+    <td width="50%"><img src="docs/images/logs.png" alt="会话日志" /></td>
+  </tr>
+  <tr>
+    <td align="center">笔记</td>
+    <td align="center">会话日志</td>
+  </tr>
+</table>
+
+### 终端工作区
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/terminal-files.png" alt="文件 / SFTP" /></td>
+    <td width="50%"><img src="docs/images/terminal-scripts.png" alt="侧栏脚本" /></td>
+  </tr>
+  <tr>
+    <td align="center">文件 / SFTP</td>
+    <td align="center">侧栏脚本</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/terminal-overview.png" alt="主机概览" /></td>
+    <td width="50%"><img src="docs/images/terminal-processes.png" alt="进程" /></td>
+  </tr>
+  <tr>
+    <td align="center">主机概览</td>
+    <td align="center">进程</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/terminal-ports.png" alt="端口" /></td>
+    <td width="50%"><img src="docs/images/terminal-docker.png" alt="侧栏 Docker" /></td>
+  </tr>
+  <tr>
+    <td align="center">端口</td>
+    <td align="center">侧栏 Docker</td>
   </tr>
 </table>
 

@@ -9,7 +9,7 @@ import { selectionNavClass } from "@/lib/selection";
 import { cn } from "@/lib/utils";
 
 export const sectionAsideClass =
-  "flex w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar";
+  "flex w-48 shrink-0 flex-col border-r border-sidebar-border bg-sidebar";
 
 export const sectionAsideHeaderClass =
   "flex items-center justify-between gap-1 border-b border-sidebar-border px-2 py-2";

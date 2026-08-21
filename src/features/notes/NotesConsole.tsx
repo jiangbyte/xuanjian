@@ -1,10 +1,19 @@
 /**
  * @file 笔记控制台
  * @author Charlie
- * @description 分类侧栏 + 笔记列表 + Markdown 编辑区，支持置顶、搜索与自动保存。
+ * @description 笔记列表 + Markdown 编辑区；分类用头部下拉筛选，管理入口也在头部。
  */
 
-import { Check, Pencil, Pin, Plus, Search, Trash2, Upload } from "lucide-react";
+import {
+  Check,
+  MoreHorizontal,
+  Pencil,
+  Pin,
+  Plus,
+  Search,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -13,7 +22,6 @@ import { MarkdownEditor } from "@/components/MarkdownEditor";
 import { MarkdownViewer } from "@/components/MarkdownViewer";
 import {
   SectionAsideHeader,
-  SectionNavItem,
   sectionAsideClass,
   sectionAsideIconBtnClass,
   sectionAsideListClass,
@@ -21,6 +29,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   InputGroup,
@@ -62,6 +77,8 @@ import { exportToFile, formatImportToast, importFromFile } from "@/lib/share";
 import { cn } from "@/lib/utils";
 
 const NONE = "none";
+const FILTER_ALL = "all";
+const FILTER_NONE = "none";
 
 /** 笔记管理主界面 */
 export function NotesConsole() {
@@ -242,10 +259,60 @@ export function NotesConsole() {
     [categories, t],
   );
 
+  const filterValue =
+    categoryId == null
+      ? FILTER_ALL
+      : categoryId === -1
+        ? FILTER_NONE
+        : String(categoryId);
+
+  const selectedCategory =
+    categoryId != null && categoryId !== -1
+      ? (categories.find((c) => c.id === categoryId) ?? null)
+      : null;
+
+  const createCategory = async () => {
+    const name = await dialogs.prompt(t("notes.categoryNamePrompt"), {
+      title: t("notes.newCategory"),
+    });
+    if (!name?.trim()) return;
+    try {
+      const id = await createNoteCategory(name);
+      await reload();
+      setCategoryId(id);
+    } catch (e) {
+      await dialogs.alert(String(e));
+    }
+  };
+
+  const renameSelectedCategory = async () => {
+    if (!selectedCategory) return;
+    const name = await dialogs.prompt(t("notes.categoryNamePrompt"), {
+      title: t("notes.renameCategory"),
+      defaultValue: selectedCategory.name,
+    });
+    if (!name?.trim()) return;
+    await renameNoteCategory(selectedCategory.id, name);
+    await reload();
+  };
+
+  const deleteSelectedCategory = async () => {
+    if (!selectedCategory) return;
+    if (
+      !(await dialogs.confirm(t("notes.deleteCategoryConfirm"), {
+        danger: true,
+      }))
+    )
+      return;
+    await deleteNoteCategory(selectedCategory.id);
+    setCategoryId(null);
+    await reload();
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="border-b border-border px-5 py-4">
-        <div className="flex flex-nowrap items-center gap-3">
+      <div className="border-b border-border px-4 py-3">
+        <div className="flex flex-nowrap items-center gap-2">
           <InputGroup className="min-w-0 flex-1">
             <InputGroupAddon>
               <Search size={14} />
@@ -256,99 +323,87 @@ export function NotesConsole() {
               onChange={(e) => setSearch(e.currentTarget.value)}
             />
           </InputGroup>
+
+          <Select
+            value={filterValue}
+            onValueChange={(v) => {
+              if (v === FILTER_ALL) setCategoryId(null);
+              else if (v === FILTER_NONE) setCategoryId(-1);
+              else setCategoryId(Number(v));
+            }}
+          >
+            <SelectTrigger
+              className="h-9 w-[160px] shrink-0"
+              aria-label={t("notes.category")}
+            >
+              <SelectValue placeholder={t("notes.categories")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={FILTER_ALL}>
+                {t("notes.allCategories")} ({notes.length})
+              </SelectItem>
+              {categories.map((c) => (
+                <SelectItem key={c.id} value={String(c.id)}>
+                  {c.name} ({categoryCounts.get(c.id) || 0})
+                </SelectItem>
+              ))}
+              <SelectItem value={FILTER_NONE}>
+                {t("notes.uncategorized")} ({categoryCounts.get("none") || 0})
+              </SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                className="size-9 shrink-0"
+                aria-label={t("notes.newCategory")}
+                onClick={() => void createCategory()}
+              >
+                <Plus size={14} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t("notes.newCategory")}</TooltipContent>
+          </Tooltip>
+
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    className="size-9 shrink-0"
+                    disabled={!selectedCategory}
+                    aria-label={t("notes.manage")}
+                  >
+                    <MoreHorizontal size={14} />
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>{t("notes.manage")}</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => void renameSelectedCategory()}>
+                {t("notes.renameCategory")}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={() => void deleteSelectedCategory()}
+              >
+                {t("notes.deleteCategory")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
       <div className="flex min-h-0 flex-1">
-        <aside className={sectionAsideClass}>
-          <SectionAsideHeader title={t("notes.categories")}>
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className={sectionAsideIconBtnClass}
-              title={t("notes.newCategory")}
-              aria-label={t("notes.newCategory")}
-              onClick={async () => {
-                const name = await dialogs.prompt(
-                  t("notes.categoryNamePrompt"),
-                  { title: t("notes.newCategory") },
-                );
-                if (!name?.trim()) return;
-                try {
-                  const id = await createNoteCategory(name);
-                  await reload();
-                  setCategoryId(id);
-                } catch (e) {
-                  await dialogs.alert(String(e));
-                }
-              }}
-            >
-              <Plus size={14} />
-            </Button>
-          </SectionAsideHeader>
-          <div className={sectionAsideListClass}>
-            <SectionNavItem
-              active={categoryId == null}
-              label={t("notes.allCategories")}
-              count={notes.length}
-              onClick={() => setCategoryId(null)}
-            />
-            {categories.map((c) => (
-              <SectionNavItem
-                key={c.id}
-                active={categoryId === c.id}
-                label={c.name}
-                count={categoryCounts.get(c.id) || 0}
-                onClick={() => setCategoryId(c.id)}
-                onContextMenu={(e) =>
-                  openContextMenu(e, openMenu, [
-                    {
-                      id: "rename",
-                      label: t("notes.renameCategory"),
-                      onClick: async () => {
-                        const name = await dialogs.prompt(
-                          t("notes.categoryNamePrompt"),
-                          {
-                            title: t("notes.renameCategory"),
-                            defaultValue: c.name,
-                          },
-                        );
-                        if (!name?.trim()) return;
-                        await renameNoteCategory(c.id, name);
-                        await reload();
-                      },
-                    },
-                    {
-                      id: "delete",
-                      label: t("notes.deleteCategory"),
-                      danger: true,
-                      onClick: async () => {
-                        if (
-                          !(await dialogs.confirm(
-                            t("notes.deleteCategoryConfirm"),
-                            { danger: true },
-                          ))
-                        )
-                          return;
-                        await deleteNoteCategory(c.id);
-                        if (categoryId === c.id) setCategoryId(null);
-                        await reload();
-                      },
-                    },
-                  ])
-                }
-              />
-            ))}
-            <SectionNavItem
-              active={categoryId === -1}
-              label={t("notes.uncategorized")}
-              count={categoryCounts.get("none") || 0}
-              onClick={() => setCategoryId(-1)}
-            />
-          </div>
-        </aside>
-
         <aside className={cn(sectionAsideClass, "w-64")}>
           <SectionAsideHeader title={t("notes.title")}>
             <Button

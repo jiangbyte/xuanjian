@@ -1,22 +1,21 @@
 /**
- * @file 主机卡片
+ * @file 主机列表行
  * @author Charlie
- * @description 单个主机的展示卡片，含多选、连接 / 编辑 / 删除与右键菜单。
+ * @description 紧凑列表项：勾选、名称与连接串、标签；悬停显示连接/编辑，删除走右键或批量栏。
  */
 
-import { Server } from "lucide-react";
+import { Cable, Pencil, Server, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { openContextMenu, useContextMenu } from "@/components/ContextMenu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { deleteHost, HostRow } from "@/lib/db";
 import { dialogs } from "@/lib/dialogs";
-import { selectionCard, selectionCheckboxClass } from "@/lib/selection";
+import { selectionCheckboxClass, selectionRow } from "@/lib/selection";
 import { cn } from "@/lib/utils";
 
-/** 单个主机卡片 */
+/** 单个主机列表行 */
 export function HostCard({
   host,
   selected,
@@ -34,43 +33,53 @@ export function HostCard({
 }) {
   const { t } = useTranslation();
   const { open: openMenu } = useContextMenu();
+  const tags = (host.tags || "").split(",").filter(Boolean);
+
+  const remove = async () => {
+    if (
+      !(await dialogs.confirm(t("context.confirmDelete"), {
+        danger: true,
+      }))
+    )
+      return;
+    await deleteHost(host.id);
+    await onReload();
+  };
 
   return (
-    <Card
+    <div
+      role="button"
+      tabIndex={0}
       className={cn(
-        "relative overflow-hidden p-4 transition-colors",
-        selectionCard(!!selected),
+        "group relative flex cursor-pointer items-center gap-2.5 border-b border-border px-3 py-2.5 text-left transition-colors hover:bg-muted/60",
+        selectionRow(!!selected),
       )}
+      onClick={() => onConnect(host)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onConnect(host);
+        }
+      }}
       onContextMenu={(e) =>
         openContextMenu(e, openMenu, [
           {
             id: "connect",
             label: t("context.connect"),
-            onClick: () => {
-              onConnect(host);
-            },
+            onClick: () => onConnect(host),
           },
           {
             id: "edit",
             label: t("context.editHost"),
-            onClick: () => {
-              onEdit(host);
-            },
+            onClick: () => onEdit(host),
           },
           "sep",
           {
             id: "delete",
             label: t("context.delete"),
             danger: true,
-            onClick: async () => {
-              if (
-                !(await dialogs.confirm(t("context.confirmDelete"), {
-                  danger: true,
-                }))
-              )
-                return;
-              await deleteHost(host.id);
-              await onReload();
+            onClick: () => {
+              void remove();
             },
           },
         ])
@@ -78,65 +87,105 @@ export function HostCard({
     >
       {host.color ? (
         <span
-          className="absolute inset-y-0 left-0 w-1"
+          className="absolute inset-y-0 left-0 w-0.5"
           style={{ background: host.color }}
+          aria-hidden
         />
       ) : null}
-      <div className="flex items-start gap-3">
-        {onSelectedChange ? (
-          <Checkbox
-            className={cn("mt-1", selected && selectionCheckboxClass)}
-            checked={!!selected}
-            onCheckedChange={(v) => onSelectedChange(v === true)}
-            onClick={(e) => e.stopPropagation()}
-          />
-        ) : null}
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-          <Server size={18} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold">{host.name || host.host}</p>
-          <p className="truncate text-sm text-muted-foreground">
-            {host.username}@{host.host}:{host.port}
-          </p>
-          {host.remark ? (
-            <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
-              {host.remark}
-            </p>
-          ) : null}
-          <div className="mt-2 flex flex-wrap gap-1">
-            {host.group_name && (
-              <Badge variant="secondary">{host.group_name}</Badge>
-            )}
-            {(host.tags || "")
-              .split(",")
-              .filter(Boolean)
-              .map((tag) => (
-                <Badge key={tag} variant="outline">
-                  {tag}
-                </Badge>
-              ))}
-          </div>
-        </div>
+
+      {onSelectedChange ? (
+        <Checkbox
+          className={cn("shrink-0", selected && selectionCheckboxClass)}
+          checked={!!selected}
+          onCheckedChange={(v) => onSelectedChange(v === true)}
+          onClick={(e) => e.stopPropagation()}
+        />
+      ) : null}
+
+      <div className="flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground">
+        <Server size={15} />
       </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Button size="xs" onClick={() => onConnect(host)}>
-          {t("hosts.connect")}
-        </Button>
-        <Button size="xs" variant="outline" onClick={() => onEdit(host)}>
-          {t("hosts.editHost")}
+
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span className="truncate text-sm font-medium">
+            {host.name || host.host}
+          </span>
+          <span className="truncate font-mono text-xs text-muted-foreground">
+            {host.username}@{host.host}:{host.port}
+          </span>
+        </div>
+        {(host.remark || host.group_name || tags.length > 0) && (
+          <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+            {host.remark ? (
+              <span className="min-w-0 truncate text-xs text-muted-foreground">
+                {host.remark}
+              </span>
+            ) : null}
+            {host.group_name ? (
+              <Badge
+                variant="secondary"
+                className="h-5 shrink-0 px-1.5 text-[10px] font-normal"
+              >
+                {host.group_name}
+              </Badge>
+            ) : null}
+            {tags.slice(0, 3).map((tag) => (
+              <Badge
+                key={tag}
+                variant="outline"
+                className="h-5 shrink-0 px-1.5 text-[10px] font-normal"
+              >
+                {tag}
+              </Badge>
+            ))}
+            {tags.length > 3 ? (
+              <span className="text-[10px] text-muted-foreground">
+                +{tags.length - 3}
+              </span>
+            ) : null}
+          </div>
+        )}
+      </div>
+
+      <div
+        className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          className="size-7"
+          title={t("hosts.connect")}
+          aria-label={t("hosts.connect")}
+          onClick={() => onConnect(host)}
+        >
+          <Cable size={14} />
         </Button>
         <Button
-          size="xs"
-          variant="destructive"
-          onClick={async () => {
-            await deleteHost(host.id);
-            await onReload();
-          }}
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          className="size-7"
+          title={t("hosts.editHost")}
+          aria-label={t("hosts.editHost")}
+          onClick={() => onEdit(host)}
         >
-          {t("hosts.delete")}
+          <Pencil size={14} />
+        </Button>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          className="size-7 text-muted-foreground hover:text-destructive"
+          title={t("hosts.delete")}
+          aria-label={t("hosts.delete")}
+          onClick={() => void remove()}
+        >
+          <Trash2 size={14} />
         </Button>
       </div>
-    </Card>
+    </div>
   );
 }

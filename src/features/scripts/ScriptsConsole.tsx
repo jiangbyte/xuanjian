@@ -6,6 +6,7 @@
 
 import {
   Loader2,
+  Pencil,
   Play,
   Plus,
   Search,
@@ -27,7 +28,6 @@ import {
 } from "@/components/SectionSidebar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -68,7 +68,7 @@ import {
 } from "@/lib/db";
 import { dialogs } from "@/lib/dialogs";
 import { previewScriptBody } from "@/lib/scriptVars";
-import { selectionCard, selectionCheckboxClass } from "@/lib/selection";
+import { selectionCheckboxClass, selectionRow } from "@/lib/selection";
 import { exportToFile, formatImportToast, importFromFile } from "@/lib/share";
 import { cn } from "@/lib/utils";
 import { resolveMonacoTheme, useSettingsStore } from "@/stores/settings";
@@ -318,29 +318,40 @@ export function ScriptsConsole() {
           </div>
         </aside>
 
-        <div className="flex-1 overflow-auto p-5">
-          <h2 className="mb-1 text-lg font-semibold">{title}</h2>
-          <p className="mb-4 text-xs text-muted-foreground">
-            {t("scripts.count", { count: filtered.length })}
-          </p>
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="flex shrink-0 items-baseline justify-between gap-3 border-b border-border px-4 py-2.5">
+            <h2 className="truncate text-sm font-semibold">{title}</h2>
+            <p className="shrink-0 text-xs text-muted-foreground">
+              {t("scripts.count", { count: filtered.length })}
+            </p>
+          </div>
           {filtered.length === 0 ? (
-            <div className="flex items-center justify-center rounded-md border border-dashed border-border p-10">
-              <span className="text-muted-foreground">
+            <div className="flex flex-1 items-center justify-center p-10">
+              <span className="text-sm text-muted-foreground">
                 {t("scripts.empty")}
               </span>
             </div>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="min-h-0 flex-1 overflow-auto">
               {filtered.map((script) => (
-                <Card
+                <div
                   key={script.id}
+                  role="button"
+                  tabIndex={0}
                   className={cn(
-                    "cursor-pointer p-4 transition-colors",
-                    selectionCard(selectedIds.has(script.id)),
+                    "group flex cursor-pointer items-center gap-2.5 border-b border-border px-3 py-2.5 text-left transition-colors hover:bg-muted/60",
+                    selectionRow(selectedIds.has(script.id)),
                   )}
                   onClick={() => {
                     setEditing(script);
                     setCreating(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setEditing(script);
+                      setCreating(false);
+                    }
                   }}
                   onContextMenu={(e) =>
                     openContextMenu(e, openMenu, [
@@ -379,74 +390,82 @@ export function ScriptsConsole() {
                     ])
                   }
                 >
-                  <div className="flex items-start gap-3">
-                    <Checkbox
-                      className={cn(
-                        "mt-1",
-                        selectedIds.has(script.id) && selectionCheckboxClass,
-                      )}
-                      checked={selectedIds.has(script.id)}
-                      onCheckedChange={(v) => {
-                        setSelectedIds((prev) => {
-                          const next = new Set(prev);
-                          if (v === true) next.add(script.id);
-                          else next.delete(script.id);
-                          return next;
-                        });
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                    <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                      <Zap size={18} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold">{script.name}</p>
-                      {script.description && (
-                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                          {script.description}
-                        </p>
-                      )}
-                      <p className="mt-2 truncate font-mono text-xs text-muted-foreground">
-                        {previewScriptBody(script.body)}
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {script.package_name && (
-                          <Badge variant="secondary">
-                            {script.package_name}
-                          </Badge>
-                        )}
-                        {script.paste_only ? (
-                          <Badge variant="secondary">
-                            {t("scripts.pasteOnlyShort")}
-                          </Badge>
-                        ) : null}
-                      </div>
-                    </div>
+                  <Checkbox
+                    className={cn(
+                      "shrink-0",
+                      selectedIds.has(script.id) && selectionCheckboxClass,
+                    )}
+                    checked={selectedIds.has(script.id)}
+                    onCheckedChange={(v) => {
+                      setSelectedIds((prev) => {
+                        const next = new Set(prev);
+                        if (v === true) next.add(script.id);
+                        else next.delete(script.id);
+                        return next;
+                      });
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <div className="flex size-7 shrink-0 items-center justify-center text-muted-foreground">
+                    <Zap size={15} />
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <span className="truncate text-sm font-medium">
+                        {script.name}
+                      </span>
+                      {script.package_name ? (
+                        <Badge
+                          variant="secondary"
+                          className="h-5 px-1.5 text-[10px] font-normal"
+                        >
+                          {script.package_name}
+                        </Badge>
+                      ) : null}
+                      {script.paste_only ? (
+                        <Badge
+                          variant="outline"
+                          className="h-5 px-1.5 text-[10px] font-normal"
+                        >
+                          {t("scripts.pasteOnlyShort")}
+                        </Badge>
+                      ) : null}
+                    </div>
+                    <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
+                      {previewScriptBody(script.body)}
+                    </p>
+                  </div>
+                  <div
+                    className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <Button
-                      size="xs"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setRunTarget(script);
-                      }}
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      className="size-7"
+                      title={t("scripts.run")}
+                      aria-label={t("scripts.run")}
+                      onClick={() => setRunTarget(script)}
                     >
-                      <Play size={13} />
-                      {t("scripts.run")}
+                      <Play size={14} />
                     </Button>
                     <Button
-                      size="xs"
-                      variant="outline"
-                      onClick={(e) => {
-                        e.stopPropagation();
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      className="size-7"
+                      title={t("scripts.edit")}
+                      aria-label={t("scripts.edit")}
+                      onClick={() => {
                         setEditing(script);
                         setCreating(false);
                       }}
                     >
-                      {t("scripts.edit")}
+                      <Pencil size={14} />
                     </Button>
                   </div>
-                </Card>
+                </div>
               ))}
             </div>
           )}
@@ -542,21 +561,21 @@ function ScriptEditorModal({
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-3xl">
+        {onRun ? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="absolute top-2 right-10"
+            title={t("scripts.run")}
+            aria-label={t("scripts.run")}
+            onClick={onRun}
+          >
+            <Play size={16} />
+          </Button>
+        ) : null}
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <span>
-              {initial ? t("scripts.editSnippet") : t("scripts.newSnippet")}
-            </span>
-            {onRun ? (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                title={t("scripts.run")}
-                onClick={onRun}
-              >
-                <Play size={16} />
-              </Button>
-            ) : null}
+          <DialogTitle>
+            {initial ? t("scripts.editSnippet") : t("scripts.newSnippet")}
           </DialogTitle>
         </DialogHeader>
 

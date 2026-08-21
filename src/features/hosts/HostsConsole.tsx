@@ -307,17 +307,21 @@ export function HostsConsole() {
           onReload={reload}
         />
 
-        <div className="flex-1 overflow-auto p-5">
-          <h2 className="mb-1 text-lg font-semibold">{activeGroupLabel}</h2>
-          <p className="mb-4 text-xs text-muted-foreground">
-            {t("hosts.hostsCount", { count: filtered.length })}
-          </p>
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="flex shrink-0 items-baseline justify-between gap-3 border-b border-border px-4 py-2.5">
+            <h2 className="truncate text-sm font-semibold">{activeGroupLabel}</h2>
+            <p className="shrink-0 text-xs text-muted-foreground">
+              {t("hosts.hostsCount", { count: filtered.length })}
+            </p>
+          </div>
           {filtered.length === 0 ? (
-            <div className="flex items-center justify-center rounded-md border border-dashed border-border p-10">
-              <span className="text-muted-foreground">{t("hosts.empty")}</span>
+            <div className="flex flex-1 items-center justify-center p-10">
+              <span className="text-sm text-muted-foreground">
+                {t("hosts.empty")}
+              </span>
             </div>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="min-h-0 flex-1 overflow-auto">
               {filtered.map((host) => (
                 <HostCard
                   key={host.id}
