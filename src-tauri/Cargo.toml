@@ -2,7 +2,8 @@
 name = "xuanjian"
 version = "0.1.0"
 description = "玄鉴 / Xuanjian - Agent O&M tool"
-authors = ["CharlieByte"]
+authors = ["Charlie"]
+license = "MIT"
 edition = "2021"
 
 [lib]
@@ -37,9 +38,6 @@ dirs = "6"
 chrono = { version = "0.4", features = ["serde"] }
 if-addrs = "0.13"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "blocking"] }
+which = "7"
 tauri-plugin-clipboard-manager = "2.3.2"
 tauri-plugin-prevent-default = { version = "5.0.2", features = ["platform-windows"] }
-
-# which 仅用于 Windows / macOS 探测本机 Shell 可执行文件
-[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
-which = "7"
