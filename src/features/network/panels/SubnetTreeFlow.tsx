@@ -85,7 +85,7 @@ function SubnetTreeFlowInner({ tree, selectedId, onSelect }: InnerProps) {
       ...e,
       type: "smoothstep",
       animated: false,
-      style: { stroke: "var(--accent)", strokeWidth: 1.5 },
+      style: { stroke: "var(--primary)", strokeWidth: 1.5 },
     }));
     return layoutWithDagre(nodes, edges);
   }, [rawNodes, rawEdges]);
