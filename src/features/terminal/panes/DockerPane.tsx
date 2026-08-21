@@ -131,11 +131,20 @@ function badgeVariant(tone: "accent" | "warn" | "danger" | "muted") {
 }
 
 /** 去掉 ANSI / 残留着色码，便于纯文本阅读 */
+const ESC = String.fromCharCode(0x1b);
+const BEL = String.fromCharCode(0x07);
+const ANSI_CSI = new RegExp(`${ESC}\\[[\\d;?]*[ -/]*[@-~]`, "g");
+const ANSI_OSC = new RegExp(
+  `${ESC}\\][^${BEL}${ESC}]*(?:${BEL}|${ESC}\\\\)`,
+  "g",
+);
+const ANSI_ESC_REST = new RegExp(`${ESC}.`, "g");
+
 function stripAnsi(text: string): string {
   return text
-    .replace(/\u001b\[[\d;?]*[ -/]*[@-~]/g, "")
-    .replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)/g, "")
-    .replace(/\u001b./g, "")
+    .replace(ANSI_CSI, "")
+    .replace(ANSI_OSC, "")
+    .replace(ANSI_ESC_REST, "")
     .replace(/\[[\d;]*m/g, "")
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n");

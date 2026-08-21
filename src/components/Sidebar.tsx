@@ -37,7 +37,7 @@ export function Sidebar() {
     >
       <div className="flex items-center gap-2 px-4 py-4">
         <img
-          src="/app-icon.png?v=20260821"
+          src="/app-icon.png?v=20260821d"
           alt=""
           className="size-7 shrink-0"
           width={28}
