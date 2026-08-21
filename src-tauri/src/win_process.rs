@@ -1,5 +1,5 @@
 //! Windows 子进程辅助：在 GUI（windows_subsystem）应用中隐藏控制台窗口。
-//! 非 Windows 平台不提供这些符号；调用方须置于 `#[cfg(windows)]` 内。
+//! 非 Windows 提供空实现，便于跨平台统一调用。
 //!
 //! Author: Charlie
 
@@ -19,3 +19,11 @@ pub fn hide_console(cmd: &mut std::process::Command) {
 pub fn hide_console_tokio(cmd: &mut tokio::process::Command) {
     cmd.creation_flags(CREATE_NO_WINDOW);
 }
+
+#[cfg(not(windows))]
+pub fn hide_console(_cmd: &mut std::process::Command) {}
+
+/// 仅 Windows 路径会调用；非 Windows 保留符号供统一 API，抑制 dead_code。
+#[cfg(not(windows))]
+#[allow(dead_code)]
+pub fn hide_console_tokio(_cmd: &mut tokio::process::Command) {}

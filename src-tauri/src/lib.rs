@@ -10,7 +10,6 @@ mod data_dir;
 mod db;
 mod network;
 mod session;
-#[cfg(windows)]
 mod win_process;
 
 use commands::*;
