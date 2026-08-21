@@ -1,3 +1,11 @@
+/**
+ * @file 终端侧栏笔记面板
+ * @author Charlie
+ * @description 嵌入式笔记列表与 Markdown 编辑，数据来自本地 DB。
+ * 编辑时自动防抖保存；可置顶、分类筛选、跳转完整笔记页。
+ * 空列表与条目支持右键新建/删除等快捷操作。
+ */
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, Pin, Plus, Search, Trash2 } from "lucide-react";
@@ -10,15 +18,18 @@ import {
   NoteCategoryRow,
   NoteRow,
   updateNote,
-} from "../../../lib/db";
-import { MarkdownEditor } from "../../../components/MarkdownEditor";
-import { Select } from "../../../components/Select";
-import { useDialog } from "../../../components/Dialog";
+} from "@/lib/db";
+import { MarkdownEditor } from "@/components/MarkdownEditor";
+import { Select } from "@/components/Select";
+import { useDialog } from "@/components/Dialog";
 import {
   openContextMenu,
   useContextMenu,
-} from "../../../components/ContextMenu";
+} from "@/components/ContextMenu";
 
+/**
+ * 笔记侧栏：列表模式与单篇编辑模式切换。
+ */
 export function NotesPane() {
   const { t } = useTranslation();
   const dialog = useDialog();
@@ -35,10 +46,7 @@ export function NotesPane() {
   const [dirty, setDirty] = useState(false);
 
   const reload = useCallback(async () => {
-    const [cats, rows] = await Promise.all([
-      listNoteCategories(),
-      listNotes(),
-    ]);
+    const [cats, rows] = await Promise.all([listNoteCategories(), listNotes()]);
     setCategories(cats);
     setNotes(rows);
   }, []);
@@ -87,7 +95,7 @@ export function NotesPane() {
     setDirty(false);
   };
 
-  const save = async () => {
+  const save = useCallback(async () => {
     if (!editing) return;
     await updateNote(editing.id, {
       title,
@@ -107,11 +115,12 @@ export function NotesPane() {
             category_name:
               noteCategoryId == null
                 ? null
-                : categories.find((c) => c.id === noteCategoryId)?.name ?? null,
+                : (categories.find((c) => c.id === noteCategoryId)?.name ??
+                  null),
           }
         : null,
     );
-  };
+  }, [editing, title, body, noteCategoryId, reload, t, categories]);
 
   useEffect(() => {
     if (!dirty || !editing) return;
@@ -119,12 +128,12 @@ export function NotesPane() {
       save().catch(console.error);
     }, 800);
     return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [title, body, noteCategoryId, dirty, editing?.id]);
+  }, [title, body, noteCategoryId, dirty, editing, save]);
 
   if (editing) {
     return (
       <div className="panel flex h-full flex-col">
+        {/* —— 编辑模式：返回 / 标题 / 删除 —— */}
         <div className="panel-header flex items-center gap-2">
           <button
             className="icon-btn icon-btn-sm tip"
@@ -150,7 +159,9 @@ export function NotesPane() {
             data-tip={t("notes.delete")}
             onClick={async () => {
               if (
-                !(await dialog.confirm(t("notes.deleteConfirm"), { danger: true }))
+                !(await dialog.confirm(t("notes.deleteConfirm"), {
+                  danger: true,
+                }))
               )
                 return;
               await deleteNote(editing.id);
@@ -190,6 +201,7 @@ export function NotesPane() {
 
   return (
     <div className="panel flex h-full flex-col">
+      {/* —— 列表模式：标题与管理入口 —— */}
       <div className="panel-header flex items-center gap-2">
         <span className="text-xs font-medium">{t("notes.title")}</span>
         <button
@@ -199,6 +211,8 @@ export function NotesPane() {
           {t("notes.manage")}
         </button>
       </div>
+
+      {/* —— 搜索、分类、新建 —— */}
       <div className="border-b border-[var(--border)] px-2 py-2">
         <div className="field-icon-wrap">
           <Search size={13} className="field-icon" />
@@ -246,6 +260,8 @@ export function NotesPane() {
           {t("notes.new")}
         </button>
       </div>
+
+      {/* —— 笔记列表 —— */}
       <div className="panel-body panel-list min-h-0 flex-1 overflow-y-auto p-1.5">
         {filtered.length === 0 ? (
           <div
@@ -328,8 +344,10 @@ export function NotesPane() {
               <span className="list-row-sub truncate">
                 {n.category_name || t("notes.uncategorized")}
                 {" · "}
-                {n.body.replace(/[#>*_`\n]/g, " ").trim().slice(0, 40) ||
-                  t("notes.emptyBody")}
+                {n.body
+                  .replace(/[#>*_`\n]/g, " ")
+                  .trim()
+                  .slice(0, 40) || t("notes.emptyBody")}
               </span>
             </button>
           ))

@@ -1,6 +1,21 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+/**
+ * @file 自定义下拉选择
+ * @author Charlie
+ * @description 可访问的 listbox 风格 Select，菜单经 Portal 固定定位。
+ * 点击外部或 Escape 关闭；不依赖原生 select 样式。
+ */
+
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 
+/** 下拉选项：值与展示文案 */
 export type SelectOption = {
   value: string;
   label: string;
@@ -17,6 +32,12 @@ type SelectProps = {
 
 type MenuPos = { top: number; left: number; width: number; maxHeight: number };
 
+/**
+ * 自定义下拉框。
+ * @param value 当前选中值
+ * @param options 选项列表
+ * @param onChange 选中变更（副作用：关闭菜单）
+ */
 export function Select({
   value,
   options,
@@ -44,9 +65,14 @@ export function Select({
     const spaceBelow = window.innerHeight - rect.bottom - 8;
     const spaceAbove = rect.top - 8;
     const preferBelow = spaceBelow >= 160 || spaceBelow >= spaceAbove;
-    const maxHeight = Math.min(240, Math.max(120, preferBelow ? spaceBelow : spaceAbove));
+    const maxHeight = Math.min(
+      240,
+      Math.max(120, preferBelow ? spaceBelow : spaceAbove),
+    );
     setPos({
-      top: preferBelow ? rect.bottom + 4 : Math.max(8, rect.top - maxHeight - 4),
+      top: preferBelow
+        ? rect.bottom + 4
+        : Math.max(8, rect.top - maxHeight - 4),
       left: rect.left,
       width: Math.max(rect.width, 140),
       maxHeight,

@@ -1,3 +1,11 @@
+/**
+ * @file 终端左侧边栏
+ * @author Charlie
+ * @description 左侧图标轨切换文件、脚本、历史、概览、进程、端口、Docker 等面板。
+ * 文件标签复用 TerminalSidePanel；其余对应 panes 子目录组件。
+ * 需传入当前会话 sessionId / kind，供各子面板探测远程或本地环境。
+ */
+
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -9,14 +17,15 @@ import {
   Network,
   Zap,
 } from "lucide-react";
-import { TerminalSidePanel } from "./TerminalSidePanel";
-import { ScriptsPane } from "./panes/ScriptsPane";
-import { HistoryPane } from "./panes/HistoryPane";
-import { OverviewPane } from "./panes/OverviewPane";
-import { ProcessesPane } from "./panes/ProcessesPane";
-import { PortsPane } from "./panes/PortsPane";
-import { DockerPane } from "./panes/DockerPane";
+import { TerminalSidePanel } from "@/features/terminal/TerminalSidePanel";
+import { ScriptsPane } from "@/features/terminal/panes/ScriptsPane";
+import { HistoryPane } from "@/features/terminal/panes/HistoryPane";
+import { OverviewPane } from "@/features/terminal/panes/OverviewPane";
+import { ProcessesPane } from "@/features/terminal/panes/ProcessesPane";
+import { PortsPane } from "@/features/terminal/panes/PortsPane";
+import { DockerPane } from "@/features/terminal/panes/DockerPane";
 
+/** 左侧边栏可选标签 ID */
 export type LeftTabId =
   | "files"
   | "scripts"
@@ -26,6 +35,9 @@ export type LeftTabId =
   | "ports"
   | "docker";
 
+/**
+ * 终端左侧栏：图标轨 + 对应功能面板内容区。
+ */
 export function TerminalLeftPanel({
   sessionId,
   kind,
@@ -46,8 +58,16 @@ export function TerminalLeftPanel({
         { id: "files" as const, icon: FolderOpen, label: t("termTab.files") },
         { id: "scripts" as const, icon: Zap, label: t("termTab.scripts") },
         { id: "history" as const, icon: Clock3, label: t("termTab.history") },
-        { id: "overview" as const, icon: Activity, label: t("termTab.overview") },
-        { id: "processes" as const, icon: ListTodo, label: t("termTab.processes") },
+        {
+          id: "overview" as const,
+          icon: Activity,
+          label: t("termTab.overview"),
+        },
+        {
+          id: "processes" as const,
+          icon: ListTodo,
+          label: t("termTab.processes"),
+        },
         { id: "ports" as const, icon: Network, label: t("termTab.ports") },
         { id: "docker" as const, icon: Container, label: t("termTab.docker") },
       ] as const,
@@ -56,6 +76,7 @@ export function TerminalLeftPanel({
 
   return (
     <div className="flex h-full min-w-0 overflow-hidden">
+      {/* —— 左侧图标轨 —— */}
       <nav className="term-rail" aria-label={t("termTab.rail")}>
         {tabs.map((item) => {
           const Icon = item.icon;
@@ -75,9 +96,14 @@ export function TerminalLeftPanel({
         })}
       </nav>
 
+      {/* —— 当前标签内容 —— */}
       <div className="min-w-0 flex-1 overflow-hidden">
         {tab === "files" && (
-          <TerminalSidePanel sessionId={sessionId} kind={kind} hostId={hostId} />
+          <TerminalSidePanel
+            sessionId={sessionId}
+            kind={kind}
+            hostId={hostId}
+          />
         )}
         {tab === "scripts" && <ScriptsPane sessionId={sessionId} />}
         {tab === "history" && <HistoryPane sessionId={sessionId} />}

@@ -1,11 +1,23 @@
+/**
+ * @file 终端右侧边栏
+ * @author Charlie
+ * @description 右侧窄轨切换 AI 对话与笔记两个面板。
+ * AI 面板为占位实现；笔记面板对接本地数据库。
+ * 轨按钮位于最右侧，内容区占满剩余宽度。
+ */
+
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { NotebookPen, Sparkles } from "lucide-react";
-import { AiChatPanel } from "./AiChatPanel";
-import { NotesPane } from "./panes/NotesPane";
+import { AiChatPanel } from "@/features/terminal/AiChatPanel";
+import { NotesPane } from "@/features/terminal/panes/NotesPane";
 
+/** 右侧边栏标签：AI（占位）或笔记 */
 export type RightTabId = "ai" | "notes";
 
+/**
+ * 终端右侧栏：在 AI 占位面板与笔记面板间切换。
+ */
 export function TerminalRightPanel() {
   const { t } = useTranslation();
   const [tab, setTab] = useState<RightTabId>("ai");
@@ -21,11 +33,17 @@ export function TerminalRightPanel() {
 
   return (
     <div className="flex h-full min-w-0 flex-1 overflow-hidden">
+      {/* —— 面板内容 —— */}
       <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
         {tab === "ai" && <AiChatPanel />}
         {tab === "notes" && <NotesPane />}
       </div>
-      <nav className="term-rail term-rail-right" aria-label={t("termTab.rightRail")}>
+
+      {/* —— 右侧图标轨 —— */}
+      <nav
+        className="term-rail term-rail-right"
+        aria-label={t("termTab.rightRail")}
+      >
         {tabs.map((item) => {
           const Icon = item.icon;
           const active = tab === item.id;

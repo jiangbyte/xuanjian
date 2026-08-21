@@ -1,10 +1,18 @@
+/**
+ * @file 监听端口面板
+ * @author Charlie
+ * @description 解析 ss/netstat 输出，列出 TCP/UDP 监听端口与进程。
+ * 支持按协议/公网过滤、复制端口号、向占用进程发 TERM/KILL。
+ * 常见端口会打上服务名标签。
+ */
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Copy, RefreshCw, Search, Skull, XCircle } from "lucide-react";
-import { api } from "../../../lib/tauri";
-import { clipboardWriteText } from "../../../lib/clipboard";
-import { useDialog } from "../../../components/Dialog";
-import { killCmd, portsCmd, resolveProbeEnv } from "../../../lib/probeEnv";
+import { api } from "@/lib/tauri";
+import { clipboardWriteText } from "@/lib/clipboard";
+import { useDialog } from "@/components/Dialog";
+import { killCmd, portsCmd, resolveProbeEnv } from "@/lib/probeEnv";
 
 type PortRow = {
   id: string;
@@ -22,6 +30,7 @@ type PortTag = {
   tone: "accent" | "warn" | "danger" | "muted";
 };
 
+/** 常见端口 → 服务名 */
 const WELL_KNOWN: Record<number, string> = {
   22: "SSH",
   80: "HTTP",
@@ -38,8 +47,12 @@ const WELL_KNOWN: Record<number, string> = {
   6443: "K8s",
 };
 
+/** 解析 ss / netstat 文本为端口行 */
 function parsePorts(raw: string): PortRow[] {
-  const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const lines = raw
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
   const out: PortRow[] = [];
   const seen = new Set<string>();
 
@@ -57,7 +70,7 @@ function parsePorts(raw: string): PortRow[] {
     if (!protoMatch) continue;
     const proto = protoMatch[1].toLowerCase().startsWith("udp") ? "udp" : "tcp";
 
-    // Prefer local address column for Windows netstat: TCP  0.0.0.0:80  ...
+    // Windows netstat 优先取本地地址列：TCP  0.0.0.0:80  ...
     const winLocal = line.match(
       /^(?:TCP|UDP)\s+(\[?[0-9a-fA-F:.]+\]?|\*):(\d+)\s+/i,
     );
@@ -66,7 +79,10 @@ function parsePorts(raw: string): PortRow[] {
       line.match(/(\[?[0-9a-fA-F:.]+\]?|\*|0\.0\.0\.0|::):\s*(\d+)\b/) ||
       line.match(/(\S+):(\d+)\s+/);
     if (!addrMatch) continue;
-    const addr = (winLocal ? addrMatch[1] : addrMatch[1]).replace(/^\[|\]$/g, "");
+    const addr = (winLocal ? addrMatch[1] : addrMatch[1]).replace(
+      /^\[|\]$/g,
+      "",
+    );
     const port = Number(winLocal ? addrMatch[2] : addrMatch[2]);
     if (!Number.isFinite(port)) continue;
 
@@ -81,7 +97,7 @@ function parsePorts(raw: string): PortRow[] {
       if (pidOnly) pid = pidOnly[1];
       const nameOnly = line.match(/\/([^/\s]+)\s*$/);
       if (nameOnly) process = nameOnly[1];
-      // Windows netstat -ano trailing PID
+      // Windows netstat -ano 行尾 PID
       if (!pid) {
         const tailPid = line.match(/\s(\d+)\s*$/);
         if (tailPid) pid = tailPid[1];
@@ -96,7 +112,7 @@ function parsePorts(raw: string): PortRow[] {
           ? "UDP"
           : "LISTEN";
 
-    // On Windows netstat, skip non-listening TCP unless UDP
+    // Windows netstat：跳过非监听 TCP（UDP 除外）
     if (proto === "tcp" && !/\bLISTEN/i.test(line) && !/users:\(/i.test(line)) {
       continue;
     }
@@ -110,15 +126,14 @@ function parsePorts(raw: string): PortRow[] {
   return out.sort((a, b) => a.port - b.port || a.proto.localeCompare(b.proto));
 }
 
+/** 是否绑定到公网/非本机地址 */
 function isPublic(addr: string) {
   return (
     addr === "*" ||
     addr === "0.0.0.0" ||
     addr === "::" ||
     addr === "::0" ||
-    (!addr.startsWith("127.") &&
-      addr !== "localhost" &&
-      addr !== "::1")
+    (!addr.startsWith("127.") && addr !== "localhost" && addr !== "::1")
   );
 }
 
@@ -149,6 +164,9 @@ function tipClass(tone: PortTag["tone"]) {
   return "chip";
 }
 
+/**
+ * 端口侧栏：列表、过滤、复制与杀进程。
+ */
 export function PortsPane({
   sessionId,
   kind,
@@ -240,6 +258,7 @@ export function PortsPane({
 
   return (
     <div className="panel flex h-full flex-col">
+      {/* —— 标题与刷新 —— */}
       <div className="panel-header flex items-center gap-2">
         <span className="text-xs font-medium">{t("termTab.ports")}</span>
         <span className="text-xs muted">
@@ -254,6 +273,7 @@ export function PortsPane({
         </button>
       </div>
 
+      {/* —— 搜索与过滤 —— */}
       <div className="border-b border-[var(--border)] px-2 py-2">
         <div className="field-icon-wrap">
           <Search size={13} className="field-icon" />
@@ -285,6 +305,7 @@ export function PortsPane({
         </div>
       </div>
 
+      {/* —— 端口列表 —— */}
       <div className="panel-body panel-list min-h-0 flex-1 overflow-y-auto p-1.5">
         {!sessionId || kind == null ? (
           <div className="px-2 py-6 text-center text-xs muted">

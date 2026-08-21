@@ -1,12 +1,13 @@
+/**
+ * @file 应用设置浮窗
+ * @author Charlie
+ * @description 外观（主题/语言/默认 Shell）、终端字体与编辑器主题等偏好的读写界面。
+ * 变更同步到 zustand store 与本地 settings 表。
+ */
+
 import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  AppWindow,
-  Code2,
-  Minus,
-  Plus,
-  Terminal,
-} from "lucide-react";
+import { AppWindow, Code2, Minus, Plus, Terminal } from "lucide-react";
 import {
   useSettingsStore,
   ThemeMode,
@@ -17,16 +18,17 @@ import {
   TERM_FONT_MAX,
   EDITOR_FONT_MIN,
   EDITOR_FONT_MAX,
-} from "../../stores/settings";
-import { getSetting, setSetting } from "../../lib/db";
-import { api, LocalShellInfo } from "../../lib/tauri";
-import { useUiStore } from "../../stores/ui";
-import { FloatingWindow } from "../../components/FloatingWindow";
-import { Select } from "../../components/Select";
-import i18n from "../../i18n";
+} from "@/stores/settings";
+import { getSetting, setSetting } from "@/lib/db";
+import { api, LocalShellInfo } from "@/lib/tauri";
+import { useUiStore } from "@/stores/ui";
+import { FloatingWindow } from "@/components/FloatingWindow";
+import { Select } from "@/components/Select";
+import i18n from "@/i18n";
 
 type SectionId = "appearance" | "terminal" | "editor";
 
+/** 设置项标签 + 可选说明 + 控件 */
 function SettingRow({
   label,
   hint,
@@ -45,6 +47,7 @@ function SettingRow({
   );
 }
 
+/** 数值加减步进器 */
 function Stepper({
   value,
   min,
@@ -84,6 +87,7 @@ function Stepper({
   );
 }
 
+/** 开关切换控件 */
 function Toggle({
   checked,
   onChange,
@@ -107,6 +111,7 @@ function Toggle({
   );
 }
 
+/** 应用设置模态框 */
 export function SettingsModal() {
   const open = useUiStore((s) => s.settingsOpen);
   const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
@@ -145,7 +150,9 @@ export function SettingsModal() {
       const termFamily = await getSetting("term_font_family");
       const edSize = await getSetting("editor_font_size");
       const edWrap = await getSetting("editor_word_wrap");
-      const edTheme = (await getSetting("editor_theme")) as EditorThemeMode | null;
+      const edTheme = (await getSetting(
+        "editor_theme",
+      )) as EditorThemeMode | null;
       const mdMode = (await getSetting(
         "markdown_color_mode",
       )) as EditorPreviewMode | null;
@@ -194,6 +201,7 @@ export function SettingsModal() {
       bodyClassName="p-0"
     >
       <div className="flex h-full min-h-0">
+        {/* —— 分区导航 —— */}
         <aside className="flex w-44 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg)]">
           <div className="settings-nav-label">{t("settings.title")}</div>
           <nav className="flex flex-1 flex-col gap-0.5 px-2 pb-3">

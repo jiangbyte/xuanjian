@@ -1,13 +1,17 @@
+/**
+ * @file 进程列表面板
+ * @author Charlie
+ * @description 通过探测命令拉取进程列表，支持搜索与按 CPU/内存/PID 排序。
+ * 可为进程打标签（root、高负载、Docker 等），并发送 TERM/KILL。
+ * 无会话时提示需先连接。
+ */
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RefreshCw, Search, Skull, XCircle } from "lucide-react";
-import { api } from "../../../lib/tauri";
-import { useDialog } from "../../../components/Dialog";
-import {
-  killCmd,
-  processesCmd,
-  resolveProbeEnv,
-} from "../../../lib/probeEnv";
+import { api } from "@/lib/tauri";
+import { useDialog } from "@/components/Dialog";
+import { killCmd, processesCmd, resolveProbeEnv } from "@/lib/probeEnv";
 
 type Proc = {
   pid: string;
@@ -23,8 +27,12 @@ type ProcTag = {
   tone: "accent" | "warn" | "danger" | "muted";
 };
 
+/** 解析 ps 风格输出 */
 function parsePs(raw: string): Proc[] {
-  const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const lines = raw
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
   const out: Proc[] = [];
   for (const line of lines) {
     if (/^PID\b/i.test(line)) continue;
@@ -41,6 +49,7 @@ function parsePs(raw: string): Proc[] {
   return out;
 }
 
+/** 从完整命令行提取短进程名 */
 function shortProcName(cmd: string): string {
   const trimmed = cmd.trim();
   if (!trimmed) return "?";
@@ -53,10 +62,7 @@ function shortProcName(cmd: string): string {
   return base.replace(/:$/, "") || trimmed.slice(0, 28);
 }
 
-function buildTags(
-  p: Proc,
-  t: (key: string) => string,
-): ProcTag[] {
+function buildTags(p: Proc, t: (key: string) => string): ProcTag[] {
   const tags: ProcTag[] = [];
   if (p.user === "root") {
     tags.push({ id: "root", label: t("termTab.tagRoot"), tone: "warn" });
@@ -91,6 +97,9 @@ function tipClass(tone: ProcTag["tone"]) {
   return "chip";
 }
 
+/**
+ * 进程侧栏：列表、排序、TERM/KILL。
+ */
 export function ProcessesPane({
   sessionId,
   kind,
@@ -151,10 +160,9 @@ export function ProcessesPane({
 
   const signal = async (pid: string, sig: "TERM" | "KILL") => {
     if (!sessionId) return;
-    const ok = await dialog.confirm(
-      t("termTab.killConfirm", { pid, sig }),
-      { danger: true },
-    );
+    const ok = await dialog.confirm(t("termTab.killConfirm", { pid, sig }), {
+      danger: true,
+    });
     if (!ok) return;
     try {
       await api.sessionExec(sessionId, killCmd(env, pid, sig));
@@ -166,6 +174,7 @@ export function ProcessesPane({
 
   return (
     <div className="panel flex h-full flex-col">
+      {/* —— 标题与刷新 —— */}
       <div className="panel-header flex items-center gap-2">
         <span className="text-xs font-medium">{t("termTab.processes")}</span>
         <span className="text-xs muted">
@@ -179,6 +188,8 @@ export function ProcessesPane({
           <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
         </button>
       </div>
+
+      {/* —— 搜索与排序 —— */}
       <div className="border-b border-[var(--border)] px-2 py-2">
         <div className="field-icon-wrap">
           <Search size={13} className="field-icon" />
@@ -203,6 +214,8 @@ export function ProcessesPane({
           ))}
         </div>
       </div>
+
+      {/* —— 进程列表 —— */}
       <div className="panel-body panel-list min-h-0 flex-1 overflow-y-auto p-1.5">
         {!sessionId || kind == null ? (
           <div className="px-2 py-6 text-center text-xs muted">
@@ -218,7 +231,11 @@ export function ProcessesPane({
               <div key={p.pid} className="list-row items-start gap-2">
                 <div
                   className={`list-row-dot mt-1.5 ${
-                    p.cpu >= 30 ? "is-danger" : p.cpu >= 10 ? "is-warn" : "is-ok"
+                    p.cpu >= 30
+                      ? "is-danger"
+                      : p.cpu >= 10
+                        ? "is-warn"
+                        : "is-ok"
                   }`}
                 />
                 <div className="min-w-0 flex-1">
@@ -231,7 +248,8 @@ export function ProcessesPane({
                     </div>
                   )}
                   <div className="list-row-meta">
-                    PID {p.pid} · CPU {p.cpu.toFixed(1)}% · MEM {p.mem.toFixed(1)}%
+                    PID {p.pid} · CPU {p.cpu.toFixed(1)}% · MEM{" "}
+                    {p.mem.toFixed(1)}%
                   </div>
                   {tags.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap gap-1">

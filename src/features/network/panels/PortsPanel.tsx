@@ -1,10 +1,17 @@
+/**
+ * @file TCP 端口探测面板
+ * @author Charlie
+ * @description 解析端口列表/区间，分批 TCP 探测并展示开闭与延迟，可导出 CSV。
+ */
+
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, type TcpProbeResult } from "../../../lib/tauri";
-import { COMMON_PORTS } from "../../../lib/ipcalc";
-import { addNetworkHistory } from "../../../lib/db";
-import { clipboardWriteText } from "../../../lib/clipboard";
+import { api, type TcpProbeResult } from "@/lib/tauri";
+import { COMMON_PORTS } from "@/lib/ipcalc";
+import { addNetworkHistory } from "@/lib/db";
+import { clipboardWriteText } from "@/lib/clipboard";
 
+/** 解析 `22,80,443` 或 `8000-8010` 等形式，最多 500 个端口 */
 function parsePorts(input: string): number[] {
   const set = new Set<number>();
   for (const part of input.split(/[,\s]+/).filter(Boolean)) {
@@ -22,6 +29,7 @@ function parsePorts(input: string): number[] {
   return [...set].sort((a, b) => a - b).slice(0, 500);
 }
 
+/** TCP 端口扫描面板 */
 export function PortsPanel() {
   const { t } = useTranslation();
   const [host, setHost] = useState("127.0.0.1");

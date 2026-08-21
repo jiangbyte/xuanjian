@@ -1,12 +1,22 @@
-import type { DialogApi } from "../components/Dialog";
-import { api, type SftpEntry } from "./tauri";
+/**
+ * @file SFTP / 本地传输冲突处理
+ * @author Charlie
+ * @description 检测目标路径是否已存在，弹窗询问覆盖 / 跳过 / 全部策略，
+ * 并在覆盖前清理类型冲突或本地文件，以便安全写入。
+ */
 
+import type { DialogApi } from "@/components/Dialog";
+import { api, type SftpEntry } from "@/lib/tauri";
+
+/** 覆盖策略：每次询问 / 一律覆盖 / 一律跳过 */
 export type OverwriteMode = "ask" | "overwrite" | "skip";
 
+/** 批量传输过程中共享的冲突上下文（可被「全部」动作改写） */
 export type ConflictCtx = {
   mode: OverwriteMode;
 };
 
+/** 目标端点：远程 SFTP 或本机路径 */
 export type DestEndpoint = {
   remote: boolean;
   sessionId: string | null;
@@ -18,6 +28,7 @@ function basename(path: string) {
   return i >= 0 ? p.slice(i + 1) : path;
 }
 
+/** 在目标父目录中查找同名条目；失败返回 null */
 export async function findDestEntry(
   dest: DestEndpoint,
   parentPath: string,
@@ -33,6 +44,7 @@ export async function findDestEntry(
   }
 }
 
+/** 删除目标路径（文件或目录） */
 export async function removeDestPath(
   dest: DestEndpoint,
   path: string,
@@ -47,8 +59,8 @@ export async function removeDestPath(
 }
 
 /**
- * Ask how to handle an existing destination.
- * Returns whether to proceed with overwrite, skip this item, or abort the batch.
+ * 询问如何处理已存在的目标。
+ * 返回是否覆盖、跳过本项，或中止整批传输。
  */
 export async function askOverwrite(
   dialog: DialogApi,
@@ -91,7 +103,10 @@ export async function askOverwrite(
   return "abort";
 }
 
-/** Prepare destination for overwrite (remove if type differs; files are truncated on write). */
+/**
+ * 为覆盖写入准备目标：类型不一致则先删除；
+ * 本地文件会先删再写以保证干净截断。远程文件由 sftp.create 截断；同类型目录合并。
+ */
 export async function prepareOverwrite(
   dest: DestEndpoint,
   destPath: string,
@@ -101,12 +116,13 @@ export async function prepareOverwrite(
   if (existing.isDir !== srcIsDir) {
     await removeDestPath(dest, destPath, existing.isDir);
   } else if (!srcIsDir && !dest.remote) {
-    // Local file: truncate by remove so write starts clean
+    // 本地文件：先删除再写，保证干净截断
     await removeDestPath(dest, destPath, false);
   }
-  // Remote files: sftp.create truncates. Same-type dirs merge.
+  // 远程文件：sftp.create 会截断。同类型目录则合并。
 }
 
+/** 从完整路径取出目标文件名 */
 export function destNameFromPath(path: string) {
   return basename(path);
 }

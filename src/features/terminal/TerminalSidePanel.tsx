@@ -1,3 +1,11 @@
+/**
+ * @file 终端文件浏览器侧栏
+ * @author Charlie
+ * @description 浏览本地目录或 SSH/SFTP 远程目录，支持上传下载、新建、重命名、权限等。
+ * 路径面包屑、搜索、隐藏文件与右键菜单；过大文件禁止在线编辑。
+ * 可打开双栏 SFTP 传输、Monaco 编辑器与权限弹窗。
+ */
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -22,35 +30,34 @@ import {
 } from "lucide-react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
-import { api, SftpEntry } from "../../lib/tauri";
-import {
-  enqueueDownload,
-  enqueueUpload,
-} from "../../stores/transfer";
+import { api, SftpEntry } from "@/lib/tauri";
+import { enqueueDownload, enqueueUpload } from "@/stores/transfer";
 import {
   askOverwrite,
   findDestEntry,
   prepareOverwrite,
   type ConflictCtx,
   type DestEndpoint,
-} from "../../lib/transferConflict";
-import { clipboardWriteText } from "../../lib/clipboard";
-import { FileEditorModal, FileEditorTarget } from "./FileEditorModal";
-import { SftpTransferModal } from "./SftpTransferModal";
-import { PermissionsModal } from "./PermissionsModal";
+} from "@/lib/transferConflict";
+import { clipboardWriteText } from "@/lib/clipboard";
+import { FileEditorModal, FileEditorTarget } from "@/features/terminal/FileEditorModal";
+import { SftpTransferModal } from "@/features/terminal/SftpTransferModal";
+import { PermissionsModal } from "@/features/terminal/PermissionsModal";
 import {
   openContextMenu,
   useContextMenu,
   type ContextMenuItem,
-} from "../../components/ContextMenu";
-import { useDialog } from "../../components/Dialog";
-import { PathBookmarkButton } from "../../components/PathBookmarkButton";
-import { bookmarkScope } from "../../stores/pathBookmarks";
+} from "@/components/ContextMenu";
+import { useDialog } from "@/components/Dialog";
+import { PathBookmarkButton } from "@/components/PathBookmarkButton";
+import { bookmarkScope } from "@/stores/pathBookmarks";
 
+/** 是否为 Windows 盘符路径 */
 function isWindowsPath(path: string) {
   return /^[a-zA-Z]:[\\/]/.test(path) || path.includes("\\");
 }
 
+/** 拼接子路径（远程用 /，本地按现有分隔符） */
 function joinPath(base: string, name: string, remote: boolean) {
   if (remote) {
     return base.endsWith("/") ? `${base}${name}` : `${base}/${name}`;
@@ -60,6 +67,7 @@ function joinPath(base: string, name: string, remote: boolean) {
   return `${base}${sep}${name}`;
 }
 
+/** 取父目录路径 */
 function parentPath(path: string, remote: boolean) {
   if (remote) {
     const parts = path.replace(/\/+$/, "").split("/");
@@ -79,6 +87,7 @@ function parentPath(path: string, remote: boolean) {
   return "/" + parts.join("/");
 }
 
+/** 拆成面包屑段（名称 + 绝对路径） */
 function pathSegments(path: string, remote: boolean) {
   if (!path) return [];
   if (remote) {
@@ -109,6 +118,7 @@ function pathSegments(path: string, remote: boolean) {
     }));
 }
 
+/** 格式化文件大小；目录显示 -- */
 function formatSize(size: number, isDir: boolean) {
   if (isDir) return "--";
   if (size < 1024) return `${size} B`;
@@ -117,16 +127,21 @@ function formatSize(size: number, isDir: boolean) {
   return `${(size / 1024 / 1024 / 1024).toFixed(1)} GB`;
 }
 
+/** 根据扩展名得到类型展示文案 */
 function fileExtType(name: string, isDir: boolean, t: (k: string) => string) {
   if (isDir) return t("terminal.folder");
   const ext = name.includes(".") ? name.split(".").pop()!.toUpperCase() : "";
   return ext || t("terminal.file");
 }
 
+/** 超过 2MB 视为过大，禁止在线编辑 */
 function isTooBig(entry: SftpEntry) {
   return entry.size > 2 * 1024 * 1024;
 }
 
+/**
+ * 文件浏览器面板：本地 / SFTP 目录浏览与常见文件操作。
+ */
 export function TerminalSidePanel({
   sessionId,
   kind,
@@ -206,10 +221,7 @@ export function TerminalSidePanel({
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
-  const segments = useMemo(
-    () => pathSegments(cwd, remote),
-    [cwd, remote],
-  );
+  const segments = useMemo(() => pathSegments(cwd, remote), [cwd, remote]);
 
   const visible = useMemo(() => {
     let list = [...entries];
@@ -220,7 +232,9 @@ export function TerminalSidePanel({
     }
     list.sort((a, b) => {
       if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
-      const cmp = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+      const cmp = a.name.localeCompare(b.name, undefined, {
+        sensitivity: "base",
+      });
       return sortAsc ? cmp : -cmp;
     });
     return list;
@@ -368,7 +382,8 @@ export function TerminalSidePanel({
     if (!name?.trim() || name.trim() === entry.name) return;
     const next = joinPath(cwd, name.trim(), remote);
     try {
-      if (remote && sessionId) await api.sftpRename(sessionId, entry.path, next);
+      if (remote && sessionId)
+        await api.sftpRename(sessionId, entry.path, next);
       else await api.renameLocalPath(entry.path, next);
       await reload();
     } catch (e) {
@@ -384,7 +399,8 @@ export function TerminalSidePanel({
     const parent = parentPath(cwd, remote);
     const next = joinPath(parent, entry.name, remote);
     try {
-      if (remote && sessionId) await api.sftpRename(sessionId, entry.path, next);
+      if (remote && sessionId)
+        await api.sftpRename(sessionId, entry.path, next);
       else await api.renameLocalPath(entry.path, next);
       await reload();
     } catch (e) {
@@ -542,6 +558,7 @@ export function TerminalSidePanel({
       className="panel file-browser h-full"
       onContextMenu={(e) => openContextMenu(e, openMenu, blankMenuItems())}
     >
+      {/* —— 面包屑导航 —— */}
       <div className="flex items-center gap-1 border-b border-[var(--border)] px-2 py-2">
         <button className="icon-btn icon-btn-sm" onClick={goHome} title="Home">
           <Home size={14} />
@@ -564,7 +581,11 @@ export function TerminalSidePanel({
         </div>
       </div>
 
-      <div className="relative border-b border-[var(--border)] px-2 py-2" ref={pathBoxRef}>
+      {/* —— 路径输入与补全 —— */}
+      <div
+        className="relative border-b border-[var(--border)] px-2 py-2"
+        ref={pathBoxRef}
+      >
         <input
           value={pathInput}
           onChange={(e) => setPathInput(e.target.value)}
@@ -596,6 +617,7 @@ export function TerminalSidePanel({
         )}
       </div>
 
+      {/* —— 工具条 —— */}
       <div className="flex items-center gap-0.5 border-b border-[var(--border)] px-1.5 py-1">
         <PathBookmarkButton
           scope={bookmarkScope({ kind, hostId })}
@@ -621,7 +643,10 @@ export function TerminalSidePanel({
             <Upload size={14} />
           </button>
         )}
-        <button className="icon-btn icon-btn-sm is-active" title={t("terminal.listView")}>
+        <button
+          className="icon-btn icon-btn-sm is-active"
+          title={t("terminal.listView")}
+        >
           <List size={14} />
         </button>
         <button
@@ -673,6 +698,7 @@ export function TerminalSidePanel({
         </div>
       )}
 
+      {/* —— 表头 —— */}
       <div className="file-table-head">
         <span />
         <button
@@ -688,6 +714,7 @@ export function TerminalSidePanel({
         <span>{t("terminal.type")}</span>
       </div>
 
+      {/* —— 文件列表 —— */}
       <div
         className="panel-body"
         onContextMenu={(e) => openContextMenu(e, openMenu, blankMenuItems())}
@@ -720,7 +747,9 @@ export function TerminalSidePanel({
               openContextMenu(ev, openMenu, entryMenuItems(e))
             }
           >
-            <span className={`entry-icon ${e.isDir ? "folder-icon" : "file-icon"}`}>
+            <span
+              className={`entry-icon ${e.isDir ? "folder-icon" : "file-icon"}`}
+            >
               {e.isDir ? <Folder size={14} /> : <File size={14} />}
             </span>
             <span className="truncate">{e.name}</span>
@@ -728,7 +757,9 @@ export function TerminalSidePanel({
             <span className="truncate muted font-mono text-[11px]">
               {e.permissions || "--"}
             </span>
-            <span className="truncate muted">{formatSize(e.size, e.isDir)}</span>
+            <span className="truncate muted">
+              {formatSize(e.size, e.isDir)}
+            </span>
             <span className="truncate muted">
               {fileExtType(e.name, e.isDir, t)}
             </span>
@@ -736,6 +767,7 @@ export function TerminalSidePanel({
         ))}
       </div>
 
+      {/* —— 关联弹层：SFTP / 编辑器 / 权限 —— */}
       {transferOpen && (
         <SftpTransferModal
           onClose={() => setTransferOpen(false)}

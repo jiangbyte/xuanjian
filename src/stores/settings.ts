@@ -1,10 +1,19 @@
+/**
+ * @file 应用外观与编辑器设置 Store
+ * @author Charlie
+ * @description 主题、语言、终端/编辑器字体与 Markdown 色模式。
+ * 多数项同步 localStorage；`hydrate` 可从 DB 覆盖。模块加载时立即 applyTheme。
+ */
+
 import { create } from "zustand";
 
+/** 应用主题：亮 / 暗 / 跟随系统 */
 export type ThemeMode = "light" | "dark" | "system";
 
-/** Monaco / code editor theme preference. */
+/** Monaco / 代码编辑器主题偏好 */
 export type EditorThemeMode = "follow" | "vs-dark" | "light" | "hc-black";
 
+/** Markdown 预览色模式 */
 export type EditorPreviewMode = "follow" | "dark" | "light";
 
 const TERM_FONT_MIN = 10;
@@ -64,6 +73,11 @@ type SettingsState = {
   ) => void;
 };
 
+/**
+ * 将主题应用到 documentElement，并写入 localStorage。
+ * @param theme light / dark / system
+ * @副作用 切换 `.light` / `.dark` class
+ */
 export function applyTheme(theme: ThemeMode) {
   const root = document.documentElement;
   const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -73,11 +87,15 @@ export function applyTheme(theme: ThemeMode) {
   localStorage.setItem("xuanjian.theme", theme);
 }
 
+/** 当前是否为暗色应用主题（看 documentElement class） */
 export function isAppDark(): boolean {
   return !document.documentElement.classList.contains("light");
 }
 
-/** Resolve Monaco theme id from settings. */
+/**
+ * 根据设置解析 Monaco 主题 id。
+ * @param mode 默认取 store 中的 editorTheme；follow 时跟随应用明暗
+ */
 export function resolveMonacoTheme(
   mode: EditorThemeMode = useSettingsStore.getState().editorTheme,
 ): string {
@@ -85,6 +103,10 @@ export function resolveMonacoTheme(
   return mode;
 }
 
+/**
+ * 根据设置解析 Markdown 编辑器 color-mode。
+ * @param mode 默认取 store；follow 时跟随应用明暗
+ */
 export function resolveMarkdownColorMode(
   mode: EditorPreviewMode = useSettingsStore.getState().markdownColorMode,
 ): "dark" | "light" {
@@ -92,6 +114,7 @@ export function resolveMarkdownColorMode(
   return mode;
 }
 
+/** 可选终端字体族列表（id 为 CSS font-family 串） */
 export const TERM_FONT_FAMILIES = [
   {
     id: 'Consolas, "Cascadia Mono", "Courier New", monospace',
@@ -119,14 +142,20 @@ export const TERM_FONT_FAMILIES = [
   },
 ] as const;
 
+/**
+ * 设置 Zustand store；setter 多数会同步 localStorage。
+ */
 export const useSettingsStore = create<SettingsState>((set) => ({
   theme: (localStorage.getItem("xuanjian.theme") as ThemeMode) || "dark",
   locale: localStorage.getItem("xuanjian.locale") || "zh-CN",
   defaultLocalShell: "",
-  termFontSize: clamp(readNum("xuanjian.termFontSize", 13), TERM_FONT_MIN, TERM_FONT_MAX),
+  termFontSize: clamp(
+    readNum("xuanjian.termFontSize", 13),
+    TERM_FONT_MIN,
+    TERM_FONT_MAX,
+  ),
   termFontFamily:
-    localStorage.getItem("xuanjian.termFontFamily") ||
-    TERM_FONT_FAMILIES[0].id,
+    localStorage.getItem("xuanjian.termFontFamily") || TERM_FONT_FAMILIES[0].id,
   editorFontSize: clamp(
     readNum("xuanjian.editorFontSize", 13),
     EDITOR_FONT_MIN,
@@ -174,6 +203,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     localStorage.setItem("xuanjian.markdownColorMode", mode);
     set({ markdownColorMode: mode });
   },
+  /** 用外部数据（如 DB）合并覆盖当前设置 */
   hydrate: (data) => {
     if (data.theme) applyTheme(data.theme);
     set((s) => ({

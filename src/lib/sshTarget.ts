@@ -1,10 +1,21 @@
+/**
+ * @file SSH 目标解析与主机匹配
+ * @author Charlie
+ * @description 解析 `ssh user@host`、`-p` 端口等常见写法为结构化目标。
+ * 并在主机列表中按目标或自由文本查询进行匹配。
+ */
+
+/** 解析后的 SSH 连接目标 */
 export type SshTarget = {
   username: string;
   host: string;
   port: number;
 };
 
-/** Parse `ssh user@host`, `user@host:22`, `ssh -p 2222 user@host`. */
+/**
+ * 解析 `ssh user@host`、`user@host:22`、`ssh -p 2222 user@host` 等。
+ * 纯关键字搜索（无 ssh / 用户 / 端口）不会当作连接目标。
+ */
 export function parseSshTarget(raw: string): SshTarget | null {
   let s = raw.trim();
   if (!s) return null;
@@ -19,7 +30,7 @@ export function parseSshTarget(raw: string): SshTarget | null {
     s = s.replace(/(?:^|\s)-p\s*\d+\b/i, " ").trim();
   }
 
-  // drop other common flags we don't handle yet
+  // 去掉暂未处理的其它常见短选项
   s = s.replace(/(?:^|\s)-[A-Za-z]\S*/g, " ").trim();
   if (!s) return null;
 
@@ -28,7 +39,7 @@ export function parseSshTarget(raw: string): SshTarget | null {
 
   const hasUser = Boolean(m[1]);
   const hasPort = Boolean(m[3]) || Boolean(portFlag);
-  // Plain keyword search should not become a connect target
+  // 纯关键字搜索不应变成连接目标
   if (!hadSsh && !hasUser && !hasPort) return null;
 
   return {
@@ -38,6 +49,10 @@ export function parseSshTarget(raw: string): SshTarget | null {
   };
 }
 
+/**
+ * 在主机列表中查找与目标最匹配的一项。
+ * 优先：主机+用户+端口 → 主机+用户 → 仅主机。
+ */
 export function findHostByTarget<
   T extends { host: string; username: string; port: number },
 >(hosts: T[], target: SshTarget): T | null {
@@ -59,6 +74,10 @@ export function findHostByTarget<
   );
 }
 
+/**
+ * 判断主机是否命中搜索词。
+ * 若已解析出 SshTarget，优先按主机/用户匹配；否则对名称、标签等字段做子串匹配。
+ */
 export function hostMatchesQuery(
   host: {
     name: string;
@@ -97,5 +116,8 @@ export function hostMatchesQuery(
     .join(" ")
     .toLowerCase();
 
-  return q.split(/\s+/).filter(Boolean).every((part) => hay.includes(part));
+  return q
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((part) => hay.includes(part));
 }

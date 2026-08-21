@@ -1,14 +1,25 @@
+/**
+ * @file 路径书签按钮
+ * @author Charlie
+ * @description 本地 / SSH 路径收藏入口：切换当前路径书签并列出同 scope 书签。
+ * 菜单 Portal 定位；导航通过 onNavigate 回调，不直接改路由。
+ */
+
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Bookmark, BookmarkCheck, Folder, Trash2, X } from "lucide-react";
-import {
-  bookmarkLabel,
-  usePathBookmarks,
-} from "../stores/pathBookmarks";
+import { bookmarkLabel, usePathBookmarks } from "@/stores/pathBookmarks";
 
 type MenuPos = { top: number; left: number; width: number; maxHeight: number };
 
+/**
+ * 路径书签按钮与下拉菜单。
+ * @param scope 书签作用域（如 `local` / `ssh:1`）
+ * @param path 当前路径；空则无法添加
+ * @param onNavigate 选中书签后跳转路径
+ * @副作用 读写 pathBookmarks store（localStorage）
+ */
 export function PathBookmarkButton({
   scope,
   path,
@@ -38,14 +49,19 @@ export function PathBookmarkButton({
     const spaceBelow = window.innerHeight - rect.bottom - 8;
     const spaceAbove = rect.top - 8;
     const preferBelow = spaceBelow >= 160 || spaceBelow >= spaceAbove;
-    const maxHeight = Math.min(280, Math.max(140, preferBelow ? spaceBelow : spaceAbove));
+    const maxHeight = Math.min(
+      280,
+      Math.max(140, preferBelow ? spaceBelow : spaceAbove),
+    );
     const width = 260;
     let left = rect.left;
     if (left + width > window.innerWidth - 8) {
       left = Math.max(8, window.innerWidth - width - 8);
     }
     setPos({
-      top: preferBelow ? rect.bottom + 4 : Math.max(8, rect.top - maxHeight - 4),
+      top: preferBelow
+        ? rect.bottom + 4
+        : Math.max(8, rect.top - maxHeight - 4),
       left,
       width,
       maxHeight,
@@ -112,6 +128,7 @@ export function PathBookmarkButton({
             }}
             role="menu"
           >
+            {/* —— 头部 —— */}
             <div className="bookmark-menu-head">
               <span>{t("terminal.bookmarks")}</span>
               <button
@@ -122,6 +139,7 @@ export function PathBookmarkButton({
                 <X size={12} />
               </button>
             </div>
+            {/* —— 书签列表 —— */}
             <div className="bookmark-menu-body">
               {bookmarks.length === 0 ? (
                 <div className="bookmark-menu-empty">
@@ -140,7 +158,10 @@ export function PathBookmarkButton({
                       }}
                       title={b.path}
                     >
-                      <Folder size={13} className="shrink-0 text-[var(--accent)]" />
+                      <Folder
+                        size={13}
+                        className="shrink-0 text-[var(--accent)]"
+                      />
                       <span className="min-w-0 flex-1 text-left">
                         <span className="block truncate text-[12px] font-medium">
                           {bookmarkLabel(b.path)}
@@ -162,6 +183,7 @@ export function PathBookmarkButton({
                 ))
               )}
             </div>
+            {/* —— 添加 / 移除当前路径 —— */}
             <div className="bookmark-menu-foot">
               <button
                 type="button"

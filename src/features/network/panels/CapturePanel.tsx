@@ -1,8 +1,15 @@
+/**
+ * @file 实时抓包面板
+ * @author Charlie
+ * @description 选择网卡、BPF 过滤器与输出路径，启停 dumpcap/tshark 抓包任务。
+ * 并检测本机是否安装抓包工具。
+ */
+
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { save } from "@tauri-apps/plugin-dialog";
-import { api, type CaptureTools, type NetInterface } from "../../../lib/tauri";
-import { addNetworkHistory } from "../../../lib/db";
+import { api, type CaptureTools, type NetInterface } from "@/lib/tauri";
+import { addNetworkHistory } from "@/lib/db";
 
 const FILTER_PRESETS = [
   { label: "HTTP", value: "tcp port 80 or tcp port 443" },
@@ -11,6 +18,7 @@ const FILTER_PRESETS = [
   { label: "ICMP", value: "icmp" },
 ];
 
+/** 实时抓包启停面板 */
 export function CapturePanel() {
   const { t } = useTranslation();
   const [tools, setTools] = useState<CaptureTools | null>(null);
@@ -132,14 +140,16 @@ export function CapturePanel() {
               {t("network.captureStart")}
             </button>
           ) : (
-            <button type="button" className="btn btn-danger-fill" onClick={stop}>
+            <button
+              type="button"
+              className="btn btn-danger-fill"
+              onClick={stop}
+            >
               {t("network.captureStop")}
             </button>
           )}
         </div>
-        {error && (
-          <div className="text-sm text-[var(--danger)]">{error}</div>
-        )}
+        {error && <div className="text-sm text-[var(--danger)]">{error}</div>}
         {jobId && (
           <div className="text-sm muted">
             {t("network.running")} ({jobId.slice(0, 8)})

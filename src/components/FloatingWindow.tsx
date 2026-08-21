@@ -1,3 +1,10 @@
+/**
+ * @file 可拖拽浮动窗口
+ * @author Charlie
+ * @description 遮罩层上的可移动 / 八向缩放浮动面板。
+ * 用于表单弹层等；点击遮罩关闭，标题栏拖动，边缘手柄缩放。
+ */
+
 import {
   useCallback,
   useEffect,
@@ -8,15 +15,7 @@ import {
 } from "react";
 import { X } from "lucide-react";
 
-type ResizeDir =
-  | "n"
-  | "s"
-  | "e"
-  | "w"
-  | "ne"
-  | "nw"
-  | "se"
-  | "sw";
+type ResizeDir = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 
 type Rect = { x: number; y: number; w: number; h: number };
 
@@ -57,6 +56,14 @@ const HANDLES: { dir: ResizeDir; className: string }[] = [
   { dir: "sw", className: "floating-resize-sw" },
 ];
 
+/**
+ * 浮动窗口：居中打开，支持拖动与缩放。
+ * @param title 标题栏文案
+ * @param onClose 关闭回调（遮罩或关闭按钮）
+ * @param children 主体内容
+ * @param initialWidth / initialHeight 初始尺寸
+ * @param headerActions 标题栏额外操作区
+ */
 export function FloatingWindow({
   title,
   onClose,
@@ -116,7 +123,7 @@ export function FloatingWindow({
       y = o.y + dy;
     }
 
-    // Keep opposite edge anchored when hitting min size
+    // 触达最小尺寸时保持对边锚定
     if (w < MIN_W && dir.includes("w")) x = o.x + o.w - MIN_W;
     if (h < MIN_H && dir.includes("n")) y = o.y + o.h - MIN_H;
 
@@ -168,6 +175,7 @@ export function FloatingWindow({
         }}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* —— 标题栏（拖动） —— */}
         <div
           className="floating-window-title flex shrink-0 cursor-grab items-center justify-between px-4 py-2.5 active:cursor-grabbing"
           onPointerDown={startMove}
@@ -186,6 +194,7 @@ export function FloatingWindow({
           {children}
         </div>
 
+        {/* —— 八向缩放手柄 —— */}
         {HANDLES.map(({ dir, className }) => (
           <div
             key={dir}

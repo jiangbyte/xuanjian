@@ -1,3 +1,10 @@
+/**
+ * @file 标题栏
+ * @author Charlie
+ * @description 会话标签、侧栏折叠、传输面板入口、设置与窗口控制。
+ * 支持拖拽区域（Tauri）；标签右键可重连 / 关闭。
+ */
+
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -8,22 +15,21 @@ import {
   PanelRight,
   ArrowDownUp,
 } from "lucide-react";
-import { WindowControls } from "./WindowControls";
-import { useUiStore } from "../stores/ui";
-import { useTransferStore } from "../stores/transfer";
+import { WindowControls } from "@/components/WindowControls";
+import { useUiStore } from "@/stores/ui";
+import { useTransferStore } from "@/stores/transfer";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import {
-  openContextMenu,
-  useContextMenu,
-} from "./ContextMenu";
-import {
-  canReconnect,
-  reconnectTermTab,
-} from "../lib/sessionConnect";
-import { useDialog } from "./Dialog";
-import { TransferPanel } from "../features/terminal/TransferPanel";
+import { openContextMenu, useContextMenu } from "@/components/ContextMenu";
+import { canReconnect, reconnectTermTab } from "@/lib/sessionConnect";
+import { useDialog } from "@/components/Dialog";
+import { TransferPanel } from "@/features/terminal/TransferPanel";
 
+/**
+ * 锚定在传输按钮下方的传输任务气泡。
+ * @param anchor 定位参照元素
+ * @param onClose 外点 / Escape 关闭
+ */
 function TransferPopover({
   anchor,
   onClose,
@@ -62,7 +68,7 @@ function TransferPopover({
       onClose();
     };
     window.addEventListener("keydown", onKey);
-    // Defer so the opening click doesn't immediately close.
+    // 延迟绑定，避免打开时的同一次点击立刻关闭
     const id = window.setTimeout(() => {
       window.addEventListener("mousedown", onDown);
     }, 0);
@@ -89,6 +95,10 @@ function TransferPopover({
   );
 }
 
+/**
+ * 应用顶栏：标签条 + 终端布局开关 + 传输 / 设置 / 窗口控制。
+ * @副作用 切换标签、关闭会话、打开设置与传输面板
+ */
 export function TitleBar() {
   const { t } = useTranslation();
   const { open: openMenu } = useContextMenu();
@@ -125,6 +135,7 @@ export function TitleBar() {
       className="flex h-10 shrink-0 items-center border-b border-[var(--border)] bg-[var(--titlebar)]"
       data-tauri-drag-region
     >
+      {/* —— 首页 + 会话标签 —— */}
       <div
         className="flex min-w-0 flex-1 items-center gap-1 px-2"
         data-tauri-drag-region
@@ -230,20 +241,25 @@ export function TitleBar() {
           </button>
         </div>
       </div>
+      {/* —— 右侧工具 —— */}
       <div className="flex h-full items-center gap-0.5 pr-0">
         {onTerminal && (
           <>
             <button
               className={`icon-btn ${leftCollapsed ? "" : "is-active"}`}
               onClick={toggleLeft}
-              title={leftCollapsed ? t("terminal.expand") : t("terminal.collapse")}
+              title={
+                leftCollapsed ? t("terminal.expand") : t("terminal.collapse")
+              }
             >
               <PanelLeft size={14} />
             </button>
             <button
               className={`icon-btn ${rightCollapsed ? "" : "is-active"}`}
               onClick={toggleRight}
-              title={rightCollapsed ? t("terminal.expand") : t("terminal.collapse")}
+              title={
+                rightCollapsed ? t("terminal.expand") : t("terminal.collapse")
+              }
             >
               <PanelRight size={14} />
             </button>

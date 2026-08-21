@@ -1,0 +1,25 @@
+/**
+ * @file scrollbar-xterm.css
+ * Author: Charlie
+ * @description 滚动条与 xterm 高度
+ */
+
+/* ========== Scrollbar / xterm ========== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+.xterm,
+.xterm-viewport {
+  height: 100% !important;
+}

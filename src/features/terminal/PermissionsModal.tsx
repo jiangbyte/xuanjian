@@ -1,10 +1,21 @@
+/**
+ * @file 文件权限编辑模态框
+ * @author Charlie
+ * @description 以勾选位与八进制两种方式编辑 Unix 风格权限（rwx）。
+ * 支持从符号串（如 rw-r--r--）或八进制（644）解析初值。
+ * 应用时回调父组件传入的 onApply(mode)，由调用方执行 chmod。
+ */
+
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 
+/** 单组读写执行位 */
 type PermBits = { r: boolean; w: boolean; x: boolean };
+/** 所有者 / 组 / 其他人 三组权限 */
 type PermState = { owner: PermBits; group: PermBits; other: PermBits };
 
+/** 从数字 mode 拆出 owner/group/other 位 */
 function bitsFromMode(mode: number): PermState {
   const bit = (shift: number, mask: number) => ((mode >> shift) & mask) !== 0;
   return {
@@ -14,17 +25,22 @@ function bitsFromMode(mode: number): PermState {
   };
 }
 
+/** 将三组位打包为数字 mode */
 function modeFromBits(state: PermState): number {
   const pack = (b: PermBits) => (b.r ? 4 : 0) | (b.w ? 2 : 0) | (b.x ? 1 : 0);
-  return (pack(state.owner) << 6) | (pack(state.group) << 3) | pack(state.other);
+  return (
+    (pack(state.owner) << 6) | (pack(state.group) << 3) | pack(state.other)
+  );
 }
 
+/** 生成符号权限串，如 rw-r--r-- */
 function symbolicFromBits(state: PermState): string {
   const one = (b: PermBits) =>
     `${b.r ? "r" : "-"}${b.w ? "w" : "-"}${b.x ? "x" : "-"}`;
   return `${one(state.owner)}${one(state.group)}${one(state.other)}`;
 }
 
+/** 解析初始权限：优先 9 位符号串，其次 3–4 位八进制，默认 0644 */
 function parseInitial(permissions?: string | null): PermState {
   if (permissions && /^[rwx-]{9}$/.test(permissions)) {
     const c = permissions.split("");
@@ -41,6 +57,9 @@ function parseInitial(permissions?: string | null): PermState {
   return bitsFromMode(0o644);
 }
 
+/**
+ * 权限编辑弹层：勾选位与八进制双向同步，确认后调用 onApply。
+ */
 export function PermissionsModal({
   path,
   permissions,
@@ -53,8 +72,11 @@ export function PermissionsModal({
   onApply: (mode: number) => Promise<void> | void;
 }) {
   const { t } = useTranslation();
-  const name = path.replace(/\\/g, "/").split("/").filter(Boolean).pop() || path;
-  const [state, setState] = useState<PermState>(() => parseInitial(permissions));
+  const name =
+    path.replace(/\\/g, "/").split("/").filter(Boolean).pop() || path;
+  const [state, setState] = useState<PermState>(() =>
+    parseInitial(permissions),
+  );
   const [octalInput, setOctalInput] = useState(() =>
     modeFromBits(parseInitial(permissions)).toString(8).padStart(3, "0"),
   );
@@ -95,11 +117,15 @@ export function PermissionsModal({
   ];
 
   return (
-    <div className="overlay z-[90] flex items-center justify-center p-4" onClick={onClose}>
+    <div
+      className="overlay z-[90] flex items-center justify-center p-4"
+      onClick={onClose}
+    >
       <div
         className="modal-card flex w-full max-w-md flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* —— 标题与关闭 —— */}
         <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
           <div className="min-w-0">
             <div className="text-sm font-medium">{t("perms.title")}</div>
@@ -112,6 +138,7 @@ export function PermissionsModal({
           </button>
         </div>
 
+        {/* —— 八进制输入 + 勾选位 —— */}
         <div className="flex flex-col gap-3 p-4">
           <label className="field-label">
             {t("perms.octal")}
@@ -120,7 +147,9 @@ export function PermissionsModal({
                 className="field font-mono"
                 value={octalInput}
                 maxLength={4}
-                onChange={(e) => applyOctal(e.target.value.replace(/[^0-7]/g, ""))}
+                onChange={(e) =>
+                  applyOctal(e.target.value.replace(/[^0-7]/g, ""))
+                }
               />
               <span className="chip chip-accent font-mono">{symbolic}</span>
             </div>
@@ -132,7 +161,9 @@ export function PermissionsModal({
                 key={role.key}
                 className="flex flex-wrap items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5"
               >
-                <span className="w-14 shrink-0 text-xs muted">{role.label}</span>
+                <span className="w-14 shrink-0 text-xs muted">
+                  {role.label}
+                </span>
                 <div className="flex flex-1 flex-wrap gap-1.5">
                   {flags.map((flag) => {
                     const on = state[role.key][flag.key];
@@ -155,6 +186,7 @@ export function PermissionsModal({
           {error && <div className="text-xs text-danger">{error}</div>}
         </div>
 
+        {/* —— 底部操作 —— */}
         <div className="flex justify-end gap-2 border-t border-[var(--border)] px-4 py-3">
           <button className="btn" onClick={onClose} disabled={saving}>
             {t("hosts.cancel")}

@@ -1,3 +1,7 @@
+//! SSH 客户端会话：连接、交互式通道、一次性 exec。
+//!
+//! Author: Charlie
+
 use super::{emit_closed, emit_output};
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
@@ -49,7 +53,6 @@ enum ChannelCommand {
 pub struct SshSession {
     pub id: String,
     pub title: String,
-    pub host: String,
     handle: Arc<Mutex<Handle<ClientHandler>>>,
     tx: mpsc::UnboundedSender<ChannelCommand>,
 }
@@ -81,13 +84,9 @@ impl SshSession {
 
 pub async fn connect(app: AppHandle, params: SshConnectParams) -> Result<SshSession> {
     let config = Arc::new(client::Config::default());
-    let mut handle = client::connect(
-        config,
-        (params.host.as_str(), params.port),
-        ClientHandler,
-    )
-    .await
-    .context("ssh connect")?;
+    let mut handle = client::connect(config, (params.host.as_str(), params.port), ClientHandler)
+        .await
+        .context("ssh connect")?;
 
     let auth_ok = match params.auth_type.as_str() {
         "password" => {
@@ -108,8 +107,8 @@ pub async fn connect(app: AppHandle, params: SshConnectParams) -> Result<SshSess
                 return Err(anyhow!("private key not found: {key_path}"));
             }
             let passphrase = params.passphrase.as_deref();
-            let key_pair = russh_keys::load_secret_key(&key_path, passphrase)
-                .context("load private key")?;
+            let key_pair =
+                russh_keys::load_secret_key(&key_path, passphrase).context("load private key")?;
             handle
                 .authenticate_publickey(&params.username, Arc::new(key_pair))
                 .await?
@@ -192,7 +191,6 @@ pub async fn connect(app: AppHandle, params: SshConnectParams) -> Result<SshSess
     Ok(SshSession {
         id,
         title,
-        host: params.host,
         handle: Arc::new(Mutex::new(handle)),
         tx,
     })
@@ -201,18 +199,15 @@ pub async fn connect(app: AppHandle, params: SshConnectParams) -> Result<SshSess
 pub async fn open_sftp_channel(
     handle: Arc<Mutex<Handle<ClientHandler>>>,
 ) -> Result<russh::Channel<Msg>> {
-    let mut h = handle.lock().await;
-    let mut channel = h.channel_open_session().await?;
+    let h = handle.lock().await;
+    let channel = h.channel_open_session().await?;
     channel.request_subsystem(true, "sftp").await?;
     Ok(channel)
 }
 
-pub async fn exec(
-    handle: Arc<Mutex<Handle<ClientHandler>>>,
-    command: &str,
-) -> Result<String> {
+pub async fn exec(handle: Arc<Mutex<Handle<ClientHandler>>>, command: &str) -> Result<String> {
     let mut channel = {
-        let mut h = handle.lock().await;
+        let h = handle.lock().await;
         h.channel_open_session().await?
     };
     channel.exec(true, command).await?;

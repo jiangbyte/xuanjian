@@ -1,6 +1,17 @@
-/** Runtime environment for session-side probe commands. */
+/**
+ * @file 会话侧探测命令与环境判定
+ * @author Charlie
+ * @description 根据本地 / SSH / WSL / PowerShell 等判定探测环境，
+ * 并导出主机指标、进程、端口、杀进程等命令字符串（Unix / Windows）。
+ */
+
+/** 会话侧探测命令运行时环境 */
 export type ProbeEnv = "unix" | "windows";
 
+/**
+ * 根据会话 kind 与 shellId 推断探测环境。
+ * SSH / WSL / Git Bash 视为 unix；cmd / PowerShell 视为 windows。
+ */
 export function resolveProbeEnv(
   kind: "local" | "ssh" | null | undefined,
   shellId?: string | null,
@@ -21,17 +32,19 @@ export function resolveProbeEnv(
   return "unix";
 }
 
-/** Linux / WSL / Git Bash / SSH */
+// —— 指标采集命令 ——
+
+/** Linux / WSL / Git Bash / SSH：输出带标签的指标行 */
 export const UNIX_METRICS_CMD = [
   "printf 'HOST '; hostname 2>/dev/null || uname -n 2>/dev/null",
   "printf '\\nIP '; (hostname -I 2>/dev/null || true) | awk '{print $1,$2,$3}'",
   "printf '\\nLOAD '; cat /proc/loadavg 2>/dev/null",
   "printf '\\nUP '; cat /proc/uptime 2>/dev/null",
-  // Prefer /proc/meminfo (works when free is missing); values in bytes.
+  // 优先 /proc/meminfo（无 free 时也可用）；数值单位为字节
   "printf '\\nMEM '; awk '/MemTotal:/{t=$2*1024} /MemAvailable:/{a=$2*1024} /MemFree:/{f=$2*1024} END{if(t>0){avail=(a>0?a:f); print t, (t>avail?t-avail:0), avail}else{print 0,0,0}}' /proc/meminfo 2>/dev/null",
   "printf '\\nSWAP '; awk '/SwapTotal:/{t=$2*1024} /SwapFree:/{f=$2*1024} END{print t+0, (t>f?t-f:0)+0}' /proc/meminfo 2>/dev/null",
   "printf '\\nCPU '; nproc 2>/dev/null; grep '^cpu ' /proc/stat 2>/dev/null",
-  // POSIX 1K blocks + mount point
+  // POSIX 1K 块 + 挂载点
   "printf '\\nDF '; (df -Pk / 2>/dev/null || df -kP / 2>/dev/null || df -k / 2>/dev/null) | awk 'NR==2{print $2,$3,$6,$1}'",
   "printf '\\nNET '; awk 'NR>2 && $1 !~ /lo:/{gsub(\":\",\"\",$1); rx+=$2; tx+=$10} END{print rx+0,tx+0}' /proc/net/dev 2>/dev/null",
   "printf '\\nUNAME '; uname -sr 2>/dev/null",
@@ -39,7 +52,7 @@ export const UNIX_METRICS_CMD = [
   "printf '\\n'",
 ].join("; ");
 
-/** PowerShell — labeled lines compatible with OverviewPane parser */
+/** PowerShell：带标签的指标行，兼容 OverviewPane 解析 */
 export const WIN_METRICS_CMD = [
   "$ErrorActionPreference='SilentlyContinue'",
   "$os=Get-CimInstance Win32_OperatingSystem",
@@ -57,25 +70,27 @@ export const WIN_METRICS_CMD = [
   "$cores=$env:NUMBER_OF_PROCESSORS; if(-not $cores){$cores=1}",
   "$ips=@(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -notlike '127.*' -and $_.PrefixOrigin -ne 'WellKnown' } | Select-Object -ExpandProperty IPAddress -First 3) -join ' '",
   "$hostName=if($cs.Name){$cs.Name}else{$env:COMPUTERNAME}",
-  "Write-Output (\"HOST {0}\" -f $hostName)",
-  "Write-Output (\"IP {0}\" -f $ips)",
-  "Write-Output (\"LOAD {0} 0 0\" -f $cpu)",
-  "Write-Output (\"UP {0}\" -f $up)",
-  "Write-Output (\"MEM {0} {1} {2}\" -f $memTotal,$memUsed,$memFree)",
+  'Write-Output ("HOST {0}" -f $hostName)',
+  'Write-Output ("IP {0}" -f $ips)',
+  'Write-Output ("LOAD {0} 0 0" -f $cpu)',
+  'Write-Output ("UP {0}" -f $up)',
+  'Write-Output ("MEM {0} {1} {2}" -f $memTotal,$memUsed,$memFree)',
   "Write-Output 'SWAP 0 0'",
-  "Write-Output (\"CPUPCT {0}\" -f $cpu)",
-  "Write-Output (\"CPU {0}\" -f $cores)",
+  'Write-Output ("CPUPCT {0}" -f $cpu)',
+  'Write-Output ("CPU {0}" -f $cores)',
   "Write-Output 'cpu 0 0 0 0'",
-  "Write-Output (\"DF {0} {1} {2} {3}\" -f $dfTotal,$dfUsed,$dfMount,$dfFs)",
+  'Write-Output ("DF {0} {1} {2} {3}" -f $dfTotal,$dfUsed,$dfMount,$dfFs)',
   "Write-Output 'NET 0 0'",
-  "Write-Output (\"UNAME {0}\" -f $os.Caption)",
+  'Write-Output ("UNAME {0}" -f $os.Caption)',
   "$top=Get-CimInstance Win32_Process | Sort-Object WorkingSetSize -Descending | Select-Object -First 5",
-  "foreach($p in $top){ $mem=[math]::Round(($p.WorkingSetSize/[math]::Max($memTotal,1))*100,1); Write-Output (\"TOP {0}`t-`t0.0`t{1}`t{2}\" -f $p.ProcessId,$mem,$p.Name) }",
+  'foreach($p in $top){ $mem=[math]::Round(($p.WorkingSetSize/[math]::Max($memTotal,1))*100,1); Write-Output ("TOP {0}`t-`t0.0`t{1}`t{2}" -f $p.ProcessId,$mem,$p.Name) }',
 ].join("; ");
 
+/** Unix 进程列表命令 */
 export const UNIX_PS_CMD =
   "ps -eo pid,user,%cpu,%mem,args --sort=-%cpu 2>/dev/null | head -n 120";
 
+/** Windows 进程列表（PowerShell）命令 */
 export const WIN_PS_CMD = [
   "$ErrorActionPreference='SilentlyContinue'",
   "$os=Get-CimInstance Win32_OperatingSystem",
@@ -93,37 +108,48 @@ export const WIN_PS_CMD = [
   "}",
 ].join("; ");
 
+/** Unix 监听端口命令 */
 export const UNIX_SS_CMD =
   "ss -lntupH 2>/dev/null || ss -lntup 2>/dev/null || netstat -lntup 2>/dev/null";
 
+/** Windows 监听端口命令 */
 export const WIN_SS_CMD = "netstat -ano";
 
+/** 按环境返回主机指标采集命令 */
 export function metricsCmd(env: ProbeEnv, shellId?: string | null) {
   if (env === "unix") return UNIX_METRICS_CMD;
   return wrapForWindowsShell(shellId, WIN_METRICS_CMD);
 }
 
+/** 按环境返回进程列表命令 */
 export function processesCmd(env: ProbeEnv, shellId?: string | null) {
   if (env === "unix") return UNIX_PS_CMD;
   return wrapForWindowsShell(shellId, WIN_PS_CMD);
 }
 
+/** 按环境返回端口列表命令 */
 export function portsCmd(env: ProbeEnv, _shellId?: string | null) {
-  // netstat works in both cmd and PowerShell
+  // netstat 在 cmd 与 PowerShell 中均可使用
   return env === "windows" ? WIN_SS_CMD : UNIX_SS_CMD;
 }
 
+/** 生成杀进程命令（Windows taskkill / Unix kill） */
 export function killCmd(env: ProbeEnv, pid: string, sig: "TERM" | "KILL") {
   const safe = pid.replace(/[^\d]/g, "");
   if (!safe) throw new Error("invalid pid");
   if (env === "windows") {
-    return sig === "KILL" ? `taskkill /PID ${safe} /F` : `taskkill /PID ${safe}`;
+    return sig === "KILL"
+      ? `taskkill /PID ${safe} /F`
+      : `taskkill /PID ${safe}`;
   }
   return `kill -${sig} ${safe}`;
 }
 
-/** CMD sessions need an explicit powershell host for rich scripts. */
-function wrapForWindowsShell(shellId: string | null | undefined, script: string) {
+/** CMD 会话需要显式拉起 powershell 才能跑富脚本 */
+function wrapForWindowsShell(
+  shellId: string | null | undefined,
+  script: string,
+) {
   if (
     shellId === "local:powershell" ||
     shellId === "local:pwsh" ||

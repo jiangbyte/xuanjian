@@ -1,6 +1,14 @@
+/**
+ * @file Tauri 后端 API 与事件封装
+ * @author Charlie
+ * @description 统一 invoke 会话 / SFTP / 本地文件 / 网络工具命令，
+ * 并提供 session-output、传输进度、网络工具输出等事件监听辅助函数。
+ */
+
 import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 
+/** 本机可用 Shell 信息 */
 export type LocalShellInfo = {
   id: string;
   name: string;
@@ -9,12 +17,14 @@ export type LocalShellInfo = {
   isDefault: boolean;
 };
 
+/** 已打开的会话摘要 */
 export type SessionInfo = {
   id: string;
   kind: "local" | "ssh";
   title: string;
 };
 
+/** SFTP / 本地目录条目 */
 export type SftpEntry = {
   name: string;
   path: string;
@@ -24,6 +34,7 @@ export type SftpEntry = {
   permissions?: string | null;
 };
 
+/** SSH 连接参数 */
 export type SshConnectParams = {
   host: string;
   port: number;
@@ -38,6 +49,7 @@ export type SshConnectParams = {
   terminalType?: string | null;
 };
 
+/** 面向前端的 Tauri 命令集合 */
 export const api = {
   listLocalShells: () => invoke<LocalShellInfo[]>("list_local_shells"),
   localShellOpen: (shellId: string, cols?: number, rows?: number) =>
@@ -48,8 +60,7 @@ export const api = {
     invoke("session_write", { sessionId, data }),
   sessionResize: (sessionId: string, cols: number, rows: number) =>
     invoke("session_resize", { sessionId, cols, rows }),
-  sessionClose: (sessionId: string) =>
-    invoke("session_close", { sessionId }),
+  sessionClose: (sessionId: string) => invoke("session_close", { sessionId }),
   sessionExec: (sessionId: string, command: string) =>
     invoke<string>("session_exec", { sessionId, command }),
   sftpList: (sessionId: string, path: string) =>
@@ -99,25 +110,22 @@ export const api = {
     invoke("sftp_rename", { sessionId, oldPath, newPath }),
   sftpChmod: (sessionId: string, path: string, mode: number) =>
     invoke("sftp_chmod", { sessionId, path, mode }),
-  encryptSecret: (plain: string) =>
-    invoke<string>("encrypt_secret", { plain }),
+  encryptSecret: (plain: string) => invoke<string>("encrypt_secret", { plain }),
   getHomeDir: () => invoke<string>("get_home_dir"),
   getTempDir: () => invoke<string>("get_temp_dir"),
   listLocalDir: (path: string) =>
     invoke<SftpEntry[]>("list_local_dir", { path }),
-  createLocalDir: (path: string) =>
-    invoke("create_local_dir", { path }),
-  readLocalFile: (path: string) =>
-    invoke<string>("read_local_file", { path }),
+  createLocalDir: (path: string) => invoke("create_local_dir", { path }),
+  readLocalFile: (path: string) => invoke<string>("read_local_file", { path }),
   writeLocalFile: (path: string, content: string) =>
     invoke("write_local_file", { path, content }),
   renameLocalPath: (oldPath: string, newPath: string) =>
     invoke("rename_local_path", { oldPath, newPath }),
   chmodLocalPath: (path: string, mode: number) =>
     invoke("chmod_local_path", { path, mode }),
-  removeLocalPath: (path: string) =>
-    invoke("remove_local_path", { path }),
+  removeLocalPath: (path: string) => invoke("remove_local_path", { path }),
 
+  // —— 网络工具 ——
   networkListInterfaces: () =>
     invoke<NetInterface[]>("network_list_interfaces"),
   networkPing: (target: string, count?: number) =>
@@ -165,8 +173,7 @@ export const api = {
     }),
   networkTlsCert: (hostPort: string) =>
     invoke<TlsCertInfo>("network_tls_cert", { hostPort }),
-  networkWhois: (query: string) =>
-    invoke<string>("network_whois", { query }),
+  networkWhois: (query: string) => invoke<string>("network_whois", { query }),
 };
 
 export type NetInterface = { name: string; addrs: string[] };
@@ -207,6 +214,7 @@ export type TlsCertInfo = {
   raw: string;
 };
 
+/** 监听会话标准输出事件 */
 export function onSessionOutput(
   cb: (payload: { sessionId: string; data: string }) => void,
 ): Promise<UnlistenFn> {
@@ -215,12 +223,14 @@ export function onSessionOutput(
   );
 }
 
+/** 监听会话关闭事件 */
 export function onSessionClosed(
   cb: (payload: { sessionId: string }) => void,
 ): Promise<UnlistenFn> {
   return listen<{ sessionId: string }>("session-closed", (e) => cb(e.payload));
 }
 
+/** 监听 SFTP 传输进度事件 */
 export function onTransferProgress(
   cb: (payload: {
     transferId: string;
@@ -235,6 +245,7 @@ export function onTransferProgress(
   }>("sftp-transfer-progress", (e) => cb(e.payload));
 }
 
+/** 监听网络工具（ping / traceroute 等）流式输出 */
 export function onNetworkToolOutput(
   cb: (payload: { jobId: string; line: string; done: boolean }) => void,
 ): Promise<UnlistenFn> {

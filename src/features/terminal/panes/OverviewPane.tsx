@@ -1,4 +1,18 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+/**
+ * @file 主机资源概览面板
+ * @author Charlie
+ * @description 周期性执行探测脚本，解析 CPU/内存/磁盘/网络与 Top 进程。
+ * 用迷你面积图展示近期采样；适配本地与 SSH 不同探测环境。
+ * 无会话时显示需先连接的提示。
+ */
+
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import {
   Activity,
@@ -9,15 +23,17 @@ import {
   RefreshCw,
   Server,
 } from "lucide-react";
-import {
-  Area,
-  AreaChart,
-  ResponsiveContainer,
-} from "recharts";
-import { api } from "../../../lib/tauri";
-import { metricsCmd, resolveProbeEnv } from "../../../lib/probeEnv";
+import { Area, AreaChart, ResponsiveContainer } from "recharts";
+import { api } from "@/lib/tauri";
+import { metricsCmd, resolveProbeEnv } from "@/lib/probeEnv";
 
-type Sample = { t: number; cpu: number; mem: number; disk: number; net: number };
+type Sample = {
+  t: number;
+  cpu: number;
+  mem: number;
+  disk: number;
+  net: number;
+};
 
 type TopProc = {
   pid: string;
@@ -50,7 +66,11 @@ type Metrics = {
   top: TopProc[];
 };
 
-function parseMetrics(raw: string, prevCpu?: { idle: number; total: number }): {
+/** 解析探测脚本文本输出为指标与 CPU 计数器 */
+function parseMetrics(
+  raw: string,
+  prevCpu?: { idle: number; total: number },
+): {
   metrics: Metrics;
   cpuCounters: { idle: number; total: number };
 } {
@@ -94,7 +114,11 @@ function parseMetrics(raw: string, prevCpu?: { idle: number; total: number }): {
       uptime = d > 0 ? `${d}d ${h}h` : `${h}h ${m}m`;
     }
     if (line.startsWith("MEM ")) {
-      const [total, used, avail] = line.slice(4).trim().split(/\s+/).map(Number);
+      const [total, used, avail] = line
+        .slice(4)
+        .trim()
+        .split(/\s+/)
+        .map(Number);
       memTotal = total || 0;
       memUsed = used || 0;
       memAvail = avail || Math.max(0, memTotal - memUsed);
@@ -210,6 +234,7 @@ function pct(used: number, total: number) {
   return Math.max(0, Math.min(100, (used / total) * 100));
 }
 
+/** 迷你面积图：资源趋势火花线 */
 function Spark({
   data,
   color,
@@ -240,6 +265,7 @@ function Spark({
   );
 }
 
+/** 百分比进度条 */
 function Bar({ value, color }: { value: number; color: string }) {
   const v = Math.max(0, Math.min(100, value));
   return (
@@ -252,6 +278,9 @@ function Bar({ value, color }: { value: number; color: string }) {
   );
 }
 
+/**
+ * 主机概览侧栏：主机信息、资源卡片、Swap、Top 进程。
+ */
 export function OverviewPane({
   sessionId,
   kind,
@@ -352,9 +381,13 @@ export function OverviewPane({
           <div className="px-2 py-4 text-xs text-danger">{error}</div>
         ) : (
           <>
+            {/* —— 主机身份与负载 —— */}
             <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2.5">
               <div className="flex items-start gap-2">
-                <Server size={14} className="mt-0.5 shrink-0 text-[var(--accent)]" />
+                <Server
+                  size={14}
+                  className="mt-0.5 shrink-0 text-[var(--accent)]"
+                />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold">
                     {metrics?.host || "-"}
@@ -372,6 +405,7 @@ export function OverviewPane({
               </div>
             </div>
 
+            {/* —— CPU / 内存 / 磁盘 / 网络 —— */}
             <ResourceCard
               icon={<Cpu size={13} />}
               title="CPU"
@@ -428,7 +462,10 @@ export function OverviewPane({
                   ? `${t("termTab.netTotal")} ${fmtBytes(metrics.netRx + metrics.netTx)}`
                   : undefined
               }
-              bar={Math.min(100, ((netRate.rx + netRate.tx) / (512 * 1024)) * 100)}
+              bar={Math.min(
+                100,
+                ((netRate.rx + netRate.tx) / (512 * 1024)) * 100,
+              )}
               spark={<Spark data={samples} color="#06b6d4" dataKey="net" />}
             />
 
@@ -437,7 +474,8 @@ export function OverviewPane({
                 <div className="mb-1 flex items-center justify-between text-[11px]">
                   <span className="muted">{t("termTab.swap")}</span>
                   <span className="font-medium">
-                    {fmtBytes(metrics!.swapUsed)} / {fmtBytes(metrics!.swapTotal)}
+                    {fmtBytes(metrics!.swapUsed)} /{" "}
+                    {fmtBytes(metrics!.swapTotal)}
                   </span>
                 </div>
                 <Bar value={swapPct} color="#a855f7" />
@@ -445,10 +483,17 @@ export function OverviewPane({
             )}
 
             <div className="grid grid-cols-2 gap-2 text-xs">
-              <InfoBox label={t("termTab.system")} value={metrics?.system || "-"} />
-              <InfoBox label={t("termTab.kernel")} value={metrics?.kernel || "-"} />
+              <InfoBox
+                label={t("termTab.system")}
+                value={metrics?.system || "-"}
+              />
+              <InfoBox
+                label={t("termTab.kernel")}
+                value={metrics?.kernel || "-"}
+              />
             </div>
 
+            {/* —— Top 进程 —— */}
             {metrics && metrics.top.length > 0 && (
               <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg)] px-2 py-2">
                 <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium muted">
@@ -458,7 +503,9 @@ export function OverviewPane({
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-2 px-0.5 text-[10px] muted">
                     <span className="w-16 shrink-0">PID</span>
-                    <span className="min-w-0 flex-1">{t("termTab.procName")}</span>
+                    <span className="min-w-0 flex-1">
+                      {t("termTab.procName")}
+                    </span>
                     <span className="w-12 shrink-0 text-right">CPU</span>
                     <span className="w-12 shrink-0 text-right">MEM</span>
                   </div>
@@ -494,6 +541,7 @@ export function OverviewPane({
   );
 }
 
+/** 单资源卡片：数值、详情、进度条与火花图 */
 function ResourceCard({
   icon,
   title,
@@ -539,6 +587,7 @@ function ResourceCard({
   );
 }
 
+/** 系统/内核等键值信息格 */
 function InfoBox({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2">

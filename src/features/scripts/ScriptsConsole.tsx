@@ -1,14 +1,12 @@
+/**
+ * @file 脚本片段控制台
+ * @author Charlie
+ * @description 管理脚本包与片段：搜索、编辑（Monaco）、新建/删除，并打开运行目标弹窗。
+ */
+
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  FolderPlus,
-  Play,
-  Plus,
-  Search,
-  Terminal,
-  X,
-  Zap,
-} from "lucide-react";
+import { FolderPlus, Play, Plus, Search, Terminal, X, Zap } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import {
   createScript,
@@ -22,20 +20,15 @@ import {
   ScriptPackageRow,
   ScriptRow,
   updateScript,
-} from "../../lib/db";
-import { previewScriptBody } from "../../lib/scriptVars";
-import {
-  openContextMenu,
-  useContextMenu,
-} from "../../components/ContextMenu";
-import {
-  resolveMonacoTheme,
-  useSettingsStore,
-} from "../../stores/settings";
-import { Select } from "../../components/Select";
-import { useDialog } from "../../components/Dialog";
-import { RunScriptTargetModal } from "./RunScriptTargetModal";
+} from "@/lib/db";
+import { previewScriptBody } from "@/lib/scriptVars";
+import { openContextMenu, useContextMenu } from "@/components/ContextMenu";
+import { resolveMonacoTheme, useSettingsStore } from "@/stores/settings";
+import { Select } from "@/components/Select";
+import { useDialog } from "@/components/Dialog";
+import { RunScriptTargetModal } from "@/features/scripts/RunScriptTargetModal";
 
+/** 脚本包与片段管理主界面 */
 export function ScriptsConsole() {
   const { t } = useTranslation();
   const { open: openMenu } = useContextMenu();
@@ -71,7 +64,8 @@ export function ScriptsConsole() {
   const filtered = useMemo(() => {
     let list = [...scripts];
     if (packageId === -1) list = list.filter((s) => s.package_id == null);
-    else if (packageId != null) list = list.filter((s) => s.package_id === packageId);
+    else if (packageId != null)
+      list = list.filter((s) => s.package_id === packageId);
     const q = search.trim().toLowerCase();
     if (q) {
       list = list.filter(
@@ -88,13 +82,16 @@ export function ScriptsConsole() {
   const title = useMemo(() => {
     if (packageId === -1) return t("scripts.ungrouped");
     if (packageId != null) {
-      return packages.find((p) => p.id === packageId)?.name || t("scripts.title");
+      return (
+        packages.find((p) => p.id === packageId)?.name || t("scripts.title")
+      );
     }
     return t("scripts.allPackages");
   }, [packageId, packages, t]);
 
   return (
     <div className="flex h-full flex-col">
+      {/* —— 工具栏 —— */}
       <div className="flex items-center gap-3 border-b border-[var(--border)] px-5 py-4">
         <div className="field-icon-wrap flex-1">
           <Search size={14} className="field-icon" />
@@ -136,6 +133,7 @@ export function ScriptsConsole() {
         </button>
       </div>
 
+      {/* —— 包侧栏 + 脚本列表 / 编辑器 —— */}
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-52 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg)]">
           <div className="px-3 py-3">
@@ -184,9 +182,12 @@ export function ScriptsConsole() {
                       danger: true,
                       onClick: async () => {
                         if (
-                          !(await dialog.confirm(t("scripts.deletePackageConfirm"), {
-                            danger: true,
-                          }))
+                          !(await dialog.confirm(
+                            t("scripts.deletePackageConfirm"),
+                            {
+                              danger: true,
+                            },
+                          ))
                         )
                           return;
                         await deleteScriptPackage(p.id);
@@ -197,8 +198,12 @@ export function ScriptsConsole() {
                   ])
                 }
               >
-                <span className="min-w-0 flex-1 truncate text-left text-sm">{p.name}</span>
-                <span className="count-badge">{packageCounts.get(p.id) || 0}</span>
+                <span className="min-w-0 flex-1 truncate text-left text-sm">
+                  {p.name}
+                </span>
+                <span className="count-badge">
+                  {packageCounts.get(p.id) || 0}
+                </span>
               </button>
             ))}
             <button
@@ -209,7 +214,9 @@ export function ScriptsConsole() {
               <span className="min-w-0 flex-1 truncate text-left text-sm">
                 {t("scripts.ungrouped")}
               </span>
-              <span className="count-badge">{packageCounts.get("none") || 0}</span>
+              <span className="count-badge">
+                {packageCounts.get("none") || 0}
+              </span>
             </button>
           </div>
         </aside>
@@ -270,7 +277,9 @@ export function ScriptsConsole() {
                       <Zap size={18} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate font-semibold">{script.name}</div>
+                      <div className="truncate font-semibold">
+                        {script.name}
+                      </div>
                       {script.description && (
                         <div className="mt-0.5 truncate text-xs muted">
                           {script.description}
@@ -284,7 +293,9 @@ export function ScriptsConsole() {
                           <span className="chip">{script.package_name}</span>
                         )}
                         {script.paste_only ? (
-                          <span className="chip">{t("scripts.pasteOnlyShort")}</span>
+                          <span className="chip">
+                            {t("scripts.pasteOnlyShort")}
+                          </span>
                         ) : null}
                       </div>
                     </div>
@@ -323,7 +334,9 @@ export function ScriptsConsole() {
           packages={packages}
           initial={editing}
           defaultPackageId={
-            packageId != null && packageId !== -1 ? packageId : packages[0]?.id ?? null
+            packageId != null && packageId !== -1
+              ? packageId
+              : (packages[0]?.id ?? null)
           }
           onClose={() => {
             setCreating(false);
@@ -336,21 +349,21 @@ export function ScriptsConsole() {
             setEditing(null);
             await reload();
           }}
-            onDelete={
-              editing
-                ? async () => {
-                    if (
-                      !(await dialog.confirm(t("scripts.deleteConfirm"), {
-                        danger: true,
-                      }))
-                    )
-                      return;
-                    await deleteScript(editing.id);
-                    setEditing(null);
-                    await reload();
-                  }
-                : undefined
-            }
+          onDelete={
+            editing
+              ? async () => {
+                  if (
+                    !(await dialog.confirm(t("scripts.deleteConfirm"), {
+                      danger: true,
+                    }))
+                  )
+                    return;
+                  await deleteScript(editing.id);
+                  setEditing(null);
+                  await reload();
+                }
+              : undefined
+          }
           onRun={editing ? () => setRunTarget(editing) : undefined}
         />
       )}
@@ -365,6 +378,7 @@ export function ScriptsConsole() {
   );
 }
 
+/** 新建 / 编辑脚本片段的模态编辑器 */
 function ScriptEditorModal({
   initial,
   packages,
@@ -402,7 +416,10 @@ function ScriptEditorModal({
   void appTheme;
 
   return (
-    <div className="overlay flex items-center justify-center p-4" onClick={onClose}>
+    <div
+      className="overlay flex items-center justify-center p-4"
+      onClick={onClose}
+    >
       <div
         className="modal-card flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
@@ -413,7 +430,11 @@ function ScriptEditorModal({
           </h3>
           <div className="flex items-center gap-1">
             {onRun && (
-              <button className="icon-btn" title={t("scripts.run")} onClick={onRun}>
+              <button
+                className="icon-btn"
+                title={t("scripts.run")}
+                onClick={onRun}
+              >
                 <Play size={16} />
               </button>
             )}
@@ -440,7 +461,10 @@ function ScriptEditorModal({
                 value={packageId === "" ? "" : String(packageId)}
                 options={[
                   { value: "", label: t("scripts.ungrouped") },
-                  ...packages.map((p) => ({ value: String(p.id), label: p.name })),
+                  ...packages.map((p) => ({
+                    value: String(p.id),
+                    label: p.name,
+                  })),
                 ]}
                 onChange={(v) => setPackageId(v ? Number(v) : "")}
               />

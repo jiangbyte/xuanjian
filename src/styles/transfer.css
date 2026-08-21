@@ -1,0 +1,112 @@
+/**
+ * @file transfer.css
+ * Author: Charlie
+ * @description 文件传输面板样式
+ */
+
+/* ========== File transfer panel ========== */
+.transfer-popover {
+  position: fixed;
+  z-index: 90;
+  display: flex;
+  width: min(440px, calc(100vw - 16px));
+  height: min(360px, calc(100vh - 56px));
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+}
+
+.transfer-panel {
+  background: var(--bg-elevated);
+}
+
+.transfer-tabs {
+  scrollbar-width: thin;
+}
+
+.transfer-tab {
+  position: relative;
+  flex-shrink: 0;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.transfer-tab:hover {
+  color: var(--text);
+}
+
+.transfer-tab.is-active {
+  color: var(--accent);
+}
+
+.transfer-tab.is-active::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+.transfer-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+}
+
+.transfer-row:hover {
+  background: var(--hover);
+}
+
+.transfer-progress {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.transfer-progress-bar {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width 0.15s ease;
+}
+
+.transfer-progress-bar.is-done {
+  background: color-mix(in srgb, var(--accent) 70%, #22c55e);
+}
+
+.transfer-progress-bar.is-error {
+  background: var(--danger);
+}
+
+.transfer-title-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 9px;
+  line-height: 14px;
+  text-align: center;
+  font-weight: 600;
+}
+
+body.is-pane-resizing-y iframe,
+body.is-pane-resizing-y .xterm {
+  pointer-events: none !important;
+}

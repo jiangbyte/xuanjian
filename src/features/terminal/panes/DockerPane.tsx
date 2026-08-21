@@ -1,3 +1,11 @@
+/**
+ * @file Docker 管理面板
+ * @author Charlie
+ * @description 通过 sessionExec 调用 docker CLI，管理容器/镜像/网络/卷。
+ * JSON 行输出解析；危险操作前确认；容器可进 shell、看日志。
+ * 仅允许安全字符作为 docker 引用参数，防止命令注入。
+ */
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -11,9 +19,9 @@ import {
   Terminal,
   Trash2,
 } from "lucide-react";
-import { api } from "../../../lib/tauri";
-import { clipboardWriteText } from "../../../lib/clipboard";
-import { useDialog } from "../../../components/Dialog";
+import { api } from "@/lib/tauri";
+import { clipboardWriteText } from "@/lib/clipboard";
+import { useDialog } from "@/components/Dialog";
 
 type Section = "containers" | "images" | "networks" | "volumes";
 
@@ -50,6 +58,7 @@ type VolumeRow = {
 
 const FORMAT = `--format "{{json .}}"`;
 
+/** 解析 docker --format json 的逐行 JSON */
 function parseJsonLines<T>(raw: string): T[] {
   const out: T[] = [];
   for (const line of raw.split(/\r?\n/)) {
@@ -58,19 +67,20 @@ function parseJsonLines<T>(raw: string): T[] {
     try {
       out.push(JSON.parse(trimmed) as T);
     } catch {
-      /* skip */
+      /* 跳过坏行 */
     }
   }
   return out;
 }
 
+/** 判断输出是否像 Docker 守护进程/命令不可用错误 */
 function looksLikeDockerError(raw: string) {
   return /Cannot connect to the Docker daemon|Is the docker daemon running|docker: command not found|is not recognized as an internal or external command|permission denied while trying to connect|error during connect/i.test(
     raw,
   );
 }
 
-/** Only allow docker IDs/names that are safe as bare shell args. */
+/** 仅允许可作为裸 shell 参数的 docker ID/名称 */
 function safeArg(value: string): string {
   const v = value.trim();
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_.\-/:]*$/.test(v)) {
@@ -103,6 +113,9 @@ function tipClass(tone: "accent" | "warn" | "danger" | "muted") {
   return "chip";
 }
 
+/**
+ * Docker 侧栏：分区列表、过滤、启停/删除等操作。
+ */
 export function DockerPane({
   sessionId,
   kind,
@@ -120,9 +133,10 @@ export function DockerPane({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [logsView, setLogsView] = useState<{ title: string; body: string } | null>(
-    null,
-  );
+  const [logsView, setLogsView] = useState<{
+    title: string;
+    body: string;
+  } | null>(null);
 
   const [containers, setContainers] = useState<ContainerRow[]>([]);
   const [images, setImages] = useState<ImageRow[]>([]);
@@ -230,7 +244,11 @@ export function DockerPane({
     refresh().catch(() => undefined);
   }, [refresh]);
 
-  const runDocker = async (key: string, command: string, confirmMsg?: string) => {
+  const runDocker = async (
+    key: string,
+    command: string,
+    confirmMsg?: string,
+  ) => {
     if (!sessionId) return;
     if (confirmMsg) {
       const ok = await dialog.confirm(confirmMsg, { danger: true });
@@ -364,6 +382,7 @@ export function DockerPane({
 
   return (
     <div className="panel flex h-full flex-col">
+      {/* —— 标题与刷新 —— */}
       <div className="panel-header flex items-center gap-2">
         <span className="text-xs font-medium">{t("termTab.docker")}</span>
         <span className="text-xs muted">
@@ -378,6 +397,7 @@ export function DockerPane({
         </button>
       </div>
 
+      {/* —— 分区、搜索与容器状态过滤 —— */}
       <div className="border-b border-[var(--border)] px-2 py-2">
         <div className="flex flex-wrap gap-1">
           {sections.map((s) => (
@@ -426,6 +446,7 @@ export function DockerPane({
         )}
       </div>
 
+      {/* —— 资源列表（容器 / 镜像 / 网络 / 卷） —— */}
       <div className="panel-body panel-list min-h-0 flex-1 overflow-y-auto p-1.5">
         {!sessionId || kind == null ? (
           <div className="px-2 py-6 text-center text-xs muted">
@@ -566,7 +587,10 @@ export function DockerPane({
                   ? `${img.repository}:${img.tag}`
                   : img.id;
               return (
-                <div key={`${img.id}:${img.tag}`} className="list-row items-start gap-2">
+                <div
+                  key={`${img.id}:${img.tag}`}
+                  className="list-row items-start gap-2"
+                >
                   <div className="min-w-0 flex-1">
                     <div className="list-row-title truncate" title={ref}>
                       {img.repository}
@@ -622,7 +646,9 @@ export function DockerPane({
                     <div className="list-row-meta">{shortId(n.id)}</div>
                     {builtin && (
                       <div className="mt-1.5">
-                        <span className="chip">{t("termTab.dockerBuiltin")}</span>
+                        <span className="chip">
+                          {t("termTab.dockerBuiltin")}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -697,6 +723,7 @@ export function DockerPane({
         )}
       </div>
 
+      {/* —— 容器日志弹层 —— */}
       {logsView && (
         <div
           className="overlay z-[95] flex items-center justify-center p-4"
@@ -707,7 +734,9 @@ export function DockerPane({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-5 py-3">
-              <h3 className="truncate text-sm font-semibold">{logsView.title}</h3>
+              <h3 className="truncate text-sm font-semibold">
+                {logsView.title}
+              </h3>
               <button className="btn btn-sm" onClick={() => setLogsView(null)}>
                 {t("dialog.ok")}
               </button>

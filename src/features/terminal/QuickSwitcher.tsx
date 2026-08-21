@@ -1,13 +1,24 @@
+/**
+ * @file 快速切换器（Quick Switcher）
+ * @author Charlie
+ * @description 全局快捷面板：搜索并打开本地 Shell、已保存主机或已有标签页。
+ * 打开时拉取本地 Shell 列表与主机列表，按关键字过滤。
+ * 连接成功后会启动会话录制并导航到 /terminal。
+ */
+
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { api, LocalShellInfo } from "../../lib/tauri";
-import { HostRow, listHosts, touchHostConnected } from "../../lib/db";
-import { useUiStore } from "../../stores/ui";
-import { useSettingsStore } from "../../stores/settings";
-import { useDialog } from "../../components/Dialog";
-import { startRecordingForOpenTab } from "../../lib/sessionRecorder";
+import { api, LocalShellInfo } from "@/lib/tauri";
+import { HostRow, listHosts, touchHostConnected } from "@/lib/db";
+import { useUiStore } from "@/stores/ui";
+import { useSettingsStore } from "@/stores/settings";
+import { useDialog } from "@/components/Dialog";
+import { startRecordingForOpenTab } from "@/lib/sessionRecorder";
 
+/**
+ * 快速切换器浮层：本地 Shell / 主机 / 标签三分区列表。
+ */
 export function QuickSwitcher() {
   const open = useUiStore((s) => s.switcherOpen);
   const setSwitcherOpen = useUiStore((s) => s.setSwitcherOpen);
@@ -49,13 +60,17 @@ export function QuickSwitcher() {
   const filteredShells = useMemo(
     () =>
       shells.filter(
-        (s) => !q || s.name.toLowerCase().includes(q) || s.path.toLowerCase().includes(q),
+        (s) =>
+          !q ||
+          s.name.toLowerCase().includes(q) ||
+          s.path.toLowerCase().includes(q),
       ),
     [shells, q],
   );
 
   if (!open) return null;
 
+  /** 打开本地 Shell 会话并切到终端页 */
   const openLocal = async (shell: LocalShellInfo) => {
     setSwitcherOpen(false);
     const tabId = crypto.randomUUID();
@@ -84,6 +99,7 @@ export function QuickSwitcher() {
     }
   };
 
+  /** SSH 连接主机并可选写入启动命令 */
   const openHost = async (host: HostRow) => {
     setSwitcherOpen(false);
     const tabId = crypto.randomUUID();
@@ -101,7 +117,8 @@ export function QuickSwitcher() {
         host: host.host,
         port: host.port,
         username: host.username,
-        authType: host.auth_type === "private_key" ? "privateKey" : host.auth_type,
+        authType:
+          host.auth_type === "private_key" ? "privateKey" : host.auth_type,
         password: host.password_enc,
         privateKeyPath: host.private_key_path,
         passphrase: host.passphrase_enc,
@@ -142,6 +159,7 @@ export function QuickSwitcher() {
           className="switcher-input"
         />
         <div className="max-h-[50vh] overflow-auto px-2 py-2">
+          {/* —— 本地 Shell —— */}
           <Section title={t("switcher.localShell")}>
             {filteredShells.map((shell) => {
               const isDefault =
@@ -156,12 +174,15 @@ export function QuickSwitcher() {
                 >
                   <span className="list-row-title truncate">{shell.name}</span>
                   {isDefault && (
-                    <span className="chip chip-accent">{t("switcher.default")}</span>
+                    <span className="chip chip-accent">
+                      {t("switcher.default")}
+                    </span>
                   )}
                 </button>
               );
             })}
           </Section>
+          {/* —— 已保存主机 —— */}
           <Section title={t("switcher.hosts")}>
             {filteredHosts.map((host) => (
               <button
@@ -179,6 +200,7 @@ export function QuickSwitcher() {
               </button>
             ))}
           </Section>
+          {/* —— 已有标签页 —— */}
           <Section title={t("switcher.tabs")}>
             {filteredTabs.map((tab) => (
               <button
@@ -201,13 +223,8 @@ export function QuickSwitcher() {
   );
 }
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
+/** 切换器内部分组标题 + 列表 */
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="menu-section">
       <div className="menu-section-title">{title}</div>

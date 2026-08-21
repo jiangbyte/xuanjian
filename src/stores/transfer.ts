@@ -1,6 +1,13 @@
+/**
+ * @file 文件传输任务 Store
+ * @author Charlie
+ * @description 上传 / 下载 / 远端互拷队列，并发调度与进度更新。
+ * 通过 Tauri SFTP API 执行；进度事件由 initTransferProgressListener 订阅。
+ */
+
 import { create } from "zustand";
-import { api } from "../lib/tauri";
-import { useUiStore } from "./ui";
+import { api } from "@/lib/tauri";
+import { useUiStore } from "@/stores/ui";
 
 export type TransferKind = "upload" | "download" | "copy";
 
@@ -12,20 +19,21 @@ export type TransferStatus =
   | "failed"
   | "cancelled";
 
+/** 单条传输任务 */
 export type TransferJob = {
   id: string;
   kind: TransferKind;
   sessionId?: string | null;
-  /** Second session for remote→remote. */
+  /** 远端→远端时的目标会话 */
   destSessionId?: string | null;
   localPath: string;
   remotePath: string;
-  /** Display name */
+  /** 展示名 */
   name: string;
   bytesDone: number;
   bytesTotal: number;
   status: TransferStatus;
-  /** Remote→remote: which leg is in progress. */
+  /** 远端互拷：当前阶段 */
   phase?: "download" | "upload";
   error?: string;
   createdAt: number;
@@ -49,12 +57,7 @@ type TransferState = {
   enqueue: (
     input: Omit<
       TransferJob,
-      | "id"
-      | "bytesDone"
-      | "bytesTotal"
-      | "status"
-      | "createdAt"
-      | "updatedAt"
+      "id" | "bytesDone" | "bytesTotal" | "status" | "createdAt" | "updatedAt"
     > & { bytesTotal?: number },
   ) => string;
   pause: (id: string) => void;
@@ -88,6 +91,7 @@ function errorMessage(e: unknown): string {
   return String(e);
 }
 
+/** 执行单个任务：upload / download / 经临时文件的远端互拷 */
 async function runJob(jobId: string): Promise<void> {
   const job = useTransferStore.getState().jobs.find((j) => j.id === jobId);
   if (!job) throw new Error("job missing");
@@ -101,23 +105,23 @@ async function runJob(jobId: string): Promise<void> {
   }
   if (kind === "download") {
     if (!sessionId) throw new Error("session missing");
-    await api.sftpDownload(sessionId, remotePath, localPath, id, resume ?? null);
+    await api.sftpDownload(
+      sessionId,
+      remotePath,
+      localPath,
+      id,
+      resume ?? null,
+    );
     return;
   }
-  // remote → remote via temp
+  // 远端 → 远端：经本地临时文件
   if (!sessionId || !destSessionId) throw new Error("sessions missing");
   const tempRoot = await api.getTempDir();
   const tempPath = `${tempRoot.replace(/[/\\]$/, "")}/xuanjian-xfer-${id}`;
   const phase = job.phase ?? "download";
 
   if (phase === "download") {
-    await api.sftpDownload(
-      sessionId,
-      remotePath,
-      tempPath,
-      id,
-      resume ?? null,
-    );
+    await api.sftpDownload(sessionId, remotePath, tempPath, id, resume ?? null);
     const cur = useTransferStore.getState().jobs.find((j) => j.id === id);
     if (cur?.status === "paused" || cur?.status === "cancelled") return;
     useTransferStore.setState((s) => ({
@@ -139,7 +143,9 @@ async function runJob(jobId: string): Promise<void> {
     return;
   }
   const uploadResume =
-    again.phase === "upload" && again.bytesDone > 0 ? again.bytesDone : undefined;
+    again.phase === "upload" && again.bytesDone > 0
+      ? again.bytesDone
+      : undefined;
   try {
     await api.sftpUpload(
       destSessionId,
@@ -158,6 +164,10 @@ async function runJob(jobId: string): Promise<void> {
 
 let kicking = false;
 
+/**
+ * 传输任务 Zustand store：入队、暂停/恢复、取消与并发 kick。
+ * @副作用 调用 SFTP API；enqueue 会打开传输面板
+ */
 export const useTransferStore = create<TransferState>((set, get) => ({
   jobs: [],
   filter: "all",
@@ -189,7 +199,7 @@ export const useTransferStore = create<TransferState>((set, get) => ({
     const job = get().jobs.find((j) => j.id === id);
     if (!job || (job.status !== "queued" && job.status !== "running")) return;
     const wasRunning = job.status === "running";
-    // Mark paused first so the in-flight runner never promotes to cancelled.
+    // 先标记 paused，避免进行中的 runner 误升为 cancelled
     set((s) => ({
       jobs: s.jobs.map((j) =>
         j.id === id && (j.status === "queued" || j.status === "running")
@@ -255,8 +265,7 @@ export const useTransferStore = create<TransferState>((set, get) => ({
   retry: (id) => {
     set((s) => ({
       jobs: s.jobs.map((j) =>
-        j.id === id &&
-        (j.status === "failed" || j.status === "cancelled")
+        j.id === id && (j.status === "failed" || j.status === "cancelled")
           ? {
               ...j,
               status: "queued",
@@ -307,6 +316,7 @@ export const useTransferStore = create<TransferState>((set, get) => ({
       ),
     }));
   },
+  /** 按并发上限从队列中启动任务 */
   kick: () => {
     if (kicking) return;
     kicking = true;
@@ -314,7 +324,9 @@ export const useTransferStore = create<TransferState>((set, get) => ({
       try {
         for (;;) {
           const state = get();
-          const running = state.jobs.filter((j) => j.status === "running").length;
+          const running = state.jobs.filter(
+            (j) => j.status === "running",
+          ).length;
           const slots = Math.max(0, state.concurrency - running);
           if (slots <= 0) break;
           const next = state.jobs.find((j) => j.status === "queued");
@@ -356,7 +368,7 @@ export const useTransferStore = create<TransferState>((set, get) => ({
               set((s) => ({
                 jobs: s.jobs.map((j) => {
                   if (j.id !== next.id) return j;
-                  // Never overwrite an intentional pause/cancel.
+                  // 不覆盖用户主动的 pause/cancel
                   if (j.status === "paused") {
                     return { ...j, error: undefined, updatedAt: now() };
                   }
@@ -393,9 +405,11 @@ export const useTransferStore = create<TransferState>((set, get) => ({
         }
       } finally {
         kicking = false;
-        // If more queued appeared while we were scheduling, kick again.
+        // 调度期间若又有排队任务且仍有空位，再 kick
         if (get().jobs.some((j) => j.status === "queued")) {
-          const running = get().jobs.filter((j) => j.status === "running").length;
+          const running = get().jobs.filter(
+            (j) => j.status === "running",
+          ).length;
           if (running < get().concurrency) {
             queueMicrotask(() => get().kick());
           }
@@ -405,6 +419,10 @@ export const useTransferStore = create<TransferState>((set, get) => ({
   },
 }));
 
+/**
+ * 按筛选条件过滤任务列表。
+ * @param filter `needs` 表示失败项
+ */
 export function filterJobs(jobs: TransferJob[], filter: TransferFilter) {
   switch (filter) {
     case "running":
@@ -422,16 +440,19 @@ export function filterJobs(jobs: TransferJob[], filter: TransferFilter) {
   }
 }
 
+/** 将字节数格式化为可读字符串 */
 export function formatBytes(n: number) {
   if (!n || n < 0) return "—";
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  if (n < 1024 * 1024 * 1024)
-    return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
   return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-/** Enqueue a simple upload. */
+/**
+ * 入队简单上传任务。
+ * @returns 任务 id
+ */
 export function enqueueUpload(
   sessionId: string,
   localPath: string,
@@ -448,6 +469,10 @@ export function enqueueUpload(
   });
 }
 
+/**
+ * 入队下载任务。
+ * @returns 任务 id
+ */
 export function enqueueDownload(
   sessionId: string,
   remotePath: string,
@@ -464,7 +489,10 @@ export function enqueueDownload(
   });
 }
 
-/** Remote → remote (via temp file). `destRemotePath` is stored in `localPath`. */
+/**
+ * 入队远端→远端复制（经临时文件）；目标远端路径存在 `localPath` 字段。
+ * @returns 任务 id
+ */
 export function enqueueRemoteCopy(
   sessionId: string,
   destSessionId: string,
@@ -485,12 +513,15 @@ export function enqueueRemoteCopy(
 
 let progressListening = false;
 
-/** Subscribe once for backend progress events (safe if panel is closed). */
+/**
+ * 全局订阅后端传输进度事件（面板关闭时也安全）；幂等，重复调用无效。
+ * @returns 取消订阅函数
+ */
 export function initTransferProgressListener() {
   if (progressListening) return () => undefined;
   progressListening = true;
   let unlisten: (() => void) | undefined;
-  void import("../lib/tauri").then(({ onTransferProgress }) => {
+  void import("@/lib/tauri").then(({ onTransferProgress }) => {
     onTransferProgress((p) => {
       useTransferStore
         .getState()

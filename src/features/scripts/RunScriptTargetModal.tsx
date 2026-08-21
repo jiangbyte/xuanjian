@@ -1,20 +1,28 @@
+/**
+ * @file 脚本运行目标选择弹窗
+ * @author Charlie
+ * @description 选择已开标签、SSH 主机或本地 Shell 作为脚本执行目标；
+ * 必要时新建会话并启动录制后再投递脚本。
+ */
+
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { Monitor, Server, Terminal, X } from "lucide-react";
-import { HostRow, listHosts, touchHostConnected } from "../../lib/db";
-import type { ScriptRow } from "../../lib/db";
-import { api, LocalShellInfo } from "../../lib/tauri";
-import { runScriptOnSession } from "../../lib/runScript";
-import { useUiStore, type TermTab } from "../../stores/ui";
-import { useDialog } from "../../components/Dialog";
-import { startRecordingForOpenTab } from "../../lib/sessionRecorder";
+import { HostRow, listHosts, touchHostConnected } from "@/lib/db";
+import type { ScriptRow } from "@/lib/db";
+import { api, LocalShellInfo } from "@/lib/tauri";
+import { runScriptOnSession } from "@/lib/runScript";
+import { useUiStore, type TermTab } from "@/stores/ui";
+import { useDialog } from "@/components/Dialog";
+import { startRecordingForOpenTab } from "@/lib/sessionRecorder";
 
 type Target =
   | { kind: "tab"; tab: TermTab }
   | { kind: "host"; host: HostRow }
   | { kind: "shell"; shell: LocalShellInfo };
 
+/** 选择脚本运行目标并执行 */
 export function RunScriptTargetModal({
   script,
   preferSessionId,
@@ -99,7 +107,8 @@ export function RunScriptTargetModal({
     setRunning(true);
     try {
       if (target.kind === "tab") {
-        if (!target.tab.sessionId) throw new Error(t("scripts.needSessionShort"));
+        if (!target.tab.sessionId)
+          throw new Error(t("scripts.needSessionShort"));
         await runOnSession(target.tab.sessionId, target.tab.id);
         return;
       }
@@ -184,7 +193,10 @@ export function RunScriptTargetModal({
           : "";
 
   return (
-    <div className="overlay z-[95] flex items-center justify-center p-4" onClick={onClose}>
+    <div
+      className="overlay z-[95] flex items-center justify-center p-4"
+      onClick={onClose}
+    >
       <div
         className="modal-card flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
@@ -209,6 +221,7 @@ export function RunScriptTargetModal({
           />
         </div>
 
+        {/* —— 目标列表：已开标签 / Shell / 主机 —— */}
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
           <Section title={t("scripts.openTabs")}>
             {filteredTabs.length === 0 ? (
@@ -283,13 +296,8 @@ export function RunScriptTargetModal({
   );
 }
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
+/** 目标列表分组标题 */
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="menu-section">
       <div className="menu-section-title">{title}</div>
@@ -298,6 +306,7 @@ function Section({
   );
 }
 
+/** 可选运行目标的一行 */
 function TargetRow({
   active,
   icon,

@@ -1,32 +1,34 @@
-import { useEffect, useRef, useState } from "react";
+/**
+ * @file xterm 终端视图
+ * @author Charlie
+ * @description 单标签页的 xterm.js 封装：会话 IO、尺寸适配、剪贴板与重连。
+ * 使用 Tauri 剪贴板 API，避免浏览器 clipboard 权限弹窗。
+ * 非激活标签隐藏但仍挂载，切换时 fit + focus。
+ */
+
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { useTranslation } from "react-i18next";
-import { api, onSessionClosed, onSessionOutput } from "../../lib/tauri";
-import { clipboardReadText, clipboardWriteText } from "../../lib/clipboard";
+import { api, onSessionClosed, onSessionOutput } from "@/lib/tauri";
+import { clipboardReadText, clipboardWriteText } from "@/lib/clipboard";
 import {
   openContextMenu,
   useContextMenu,
   type ContextMenuItem,
-} from "../../components/ContextMenu";
-import {
-  canReconnect,
-  reconnectTermTab,
-} from "../../lib/sessionConnect";
-import type { TermTab } from "../../stores/ui";
-import { useDialog } from "../../components/Dialog";
-import { useSettingsStore } from "../../stores/settings";
+} from "@/components/ContextMenu";
+import { canReconnect, reconnectTermTab } from "@/lib/sessionConnect";
+import type { TermTab } from "@/stores/ui";
+import { useDialog } from "@/components/Dialog";
+import { useSettingsStore } from "@/stores/settings";
 
-/** Avoid StrictMode / remount double-prompts for the same disconnect. */
+/** 避免 StrictMode / 重挂载对同一次断线重复弹出确认框 */
 const promptedClosed = new Set<string>();
 
-export function XtermView({
-  tab,
-  active,
-}: {
-  tab: TermTab;
-  active: boolean;
-}) {
+/**
+ * 单个终端标签的 xterm 视图，绑定会话输出与输入。
+ */
+export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
   const { t } = useTranslation();
   const dialog = useDialog();
   const { open: openMenu } = useContextMenu();
@@ -64,10 +66,13 @@ export function XtermView({
     if (term.cols < 2 || term.rows < 2) return;
     api.sessionResize(sid, term.cols, term.rows).catch(() => undefined);
   };
+  const safeFitRef = useRef(safeFit);
+  safeFitRef.current = safeFit;
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    // —— 创建 xterm 实例与 FitAddon ——
     const term = new Terminal({
       cursorBlink: true,
       fontSize: useSettingsStore.getState().termFontSize,
@@ -85,7 +90,7 @@ export function XtermView({
     term.open(el);
     termRef.current = term;
     fitRef.current = fit;
-    requestAnimationFrame(() => safeFit(true));
+    requestAnimationFrame(() => safeFitRef.current(true));
 
     const pasteToSession = async (text: string) => {
       const sid = sessionRef.current;
@@ -93,7 +98,7 @@ export function XtermView({
       await api.sessionWrite(sid, text);
     };
 
-    // Prefer paste event / Tauri clipboard — never navigator.clipboard (browser prompt).
+    // 优先 paste 事件 / Tauri 剪贴板，不使用 navigator.clipboard（避免浏览器授权提示）
     const onPaste = (e: ClipboardEvent) => {
       e.preventDefault();
       e.stopPropagation();
@@ -103,7 +108,7 @@ export function XtermView({
         return;
       }
       clipboardReadText()
-        .then((t) => pasteToSession(t))
+        .then((txt) => pasteToSession(txt))
         .catch(() => undefined);
     };
     el.addEventListener("paste", onPaste);
@@ -126,11 +131,11 @@ export function XtermView({
         e.preventDefault();
         e.stopPropagation();
         clipboardReadText()
-          .then((t) => pasteToSession(t))
+          .then((txt) => pasteToSession(txt))
           .catch(() => undefined);
       }
     };
-    // Capture phase so we win over leftover browser / plugin handlers.
+    // 捕获阶段，优先于残留的浏览器 / 插件处理器
     el.addEventListener("keydown", onKeyDown, true);
 
     term.attachCustomKeyEventHandler((ev) => {
@@ -138,7 +143,7 @@ export function XtermView({
       const key = ev.key.toLowerCase();
       const mod = ev.ctrlKey || ev.metaKey;
 
-      // Already handled in capture listener; keep xterm from emitting to PTY.
+      // 已在捕获监听里处理；阻止 xterm 再向 PTY 发送
       if (mod && ev.shiftKey && (key === "c" || key === "v")) {
         return false;
       }
@@ -153,13 +158,14 @@ export function XtermView({
       if (ev.shiftKey && !mod && ev.key === "Insert") {
         ev.preventDefault();
         clipboardReadText()
-          .then((t) => pasteToSession(t))
+          .then((txt) => pasteToSession(txt))
           .catch(() => undefined);
         return false;
       }
       return true;
     });
 
+    // —— 按行缓冲输入，写入命令历史 ——
     const lineBuf = { current: "" };
     const onData = term.onData((data) => {
       const sid = sessionRef.current;
@@ -170,7 +176,7 @@ export function XtermView({
           const cmd = lineBuf.current.trim();
           lineBuf.current = "";
           if (cmd) {
-            import("../../stores/cmdHistory").then(({ useCmdHistory }) => {
+            import("@/stores/cmdHistory").then(({ useCmdHistory }) => {
               useCmdHistory.getState().push({ cmd, sessionId: sid });
             });
           }
@@ -184,10 +190,11 @@ export function XtermView({
 
     const ro = new ResizeObserver(() => {
       if (!activeRef.current) return;
-      safeFit(true);
+      safeFitRef.current(true);
     });
     ro.observe(el);
 
+    // —— 订阅会话输出与关闭 ——
     let unOut: (() => void) | undefined;
     let unClose: (() => void) | undefined;
     onSessionOutput((p) => {
@@ -216,7 +223,6 @@ export function XtermView({
       termRef.current = null;
       fitRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -224,8 +230,7 @@ export function XtermView({
     if (!term) return;
     term.options.fontSize = termFontSize;
     term.options.fontFamily = termFontFamily;
-    requestAnimationFrame(() => safeFit(true));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    requestAnimationFrame(() => safeFitRef.current(true));
   }, [termFontSize, termFontFamily]);
 
   useEffect(() => {
@@ -233,7 +238,10 @@ export function XtermView({
     statusRef.current = tab.status;
     const term = termRef.current;
     if (!term) return;
-    if (tab.status === "connecting" && (prev === "closed" || prev === "error")) {
+    if (
+      tab.status === "connecting" &&
+      (prev === "closed" || prev === "error")
+    ) {
       wasReconnectRef.current = true;
       term.writeln(`\r\n\x1b[36m${t("terminal.reconnecting")}\x1b[0m`);
     }
@@ -252,20 +260,18 @@ export function XtermView({
 
   useEffect(() => {
     if (!tab.sessionId || !active) return;
-    requestAnimationFrame(() => safeFit(true));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    requestAnimationFrame(() => safeFitRef.current(true));
   }, [tab.sessionId, active]);
 
   useEffect(() => {
     if (!active) return;
     requestAnimationFrame(() => {
-      safeFit(true);
+      safeFitRef.current(true);
       termRef.current?.focus();
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
-  const doReconnect = async () => {
+  const doReconnect = useCallback(async () => {
     if (busy || !canReconnect(tab)) return;
     setBusy(true);
     try {
@@ -277,9 +283,9 @@ export function XtermView({
     } finally {
       setBusy(false);
     }
-  };
+  }, [busy, tab, dialog]);
 
-  const askReconnect = async () => {
+  const askReconnect = useCallback(async () => {
     if (busy || !canReconnect(tab)) return;
     if (tab.status !== "closed" && tab.status !== "error") return;
     const ok = await dialog.confirm(t("terminal.reconnectConfirm"), {
@@ -292,9 +298,9 @@ export function XtermView({
     });
     if (!ok) return;
     await doReconnect();
-  };
+  }, [busy, tab, dialog, t, doReconnect]);
 
-  // One confirm/cancel dialog when this tab disconnects (or becomes active while disconnected).
+  // 本标签断线（或激活时已断线）时弹出一次重连确认
   useEffect(() => {
     if (!active || busy) return;
     if (tab.status !== "closed" && tab.status !== "error") return;
@@ -302,8 +308,7 @@ export function XtermView({
     if (promptedClosed.has(tab.id)) return;
     promptedClosed.add(tab.id);
     void askReconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, tab.status, tab.id]);
+  }, [active, busy, tab, askReconnect]);
 
   return (
     <div

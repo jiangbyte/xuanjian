@@ -1,11 +1,23 @@
+/**
+ * @file Markdown 编辑器封装
+ * @author Charlie
+ * @description 基于 @uiw/react-md-editor，跟随应用主题的明暗色模式。
+ * 供笔记等场景复用；不负责持久化。
+ */
+
 import MDEditor from "@uiw/react-md-editor";
 import "@uiw/react-md-editor/markdown-editor.css";
 import "@uiw/react-markdown-preview/markdown.css";
-import {
-  resolveMarkdownColorMode,
-  useSettingsStore,
-} from "../stores/settings";
+import { resolveMarkdownColorMode, useSettingsStore } from "@/stores/settings";
 
+/**
+ * Markdown 所见即所得编辑器。
+ * @param value 当前 Markdown 文本
+ * @param onChange 内容变更回调
+ * @param height 编辑器高度，默认 100%
+ * @param preview 预览模式：live / edit / preview
+ * @param hideToolbar 是否隐藏工具栏
+ */
 export function MarkdownEditor({
   value,
   onChange,
@@ -22,7 +34,7 @@ export function MarkdownEditor({
   const markdownColorMode = useSettingsStore((s) => s.markdownColorMode);
   const theme = useSettingsStore((s) => s.theme);
   const colorMode = resolveMarkdownColorMode(markdownColorMode);
-  // Re-resolve when app theme changes while mode is "follow".
+  // 主题为 follow 时，应用主题变化需触发重新解析
   void theme;
 
   return (

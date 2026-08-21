@@ -1,12 +1,19 @@
+//! 主机口令加解密（AES-256-GCM）。
+//!
+//! 密钥存放于本机用户数据目录 `xuanjian/secret.key`，首次使用时自动生成。
+//! 密文格式：Base64(nonce || ciphertext)。
+//!
+//! Author: Charlie
+
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 use anyhow::{anyhow, Result};
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use rand::RngCore;
-use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::PathBuf;
 
+/// 返回密钥文件路径（确保目录存在）。
 fn key_path() -> Result<PathBuf> {
     let dir = dirs::data_local_dir()
         .or_else(dirs::data_dir)
@@ -16,6 +23,7 @@ fn key_path() -> Result<PathBuf> {
     Ok(dir.join("secret.key"))
 }
 
+/// 加载或创建 32 字节主密钥。
 fn load_or_create_key() -> Result<[u8; 32]> {
     let path = key_path()?;
     if path.exists() {
@@ -32,6 +40,7 @@ fn load_or_create_key() -> Result<[u8; 32]> {
     Ok(key)
 }
 
+/// 加密明文口令，返回 Base64 密文。
 pub fn encrypt_password(plain: &str) -> Result<String> {
     let key_bytes = load_or_create_key()?;
     let key = Key::<Aes256Gcm>::from_slice(&key_bytes);
@@ -47,6 +56,7 @@ pub fn encrypt_password(plain: &str) -> Result<String> {
     Ok(B64.encode(out))
 }
 
+/// 解密 Base64 密文；格式非法时返回错误。
 pub fn decrypt_password(encoded: &str) -> Result<String> {
     let raw = B64.decode(encoded)?;
     if raw.len() < 13 {
@@ -60,11 +70,4 @@ pub fn decrypt_password(encoded: &str) -> Result<String> {
         .decrypt(nonce, &raw[12..])
         .map_err(|e| anyhow!("decrypt: {e}"))?;
     Ok(String::from_utf8(plain)?)
-}
-
-pub fn fingerprint(host: &str, key_bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(host.as_bytes());
-    hasher.update(key_bytes);
-    format!("{:x}", hasher.finalize())
 }

@@ -1,14 +1,22 @@
+/**
+ * @file HTTP / TLS / Whois 面板
+ * @author Charlie
+ * @description 发送自定义 HTTP 请求、拉取 TLS 证书信息、查询 Whois，
+ * 并展示近期网络工具历史。
+ */
+
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, type HttpResponse, type TlsCertInfo } from "../../../lib/tauri";
+import { api, type HttpResponse, type TlsCertInfo } from "@/lib/tauri";
 import {
   addNetworkHistory,
   clearNetworkHistory,
   listNetworkHistory,
   type NetworkHistoryRow,
-} from "../../../lib/db";
-import { Select } from "../../../components/Select";
+} from "@/lib/db";
+import { Select } from "@/components/Select";
 
+/** 将多行 `Key: Value` 文本解析为请求头数组 */
 function parseHeaders(raw: string): [string, string][] {
   return raw
     .split("\n")
@@ -21,6 +29,7 @@ function parseHeaders(raw: string): [string, string][] {
     });
 }
 
+/** HTTP / TLS / Whois 综合面板 */
 export function HttpPanel() {
   const { t } = useTranslation();
   const [sub, setSub] = useState<"http" | "tls" | "whois">("http");
@@ -127,9 +136,14 @@ export function HttpPanel() {
                 <Select
                   value={method}
                   onChange={setMethod}
-                  options={["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"].map(
-                    (m) => ({ value: m, label: m }),
-                  )}
+                  options={[
+                    "GET",
+                    "POST",
+                    "PUT",
+                    "PATCH",
+                    "DELETE",
+                    "HEAD",
+                  ].map((m) => ({ value: m, label: m }))}
                 />
               </label>
               <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-xs muted">

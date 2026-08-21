@@ -1,13 +1,19 @@
-import { api } from "../../lib/tauri";
-import { FloatingWindow } from "../../components/FloatingWindow";
+/**
+ * @file 文件编辑器浮窗
+ * @author Charlie
+ * @description 用 Monaco 编辑本地或 SFTP 远程文件，支持按扩展名推断语言。
+ * 打开时读取内容，保存时写回本地或远程；脏标记显示在标题前。
+ * 主题与字号等跟随设置 store。
+ */
+
+import { api } from "@/lib/tauri";
+import { FloatingWindow } from "@/components/FloatingWindow";
 import { useTranslation } from "react-i18next";
 import Editor from "@monaco-editor/react";
 import { useEffect, useMemo, useState } from "react";
-import {
-  resolveMonacoTheme,
-  useSettingsStore,
-} from "../../stores/settings";
+import { resolveMonacoTheme, useSettingsStore } from "@/stores/settings";
 
+/** 根据路径扩展名推断 Monaco language id */
 function languageFromPath(path: string): string {
   const name = path.replace(/\\/g, "/").split("/").pop() || "";
   const ext = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
@@ -46,12 +52,16 @@ function languageFromPath(path: string): string {
   return map[ext] || "plaintext";
 }
 
+/** 编辑目标：路径 + 是否远程 + 可选会话 ID */
 export type FileEditorTarget = {
   path: string;
   remote: boolean;
   sessionId: string | null;
 };
 
+/**
+ * Monaco 文件编辑浮窗：加载、编辑、保存本地或 SFTP 文件。
+ */
 export function FileEditorModal({
   target,
   onClose,
@@ -77,6 +87,7 @@ export function FileEditorModal({
   const monacoTheme = resolveMonacoTheme(editorTheme);
   void appTheme;
 
+  // —— 加载文件内容 ——
   useEffect(() => {
     let cancelled = false;
     (async () => {

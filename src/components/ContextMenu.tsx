@@ -1,3 +1,10 @@
+/**
+ * @file 右键上下文菜单
+ * @author Charlie
+ * @description 全局 ContextMenu Provider + Portal 渲染菜单。
+ * 支持分隔线、危险项、快捷键提示；点击外部或 Escape 关闭。
+ */
+
 import {
   createContext,
   useCallback,
@@ -10,6 +17,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+/** 菜单项：普通操作或分隔线 `"sep"` */
 export type ContextMenuItem =
   | {
       id: string;
@@ -35,12 +43,19 @@ type ContextMenuApi = {
 
 const Ctx = createContext<ContextMenuApi | null>(null);
 
+/**
+ * 读取右键菜单 API；须在 ContextMenuProvider 内使用。
+ * @throws 未包裹 Provider 时抛错
+ */
 export function useContextMenu() {
   const api = useContext(Ctx);
   if (!api) throw new Error("useContextMenu requires ContextMenuProvider");
   return api;
 }
 
+/**
+ * 提供 open/close，并在菜单打开时 Portal 渲染 ContextMenuView。
+ */
 export function ContextMenuProvider({ children }: { children: ReactNode }) {
   const [menu, setMenu] = useState<MenuState>(null);
 
@@ -68,6 +83,7 @@ export function ContextMenuProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/** 菜单视图：贴边夹紧位置，处理 Escape / 外点关闭 */
 function ContextMenuView({
   x,
   y,
@@ -147,6 +163,12 @@ function ContextMenuView({
   );
 }
 
+/**
+ * 在 React 右键事件上打开菜单（阻止默认与冒泡）。
+ * @param e 鼠标事件
+ * @param open Provider 的 open
+ * @param items 菜单项列表
+ */
 export function openContextMenu(
   e: ReactMouseEvent,
   open: ContextMenuApi["open"],

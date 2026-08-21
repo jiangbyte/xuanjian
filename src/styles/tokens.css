@@ -1,0 +1,48 @@
+/**
+ * @file tokens.css
+ * Author: Charlie
+ * @description 设计令牌（CSS 变量）
+ */
+
+/* ========== Design tokens ========== */
+:root {
+  --bg: #0f1115;
+  --bg-elevated: #161a21;
+  --sidebar: #12161c;
+  --titlebar: #0c0e12;
+  --text: #e8eaed;
+  --text-muted: #8b939e;
+  --border: #262c36;
+  --hover: rgba(255, 255, 255, 0.06);
+  --hover-strong: rgba(255, 255, 255, 0.1);
+  --accent: #4ea1ff;
+  --accent-soft: rgba(78, 161, 255, 0.15);
+  --danger: #e85d5d;
+  --success: #3ecf8e;
+  --overlay: rgba(0, 0, 0, 0.5);
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --control-h: 32px;
+  --control-h-sm: 28px;
+  --font-ui: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+:root.light {
+  --bg: #f4f6f8;
+  --bg-elevated: #ffffff;
+  --sidebar: #eef1f5;
+  --titlebar: #e8edf2;
+  --text: #1a1f27;
+  --text-muted: #66707d;
+  --border: #d7dee6;
+  --hover: rgba(0, 0, 0, 0.05);
+  --hover-strong: rgba(0, 0, 0, 0.08);
+  --accent: #2563eb;
+  --accent-soft: rgba(37, 99, 235, 0.12);
+  --danger: #dc2626;
+  --success: #16a34a;
+  --overlay: rgba(15, 23, 42, 0.4);
+  --shadow: 0 12px 40px rgba(15, 23, 42, 0.18);
+}

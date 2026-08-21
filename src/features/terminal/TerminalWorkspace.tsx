@@ -1,14 +1,25 @@
+/**
+ * @file 终端三栏工作区
+ * @author Charlie
+ * @description 布局：左侧工具栏 | 中央 xterm 标签层 | 右侧 AI/笔记。
+ * 左右栏宽可拖拽，折叠状态与宽度来自 UI store。
+ * 监听会话关闭事件，统一走 handleSessionClosed。
+ */
+
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { useUiStore } from "../../stores/ui";
-import { XtermView } from "./XtermView";
-import { TerminalLeftPanel } from "./TerminalLeftPanel";
-import { TerminalRightPanel } from "./TerminalRightPanel";
-import { onSessionClosed } from "../../lib/tauri";
-import { handleSessionClosed } from "../../lib/sessionConnect";
+import { useUiStore } from "@/stores/ui";
+import { XtermView } from "@/features/terminal/XtermView";
+import { TerminalLeftPanel } from "@/features/terminal/TerminalLeftPanel";
+import { TerminalRightPanel } from "@/features/terminal/TerminalRightPanel";
+import { onSessionClosed } from "@/lib/tauri";
+import { handleSessionClosed } from "@/lib/sessionConnect";
 
 type ResizeAxis = "left" | "right";
 
+/**
+ * 左右分栏拖拽手柄：拖动时临时改宽，松手后持久化。
+ */
 function ResizeHandle({ axis }: { axis: ResizeAxis }) {
   const drag = useRef<{
     startPos: number;
@@ -73,6 +84,9 @@ function ResizeHandle({ axis }: { axis: ResizeAxis }) {
   );
 }
 
+/**
+ * 终端主工作区：左栏 + 多标签 xterm + 右栏。
+ */
 export function TerminalWorkspace() {
   const { t } = useTranslation();
   const tabs = useUiStore((s) => s.tabs);
@@ -95,6 +109,7 @@ export function TerminalWorkspace() {
 
   return (
     <div className="terminal-split flex h-full min-w-0">
+      {/* —— 左侧工具栏 —— */}
       {!leftCollapsed && (
         <div
           className="terminal-split-pane terminal-split-left flex h-full shrink-0 overflow-hidden"
@@ -110,6 +125,7 @@ export function TerminalWorkspace() {
         </div>
       )}
 
+      {/* —— 中央：所有标签叠放，仅激活可见 —— */}
       <div className="terminal-split-center flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--bg)]">
         <div className="relative min-h-0 flex-1 overflow-hidden">
           {tabs.length === 0 ? (
@@ -134,6 +150,7 @@ export function TerminalWorkspace() {
         </div>
       </div>
 
+      {/* —— 右侧 AI / 笔记 —— */}
       {!rightCollapsed && (
         <div
           className="terminal-split-pane terminal-split-right flex h-full shrink-0 overflow-hidden"

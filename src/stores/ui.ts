@@ -1,15 +1,23 @@
-import { create } from "zustand";
-import { api } from "../lib/tauri";
+/**
+ * @file UI 布局与终端标签 Store
+ * @author Charlie
+ * @description 左右侧栏折叠/宽度、传输面板开关、会话标签与主机筛选。
+ * 宽度持久化到 localStorage；关标签会结束录制并关闭后端 session。
+ */
 
+import { create } from "zustand";
+import { api } from "@/lib/tauri";
+
+/** 终端标签元数据（不含 xterm 实例） */
 export type TermTab = {
   id: string;
   title: string;
   kind: "local" | "ssh";
   sessionId: string | null;
   hostId?: number;
-  /** Local shell id for reconnect (PowerShell / cmd / bash …). */
+  /** 本地 shell id，用于重连（PowerShell / cmd / bash …） */
   shellId?: string;
-  /** Active session_logs row while recording. */
+  /** 录制中的 session_logs 行 id */
   logId?: number;
   status: "connecting" | "open" | "closed" | "error";
 };
@@ -61,6 +69,10 @@ function loadNum(key: string, fallback: number) {
   return Number.isFinite(v) && v > 0 ? v : fallback;
 }
 
+/**
+ * UI Zustand store。
+ * @副作用 closeTab 结束录制并 `api.sessionClose`；宽度 setter 默认可持久化
+ */
 export const useUiStore = create<UiState>((set, get) => ({
   leftCollapsed: false,
   rightCollapsed: false,
@@ -109,7 +121,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   closeTab: (id) => {
     const { tabs, activeTabId } = get();
     const closing = tabs.find((t) => t.id === id);
-    void import("../lib/sessionRecorder").then(({ endRecordingForTab }) =>
+    void import("@/lib/sessionRecorder").then(({ endRecordingForTab }) =>
       endRecordingForTab(id),
     );
     if (closing?.sessionId) {
@@ -117,7 +129,7 @@ export const useUiStore = create<UiState>((set, get) => ({
     }
     const next = tabs.filter((t) => t.id !== id);
     const active =
-      activeTabId === id ? next[next.length - 1]?.id ?? null : activeTabId;
+      activeTabId === id ? (next[next.length - 1]?.id ?? null) : activeTabId;
     set({ tabs: next, activeTabId: active });
   },
   setActiveTab: (id) => set({ activeTabId: id }),

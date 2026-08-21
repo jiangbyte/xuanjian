@@ -1,26 +1,28 @@
+/**
+ * @file 传输任务列表面板
+ * @author Charlie
+ * @description 展示上传/下载/复制任务队列，支持按状态筛选与批量暂停/恢复。
+ * 单行可右键暂停、恢复、重试、取消或移除。
+ * 数据来自 transfer store，与 SFTP 双栏传输共用。
+ */
+
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  ArrowDownUp,
-  Pause,
-  Play,
-  RotateCcw,
-  Trash2,
-  X,
-} from "lucide-react";
+import { ArrowDownUp, Pause, Play, RotateCcw, Trash2, X } from "lucide-react";
 import {
   filterJobs,
   formatBytes,
   TransferFilter,
   useTransferStore,
   type TransferJob,
-} from "../../stores/transfer";
+} from "@/stores/transfer";
 import {
   openContextMenu,
   useContextMenu,
   type ContextMenuItem,
-} from "../../components/ContextMenu";
+} from "@/components/ContextMenu";
 
+/** 筛选标签：全部 / 进行中 / 排队 / 暂停 / 需处理 / 已完成 */
 const TABS: { id: TransferFilter; labelKey: string }[] = [
   { id: "all", labelKey: "transfer.tabAll" },
   { id: "running", labelKey: "transfer.tabRunning" },
@@ -30,12 +32,14 @@ const TABS: { id: TransferFilter; labelKey: string }[] = [
   { id: "completed", labelKey: "transfer.tabCompleted" },
 ];
 
+/** 任务类型文案 */
 function kindLabel(kind: TransferJob["kind"], t: (k: string) => string) {
   if (kind === "upload") return t("transfer.upload");
   if (kind === "download") return t("transfer.download");
   return t("transfer.copy");
 }
 
+/** 任务状态文案 */
 function statusLabel(status: TransferJob["status"], t: (k: string) => string) {
   switch (status) {
     case "running":
@@ -55,6 +59,7 @@ function statusLabel(status: TransferJob["status"], t: (k: string) => string) {
   }
 }
 
+/** 单条传输任务行：进度、路径、快捷操作与右键菜单 */
 function TransferRow({ job }: { job: TransferJob }) {
   const { t } = useTranslation();
   const { open: openMenu } = useContextMenu();
@@ -218,6 +223,9 @@ function TransferRow({ job }: { job: TransferJob }) {
   );
 }
 
+/**
+ * 传输列表面板：筛选标签 + 批量操作 + 任务列表。
+ */
 export function TransferPanel() {
   const { t } = useTranslation();
   const jobs = useTransferStore((s) => s.jobs);
@@ -249,6 +257,7 @@ export function TransferPanel() {
 
   return (
     <div className="transfer-panel flex h-full min-h-0 flex-col">
+      {/* —— 标题与批量操作 —— */}
       <div className="flex items-center gap-2 border-b border-[var(--border)] px-3 py-2">
         <h3 className="text-sm font-semibold">{t("transfer.title")}</h3>
         <div className="ml-auto flex items-center gap-1">
@@ -278,6 +287,8 @@ export function TransferPanel() {
           </button>
         </div>
       </div>
+
+      {/* —— 状态筛选标签 —— */}
       <div className="transfer-tabs flex gap-0 overflow-x-auto border-b border-[var(--border)] px-2">
         {TABS.map((tab) => (
           <button
@@ -293,6 +304,8 @@ export function TransferPanel() {
           </button>
         ))}
       </div>
+
+      {/* —— 任务列表 —— */}
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {filtered.length === 0 ? (
           <div className="flex h-full min-h-[160px] flex-col items-center justify-center gap-2 py-8 text-sm muted">

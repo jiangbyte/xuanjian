@@ -1,6 +1,13 @@
+/**
+ * @file 网络杂项工具面板
+ * @author Charlie
+ * @description 提供 Base64 / URL / Hex 编解码、时间戳转换与正则匹配等小工具。
+ */
+
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+/** Base64、URL、Hex、时间戳与正则等杂项工具 */
 export function UtilsPanel() {
   const { t } = useTranslation();
   const [text, setText] = useState("");
@@ -61,6 +68,7 @@ export function UtilsPanel() {
   return (
     <div className="h-full overflow-y-auto p-4">
       <div className="mx-auto flex max-w-3xl flex-col gap-4">
+        {/* —— 编解码 —— */}
         <div>
           <div className="mb-2 text-sm font-medium">
             {t("network.base64")} / {t("network.urlEnc")} / {t("network.hex")}
@@ -97,8 +105,11 @@ export function UtilsPanel() {
           />
         </div>
 
+        {/* —— 时间戳转换 —— */}
         <div className="border-t border-[var(--border)] pt-3">
-          <div className="mb-2 text-sm font-medium">{t("network.timestamp")}</div>
+          <div className="mb-2 text-sm font-medium">
+            {t("network.timestamp")}
+          </div>
           <div className="flex flex-wrap gap-2">
             <input
               className="field w-40 font-mono"
@@ -143,6 +154,7 @@ export function UtilsPanel() {
           {dateStr && <div className="mt-1 text-xs muted">{dateStr}</div>}
         </div>
 
+        {/* —— 正则匹配 —— */}
         <div className="border-t border-[var(--border)] pt-3">
           <div className="mb-2 text-sm font-medium">{t("network.regex")}</div>
           <div className="grid gap-2 sm:grid-cols-[1fr_80px]">

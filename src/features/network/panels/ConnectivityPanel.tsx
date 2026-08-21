@@ -1,9 +1,16 @@
+/**
+ * @file 连通性探测面板
+ * @author Charlie
+ * @description 提供 ping、traceroute、DNS 查询，流式输出到日志区并可取消任务。
+ */
+
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, onNetworkToolOutput } from "../../../lib/tauri";
-import { addNetworkHistory } from "../../../lib/db";
-import { Select } from "../../../components/Select";
+import { api, onNetworkToolOutput } from "@/lib/tauri";
+import { addNetworkHistory } from "@/lib/db";
+import { Select } from "@/components/Select";
 
+/** Ping / Traceroute / DNS 连通性面板 */
 export function ConnectivityPanel() {
   const { t } = useTranslation();
   const [mode, setMode] = useState<"ping" | "traceroute" | "dns">("ping");
@@ -128,11 +135,7 @@ export function ConnectivityPanel() {
             {t("network.stop")}
           </button>
         )}
-        <button
-          type="button"
-          className="btn"
-          onClick={() => setLines([])}
-        >
+        <button type="button" className="btn" onClick={() => setLines([])}>
           {t("network.clear")}
         </button>
       </div>

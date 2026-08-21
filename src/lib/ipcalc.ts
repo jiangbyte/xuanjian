@@ -1,5 +1,11 @@
-/** IPv4 CIDR / subnet helpers for the network tools panel. */
+/**
+ * @file IPv4 CIDR / 子网计算工具
+ * @author Charlie
+ * @description 为网络工具面板提供 CIDR 解析、掩码换算、归属判断与子网划分。
+ * 另附常用端口表，供端口探测面板快速填充。
+ */
 
+/** CIDR 计算结果 */
 export type IpCalcResult = {
   cidr: string;
   network: string;
@@ -13,6 +19,7 @@ export type IpCalcResult = {
   error?: string;
 };
 
+/** 划分子网后的一行结果 */
 export type SubnetRow = {
   index: number;
   cidr: string;
@@ -22,6 +29,8 @@ export type SubnetRow = {
   lastHost: string;
   hostCount: number;
 };
+
+// —— 内部：IP 与整数互转 ——
 
 function ipToInt(ip: string): number | null {
   const parts = ip.trim().split(".");
@@ -36,12 +45,9 @@ function ipToInt(ip: string): number | null {
 }
 
 function intToIp(n: number): string {
-  return [
-    (n >>> 24) & 255,
-    (n >>> 16) & 255,
-    (n >>> 8) & 255,
-    n & 255,
-  ].join(".");
+  return [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join(
+    ".",
+  );
 }
 
 function prefixToMask(prefix: number): number {
@@ -50,6 +56,7 @@ function prefixToMask(prefix: number): number {
   return (0xffffffff << (32 - prefix)) >>> 0;
 }
 
+/** 点分掩码转前缀长度；非连续 1 位掩码返回 null */
 export function maskToPrefix(mask: string): number | null {
   const n = ipToInt(mask);
   if (n == null) return null;
@@ -67,7 +74,13 @@ export function maskToPrefix(mask: string): number | null {
   return bits;
 }
 
-export function parseCidr(input: string): { ip: number; prefix: number } | null {
+/**
+ * 解析 `a.b.c.d/prefix` 或裸 IP（默认 /32）。
+ * 非法输入返回 null。
+ */
+export function parseCidr(
+  input: string,
+): { ip: number; prefix: number } | null {
   const raw = input.trim();
   if (!raw) return null;
   if (raw.includes("/")) {
@@ -84,6 +97,10 @@ export function parseCidr(input: string): { ip: number; prefix: number } | null 
   return { ip, prefix: 32 };
 }
 
+/**
+ * 计算 CIDR 网段信息；可选 maskHint 在输入无前缀时补全。
+ * 失败时各字段为 "—" 并带 error。
+ */
 export function calcCidr(input: string, maskHint?: string): IpCalcResult {
   let parsed = parseCidr(input);
   if (!parsed && maskHint) {
@@ -108,10 +125,14 @@ export function calcCidr(input: string, maskHint?: string): IpCalcResult {
   const { ip, prefix } = parsed;
   const mask = prefixToMask(prefix);
   const network = (ip & mask) >>> 0;
-  const wildcard = (~mask) >>> 0;
+  const wildcard = ~mask >>> 0;
   const broadcast = (network | wildcard) >>> 0;
   const hostCount =
-    prefix >= 31 ? (prefix === 32 ? 1 : 2) : Math.max(0, broadcast - network - 1);
+    prefix >= 31
+      ? prefix === 32
+        ? 1
+        : 2
+      : Math.max(0, broadcast - network - 1);
   const firstHost = prefix >= 31 ? intToIp(network) : intToIp(network + 1);
   const lastHost = prefix >= 31 ? intToIp(broadcast) : intToIp(broadcast - 1);
   return {
@@ -127,6 +148,7 @@ export function calcCidr(input: string, maskHint?: string): IpCalcResult {
   };
 }
 
+/** 判断 IP 是否落在给定 CIDR 内；参数非法返回 null */
 export function ipInNetwork(ipStr: string, cidr: string): boolean | null {
   const ip = ipToInt(ipStr);
   const net = parseCidr(cidr);
@@ -135,7 +157,7 @@ export function ipInNetwork(ipStr: string, cidr: string): boolean | null {
   return (ip & mask) >>> 0 === (net.ip & mask) >>> 0;
 }
 
-/** Split a network into `count` equal subnets (next power-of-two). */
+/** 将网段均分为 count 个子网（向上取 2 的幂） */
 export function splitSubnets(cidr: string, count: number): SubnetRow[] {
   const net = parseCidr(cidr);
   if (!net || count < 1) return [];
@@ -149,11 +171,7 @@ export function splitSubnets(cidr: string, count: number): SubnetRow[] {
     const network = (base + i * size) >>> 0;
     const broadcast = (network + size - 1) >>> 0;
     const hostCount =
-      newPrefix >= 31
-        ? newPrefix === 32
-          ? 1
-          : 2
-        : Math.max(0, size - 2);
+      newPrefix >= 31 ? (newPrefix === 32 ? 1 : 2) : Math.max(0, size - 2);
     rows.push({
       index: i + 1,
       cidr: `${intToIp(network)}/${newPrefix}`,
@@ -167,10 +185,10 @@ export function splitSubnets(cidr: string, count: number): SubnetRow[] {
   return rows;
 }
 
-/** Allocate subnets with at least `hostsPer` usable hosts each. */
+/** 按每子网至少 hostsPer 个可用主机数进行划分 */
 export function allocateByHosts(cidr: string, hostsPer: number): SubnetRow[] {
   if (hostsPer < 1) return [];
-  const need = hostsPer + 2; // network + broadcast
+  const need = hostsPer + 2; // 网络地址 + 广播地址
   const hostBits = Math.ceil(Math.log2(Math.max(need, 2)));
   const net = parseCidr(cidr);
   if (!net) return [];
@@ -180,6 +198,7 @@ export function allocateByHosts(cidr: string, hostsPer: number): SubnetRow[] {
   return splitSubnets(`${calcCidr(cidr).network}/${net.prefix}`, count);
 }
 
+/** 常用服务端口快捷列表 */
 export const COMMON_PORTS: { port: number; name: string }[] = [
   { port: 22, name: "SSH" },
   { port: 80, name: "HTTP" },

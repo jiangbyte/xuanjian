@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+/**
+ * @file 笔记控制台
+ * @author Charlie
+ * @description 分类侧栏 + 笔记列表 + Markdown 编辑区，支持置顶、搜索与自动保存。
+ */
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FolderPlus, Pin, Plus, Search, Trash2 } from "lucide-react";
 import {
@@ -12,15 +18,13 @@ import {
   NoteRow,
   renameNoteCategory,
   updateNote,
-} from "../../lib/db";
-import { MarkdownEditor } from "../../components/MarkdownEditor";
-import { Select } from "../../components/Select";
-import {
-  openContextMenu,
-  useContextMenu,
-} from "../../components/ContextMenu";
-import { useDialog } from "../../components/Dialog";
+} from "@/lib/db";
+import { MarkdownEditor } from "@/components/MarkdownEditor";
+import { Select } from "@/components/Select";
+import { openContextMenu, useContextMenu } from "@/components/ContextMenu";
+import { useDialog } from "@/components/Dialog";
 
+/** 笔记管理主界面 */
 export function NotesConsole() {
   const { t } = useTranslation();
   const { open: openMenu } = useContextMenu();
@@ -38,10 +42,7 @@ export function NotesConsole() {
   const [dirty, setDirty] = useState(false);
 
   const reload = useCallback(async () => {
-    const [cats, rows] = await Promise.all([
-      listNoteCategories(),
-      listNotes(),
-    ]);
+    const [cats, rows] = await Promise.all([listNoteCategories(), listNotes()]);
     setCategories(cats);
     setNotes(rows);
     return rows;
@@ -50,20 +51,22 @@ export function NotesConsole() {
   useEffect(() => {
     reload()
       .then((rows) => {
-        if (rows[0] && activeId == null) {
-          setActiveId(rows[0].id);
-        }
+        setActiveId((id) => (id == null && rows[0] ? rows[0].id : id));
       })
       .catch(console.error);
-  }, [reload, activeId]);
+  }, [reload]);
 
   const active = useMemo(
     () => notes.find((n) => n.id === activeId) ?? null,
     [notes, activeId],
   );
 
+  /** 已同步到编辑区的笔记 id；同 id 的列表刷新不覆盖未保存编辑 */
+  const syncedNoteIdRef = useRef<number | null>(null);
+
   useEffect(() => {
     if (!active) {
+      syncedNoteIdRef.current = null;
       setTitle("");
       setBody("");
       setPinned(false);
@@ -71,12 +74,14 @@ export function NotesConsole() {
       setDirty(false);
       return;
     }
+    if (syncedNoteIdRef.current === active.id) return;
+    syncedNoteIdRef.current = active.id;
     setTitle(active.title);
     setBody(active.body);
     setPinned(!!active.pinned);
     setNoteCategoryId(active.category_id);
     setDirty(false);
-  }, [active?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active]);
 
   const categoryCounts = useMemo(() => {
     const map = new Map<number | "none", number>();
@@ -104,7 +109,7 @@ export function NotesConsole() {
     );
   }, [notes, categoryId, search]);
 
-  const save = async () => {
+  const save = useCallback(async () => {
     if (!active || saving) return;
     setSaving(true);
     try {
@@ -121,7 +126,7 @@ export function NotesConsole() {
     } finally {
       setSaving(false);
     }
-  };
+  }, [active, saving, title, body, pinned, noteCategoryId, reload, dialog]);
 
   useEffect(() => {
     if (!dirty || !active) return;
@@ -129,8 +134,7 @@ export function NotesConsole() {
       save().catch(console.error);
     }, 700);
     return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [title, body, pinned, noteCategoryId, dirty, active?.id]);
+  }, [title, body, pinned, noteCategoryId, dirty, active, save]);
 
   const create = async () => {
     try {
@@ -172,6 +176,7 @@ export function NotesConsole() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      {/* —— 工具栏 —— */}
       <div className="flex items-center gap-3 border-b border-[var(--border)] px-5 py-4">
         <div className="field-icon-wrap flex-1">
           <Search size={14} className="field-icon" />
@@ -207,6 +212,7 @@ export function NotesConsole() {
         </button>
       </div>
 
+      {/* —— 分类侧栏 + 列表 + 编辑区 —— */}
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-44 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg)]">
           <div className="px-3 py-3">

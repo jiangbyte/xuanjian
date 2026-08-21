@@ -1,8 +1,16 @@
+/**
+ * @file 抓包文件分析面板
+ * @author Charlie
+ * @description 选择 pcap/pcapng 文件，调用后端 tshark 摘要协议与会话统计。
+ * 未检测到抓包工具时给出提示。
+ */
+
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { open } from "@tauri-apps/plugin-dialog";
-import { api, type CaptureTools, type PcapSummary } from "../../../lib/tauri";
+import { api, type CaptureTools, type PcapSummary } from "@/lib/tauri";
 
+/** 离线 pcap 摘要分析面板 */
 export function AnalysisPanel() {
   const { t } = useTranslation();
   const [tools, setTools] = useState<CaptureTools | null>(null);
@@ -71,12 +79,17 @@ export function AnalysisPanel() {
             {t("network.packets")}: {summary.packetCount}
           </div>
           <div>
-            <div className="mb-1 text-sm font-medium">{t("network.protocols")}</div>
+            <div className="mb-1 text-sm font-medium">
+              {t("network.protocols")}
+            </div>
             <div className="overflow-hidden rounded-lg border border-[var(--border)]">
               <table className="w-full text-left text-xs">
                 <tbody>
                   {summary.protocols.map((p) => (
-                    <tr key={p.name} className="border-t border-[var(--border)]">
+                    <tr
+                      key={p.name}
+                      className="border-t border-[var(--border)]"
+                    >
                       <td className="px-3 py-1.5">{p.name}</td>
                       <td className="px-3 py-1.5">{p.count}</td>
                     </tr>
@@ -86,7 +99,9 @@ export function AnalysisPanel() {
             </div>
           </div>
           <div>
-            <div className="mb-1 text-sm font-medium">{t("network.sessions")}</div>
+            <div className="mb-1 text-sm font-medium">
+              {t("network.sessions")}
+            </div>
             <div className="overflow-hidden rounded-lg border border-[var(--border)]">
               <table className="w-full text-left text-xs">
                 <thead className="bg-[var(--bg-elevated)] muted">

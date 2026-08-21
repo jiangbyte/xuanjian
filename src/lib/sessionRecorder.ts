@@ -1,12 +1,19 @@
+/**
+ * @file 终端会话录制器
+ * @author Charlie
+ * @description 捕获会话输入/输出写入本地日志，支持 Vite HMR 下单例监听不重复叠加。
+ * 提供按会话 / 标签启停录制，以及应用启动时的初始化入口。
+ */
+
 import {
   appendLogChunks,
   createSessionLog,
   finalizeSessionLog,
   getHost,
   pruneSessionLogs,
-} from "./db";
-import { api, onSessionOutput } from "./tauri";
-import { useUiStore } from "../stores/ui";
+} from "@/lib/db";
+import { api, onSessionOutput } from "@/lib/tauri";
+import { useUiStore } from "@/stores/ui";
 
 type ActiveRec = {
   logId: number | null;
@@ -25,7 +32,7 @@ type ActiveRec = {
   flushChain: Promise<void>;
 };
 
-/** Survive Vite HMR so we never stack duplicate session-output listeners. */
+/** 跨 Vite HMR 存活的全局状态，避免重复挂载 session-output 监听 */
 type RecorderGlobal = {
   bySession: Map<string, ActiveRec>;
   unlistenOut: (() => void) | null;
@@ -36,12 +43,15 @@ type RecorderGlobal = {
 
 const GKEY = "__xuanjian_session_recorder_v2__";
 
-/** True after this JS module instance has bound a listener (resets on Vite HMR). */
+/** 本模块实例是否已绑定监听（Vite HMR 后会重置） */
 let boundInThisModule = false;
 
 function g(): RecorderGlobal {
-  const root = globalThis as unknown as Record<string, RecorderGlobal | undefined>;
-  // Drop leftover listeners from older recorder builds (dev HMR / prior bugs).
+  const root = globalThis as unknown as Record<
+    string,
+    RecorderGlobal | undefined
+  >;
+  // 清理旧版录制器残留的监听（开发 HMR / 历史 bug）
   for (const legacy of [
     "__xuanjian_session_recorder_v1__",
     "__xuanjian_session_recorder__",
@@ -51,7 +61,7 @@ function g(): RecorderGlobal {
       try {
         old.unlistenOut();
       } catch {
-        /* ignore */
+        /* 忽略 */
       }
       old.unlistenOut = null;
     }
@@ -105,11 +115,7 @@ function scheduleFlush(rec: ActiveRec) {
   }, FLUSH_MS);
 }
 
-function enqueue(
-  rec: ActiveRec,
-  direction: "in" | "out",
-  data: string,
-) {
+function enqueue(rec: ActiveRec, direction: "in" | "out", data: string) {
   if (!data || rec.ending) return;
   rec.pending.push({
     seq: rec.nextSeq++,
@@ -132,27 +138,28 @@ function recordIn(sessionId: string, data: string) {
   enqueue(rec, "in", data);
 }
 
-/** @deprecated kept for callers; prefer internal recordOut */
+/** @deprecated 保留给调用方；优先使用内部 recordOut */
 export function recordSessionOutput(sessionId: string, data: string) {
   recordOut(sessionId, data);
 }
 
+/** 记录会话输入（键盘 / 脚本写入） */
 export function recordSessionInput(sessionId: string, data: string) {
   recordIn(sessionId, data);
 }
 
 function ensureOutputListener() {
-  // Already bound for this module instance — do not stack.
+  // 本模块实例已绑定 — 勿重复叠加
   if (boundInThisModule) return;
   boundInThisModule = true;
 
   const state = g();
-  // Drop any listener left by a previous HMR module instance.
+  // 卸掉上一轮 HMR 模块实例留下的监听
   if (state.unlistenOut) {
     try {
       state.unlistenOut();
     } catch {
-      /* ignore */
+      /* 忽略 */
     }
     state.unlistenOut = null;
   }
@@ -177,7 +184,7 @@ function ensureOutputListener() {
 function ensureWriteWrap() {
   const state = g();
   if (state.writeWrapped) {
-    // Re-point wrap to current recordIn after HMR.
+    // HMR 后把包装重新指向当前 recordIn
     api.sessionWrite = async (sessionId: string, data: string) => {
       recordIn(sessionId, data);
       return state.originalWrite(sessionId, data);
@@ -191,6 +198,7 @@ function ensureWriteWrap() {
   };
 }
 
+/** 为指定会话创建日志并开始缓冲输入/输出块 */
 export async function startSessionRecording(opts: {
   tabId: string;
   sessionId: string;
@@ -236,7 +244,7 @@ export async function startSessionRecording(opts: {
         remoteHost = remoteHost ?? host.host;
       }
     } catch {
-      /* ignore */
+      /* 忽略 */
     }
   }
 
@@ -270,6 +278,7 @@ export async function startSessionRecording(opts: {
   }
 }
 
+/** 根据已打开标签元数据启动录制 */
 export async function startRecordingForOpenTab(
   tabId: string,
   sessionId: string,
@@ -286,6 +295,7 @@ export async function startRecordingForOpenTab(
   });
 }
 
+/** 结束指定会话的录制并落盘 finalize */
 export async function endSessionRecording(
   sessionId: string,
   status: "closed" | "error" = "closed",
@@ -316,6 +326,7 @@ export async function endSessionRecording(
   void pruneSessionLogs(1000).catch(console.error);
 }
 
+/** 按标签 ID 结束录制（优先用 sessionId，否则扫全局映射） */
 export async function endRecordingForTab(tabId: string): Promise<void> {
   const tab = useUiStore.getState().tabs.find((t) => t.id === tabId);
   if (tab?.sessionId) {
@@ -331,13 +342,13 @@ export async function endRecordingForTab(tabId: string): Promise<void> {
 }
 
 /**
- * Install once per app load. On HMR, re-binds a single listener (replacing the old).
- * React StrictMode remount must not stack listeners.
+ * 应用加载时安装一次。HMR 时重新绑定单一监听（替换旧的）。
+ * React StrictMode 重挂载不得叠加监听。
  */
 export function initSessionRecorder(): () => void {
   ensureOutputListener();
   ensureWriteWrap();
   return () => {
-    /* keep listener for app lifetime / HMR-safe singleton */
+    /* 保持监听贯穿应用生命周期 / HMR 安全单例 */
   };
 }

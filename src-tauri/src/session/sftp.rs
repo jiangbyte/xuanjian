@@ -1,3 +1,7 @@
+//! SFTP 协议实现：列举、上传下载、读写、权限与路径操作。
+//!
+//! Author: Charlie
+
 use super::ssh::{open_sftp_channel, ClientHandler};
 use super::TransferAbort;
 use anyhow::{Context, Result};
@@ -5,7 +9,6 @@ use russh::client::Handle;
 use russh_sftp::client::SftpSession;
 use russh_sftp::protocol::OpenFlags;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt, SeekFrom};
 use tokio::sync::Mutex;
@@ -26,23 +29,20 @@ pub fn format_system_time(time: std::time::SystemTime) -> Option<String> {
     Some(datetime.format("%Y-%m-%d %H:%M").to_string())
 }
 
-pub fn format_mode_bits(mode: u32) -> String {
-    let bits = mode & 0o777;
-    let mut s = String::with_capacity(9);
-    for shift in [6, 3, 0] {
-        let part = (bits >> shift) & 0o7;
-        s.push(if part & 0o4 != 0 { 'r' } else { '-' });
-        s.push(if part & 0o2 != 0 { 'w' } else { '-' });
-        s.push(if part & 0o1 != 0 { 'x' } else { '-' });
-    }
-    s
-}
-
 pub fn format_local_permissions(meta: &std::fs::Metadata) -> Option<String> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        Some(format_mode_bits(meta.permissions().mode()))
+        let mode = meta.permissions().mode();
+        let bits = mode & 0o777;
+        let mut s = String::with_capacity(9);
+        for shift in [6, 3, 0] {
+            let part = (bits >> shift) & 0o7;
+            s.push(if part & 0o4 != 0 { 'r' } else { '-' });
+            s.push(if part & 0o2 != 0 { 'w' } else { '-' });
+            s.push(if part & 0o1 != 0 { 'x' } else { '-' });
+        }
+        Some(s)
     }
     #[cfg(windows)]
     {
@@ -126,7 +126,8 @@ pub async fn download_file(
         .map(|m| m.len())
         .unwrap_or(0);
     let mut resume = if hint > 0 {
-        hint.min(local_len).min(if total > 0 { total } else { hint })
+        hint.min(local_len)
+            .min(if total > 0 { total } else { hint })
     } else {
         0
     };
@@ -211,7 +212,8 @@ pub async fn upload_file(
         .map(|m| m.len())
         .unwrap_or(0);
     let mut resume = if hint > 0 {
-        hint.min(remote_len).min(if total > 0 { total } else { hint })
+        hint.min(remote_len)
+            .min(if total > 0 { total } else { hint })
     } else {
         0
     };
@@ -285,7 +287,10 @@ pub async fn remove_path(
 }
 
 async fn remove_dir_recursive(sftp: &SftpSession, path: &str) -> Result<()> {
-    let entries = sftp.read_dir(path).await.context("sftp read_dir for remove")?;
+    let entries = sftp
+        .read_dir(path)
+        .await
+        .context("sftp read_dir for remove")?;
     for entry in entries {
         let name = entry.file_name();
         if name == "." || name == ".." {
@@ -306,10 +311,7 @@ async fn remove_dir_recursive(sftp: &SftpSession, path: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn mkdir(
-    handle: Arc<Mutex<Handle<ClientHandler>>>,
-    path: &str,
-) -> Result<()> {
+pub async fn mkdir(handle: Arc<Mutex<Handle<ClientHandler>>>, path: &str) -> Result<()> {
     let channel = open_sftp_channel(handle).await?;
     let sftp = SftpSession::new(channel.into_stream()).await?;
     sftp.create_dir(path).await?;
@@ -355,7 +357,9 @@ pub async fn rename(
 ) -> Result<()> {
     let channel = open_sftp_channel(handle).await?;
     let sftp = SftpSession::new(channel.into_stream()).await?;
-    sftp.rename(old_path, new_path).await.context("sftp rename")?;
+    sftp.rename(old_path, new_path)
+        .await
+        .context("sftp rename")?;
     Ok(())
 }
 
@@ -373,19 +377,4 @@ pub async fn set_permissions(
         .await
         .context("sftp set_metadata")?;
     Ok(())
-}
-
-pub fn join_remote(dir: &str, name: &str) -> String {
-    if dir.ends_with('/') {
-        format!("{dir}{name}")
-    } else {
-        format!("{dir}/{name}")
-    }
-}
-
-pub fn basename(path: &str) -> String {
-    Path::new(path)
-        .file_name()
-        .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_else(|| path.to_string())
 }

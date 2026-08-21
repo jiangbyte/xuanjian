@@ -1,3 +1,10 @@
+/**
+ * @file 应用对话框（alert / confirm / prompt / choice）
+ * @author Charlie
+ * @description Promise 风格对话框队列，一次只展示一个。
+ * 替代原生 window.alert/confirm；点击遮罩或 Escape 按类型 resolve。
+ */
+
 import {
   createContext,
   useCallback,
@@ -54,6 +61,7 @@ type ChoiceReq = {
 
 type DialogReq = AlertReq | ConfirmReq | PromptReq | ChoiceReq;
 
+/** 对话框 API：均返回 Promise，关闭后 resolve */
 export type DialogApi = {
   alert: (message: string, opts?: { title?: string }) => Promise<void>;
   confirm: (
@@ -69,7 +77,7 @@ export type DialogApi = {
     message: string,
     opts?: { title?: string; defaultValue?: string; placeholder?: string },
   ) => Promise<string | null>;
-  /** Multi-button dialog. Returns action id, or null if dismissed. */
+  /** 多按钮对话框；返回 action id，取消则为 null */
   choice: (
     message: string,
     opts: { title?: string; actions: ChoiceAction[] },
@@ -78,12 +86,19 @@ export type DialogApi = {
 
 const Ctx = createContext<DialogApi | null>(null);
 
+/**
+ * 读取对话框 API；须在 DialogProvider 内使用。
+ * @throws 未包裹 Provider 时抛错
+ */
 export function useDialog() {
   const api = useContext(Ctx);
   if (!api) throw new Error("useDialog requires DialogProvider");
   return api;
 }
 
+/**
+ * 提供 alert/confirm/prompt/choice，内部用队列串行展示 DialogView。
+ */
 export function DialogProvider({ children }: { children: ReactNode }) {
   const [queue, setQueue] = useState<DialogReq[]>([]);
   const current = queue[0] ?? null;
@@ -164,6 +179,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/** 单个对话框视图：键盘 Escape/Enter、遮罩关闭 */
 function DialogView({ req }: { req: DialogReq }) {
   const { t } = useTranslation();
   const [value, setValue] = useState(
@@ -215,7 +231,10 @@ function DialogView({ req }: { req: DialogReq }) {
   };
 
   return createPortal(
-    <div className="overlay z-[100] flex items-center justify-center p-4" onClick={closeOverlay}>
+    <div
+      className="overlay z-[100] flex items-center justify-center p-4"
+      onClick={closeOverlay}
+    >
       <div
         className="modal-card w-full max-w-sm overflow-hidden"
         onClick={(e) => e.stopPropagation()}
@@ -229,7 +248,9 @@ function DialogView({ req }: { req: DialogReq }) {
           </h3>
         </div>
         <div className="space-y-3 px-5 py-4">
-          <p className="whitespace-pre-wrap text-sm leading-relaxed">{req.message}</p>
+          <p className="whitespace-pre-wrap text-sm leading-relaxed">
+            {req.message}
+          </p>
           {req.kind === "prompt" && (
             <form
               onSubmit={(e) => {
@@ -248,6 +269,7 @@ function DialogView({ req }: { req: DialogReq }) {
             </form>
           )}
         </div>
+        {/* —— 操作按钮 —— */}
         <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--border)] px-5 py-3">
           {req.kind === "choice" ? (
             <>

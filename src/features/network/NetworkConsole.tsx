@@ -1,3 +1,9 @@
+/**
+ * @file 网络工具控制台壳
+ * @author Charlie
+ * @description 左侧导航切换连通性、IP 计算、端口、抓包、分析、HTTP、杂项等子面板。
+ */
+
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -9,13 +15,13 @@ import {
   Radar,
   ScanSearch,
 } from "lucide-react";
-import { ConnectivityPanel } from "./panels/ConnectivityPanel";
-import { IpCalcPanel } from "./panels/IpCalcPanel";
-import { PortsPanel } from "./panels/PortsPanel";
-import { CapturePanel } from "./panels/CapturePanel";
-import { AnalysisPanel } from "./panels/AnalysisPanel";
-import { HttpPanel } from "./panels/HttpPanel";
-import { UtilsPanel } from "./panels/UtilsPanel";
+import { ConnectivityPanel } from "@/features/network/panels/ConnectivityPanel";
+import { IpCalcPanel } from "@/features/network/panels/IpCalcPanel";
+import { PortsPanel } from "@/features/network/panels/PortsPanel";
+import { CapturePanel } from "@/features/network/panels/CapturePanel";
+import { AnalysisPanel } from "@/features/network/panels/AnalysisPanel";
+import { HttpPanel } from "@/features/network/panels/HttpPanel";
+import { UtilsPanel } from "@/features/network/panels/UtilsPanel";
 
 type TabId =
   | "connectivity"
@@ -36,12 +42,14 @@ const TABS: { id: TabId; icon: typeof Network; labelKey: string }[] = [
   { id: "utils", icon: Binary, labelKey: "network.utils" },
 ];
 
+/** 网络工具主控制台：侧栏 + 当前子面板 */
 export function NetworkConsole() {
   const { t } = useTranslation();
   const [tab, setTab] = useState<TabId>("connectivity");
 
   return (
     <div className="flex h-full min-h-0">
+      {/* —— 侧栏导航 —— */}
       <aside className="flex w-48 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--sidebar)]">
         <div className="flex items-center gap-2 border-b border-[var(--border)] px-3 py-3">
           <Network size={16} className="text-[var(--accent)]" />
@@ -64,6 +72,7 @@ export function NetworkConsole() {
           })}
         </nav>
       </aside>
+      {/* —— 子面板内容 —— */}
       <main className="min-w-0 flex-1 overflow-hidden bg-[var(--bg)]">
         {tab === "connectivity" && <ConnectivityPanel />}
         {tab === "ipCalc" && <IpCalcPanel />}

@@ -1,4 +1,8 @@
-//! Local network ops helpers (ping, dns, tcp probe, capture via tshark, http).
+//! 本机网络运维工具：ping、DNS、TCP 探测、抓包摘要、HTTP/TLS/WHOIS 等。
+//!
+//! 长时间任务通过事件流式输出，并可用 job_id 取消。
+//!
+//! Author: Charlie
 
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -442,9 +446,7 @@ pub fn network_capture_stop(
 #[tauri::command]
 pub async fn network_pcap_summary(path: String) -> Result<PcapSummary, String> {
     let tools = network_detect_capture_tools();
-    let tshark = tools
-        .tshark
-        .ok_or_else(|| "tshark not found".to_string())?;
+    let tshark = tools.tshark.ok_or_else(|| "tshark not found".to_string())?;
 
     let count_out = TokioCommand::new(&tshark)
         .args(["-r", &path, "-T", "fields", "-e", "frame.number"])
@@ -493,11 +495,7 @@ pub async fn network_pcap_summary(path: String) -> Result<PcapSummary, String> {
         }
         let parts: Vec<_> = trimmed.split_whitespace().collect();
         if parts.len() >= 3 {
-            let frames: u64 = parts
-                .iter()
-                .rev()
-                .find_map(|p| p.parse().ok())
-                .unwrap_or(0);
+            let frames: u64 = parts.iter().rev().find_map(|p| p.parse().ok()).unwrap_or(0);
             sessions.push(SessionRow {
                 src: parts[0].to_string(),
                 dst: parts.get(2).unwrap_or(&"").to_string(),
@@ -534,8 +532,7 @@ pub async fn network_http_request(
         .build()
         .map_err(|e| e.to_string())?;
 
-    let method = reqwest::Method::from_bytes(method.as_bytes())
-        .map_err(|e| e.to_string())?;
+    let method = reqwest::Method::from_bytes(method.as_bytes()).map_err(|e| e.to_string())?;
     let mut req = client.request(method, &url);
     for (k, v) in headers {
         req = req.header(k, v);
@@ -549,12 +546,7 @@ pub async fn network_http_request(
     let headers: Vec<_> = resp
         .headers()
         .iter()
-        .map(|(k, v)| {
-            (
-                k.to_string(),
-                v.to_str().unwrap_or("").to_string(),
-            )
-        })
+        .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
         .collect();
     let mut body = resp.text().await.map_err(|e| e.to_string())?;
     if body.len() > 512 * 1024 {

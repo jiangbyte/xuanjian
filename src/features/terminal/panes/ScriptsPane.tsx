@@ -1,3 +1,11 @@
+/**
+ * @file 脚本快捷面板
+ * @author Charlie
+ * @description 按包分组列出本地脚本库，可搜索并在当前会话执行。
+ * 搜索时强制展开分组以便看到匹配项。
+ * 「管理脚本」跳转到独立脚本页。
+ */
+
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight, Play, Search, Zap } from "lucide-react";
@@ -6,18 +14,22 @@ import {
   listScripts,
   ScriptPackageRow,
   ScriptRow,
-} from "../../../lib/db";
-import { previewScriptBody } from "../../../lib/scriptVars";
-import { runScriptOnSession } from "../../../lib/runScript";
+} from "@/lib/db";
+import { previewScriptBody } from "@/lib/scriptVars";
+import { runScriptOnSession } from "@/lib/runScript";
 import { useNavigate } from "react-router-dom";
-import { useDialog } from "../../../components/Dialog";
+import { useDialog } from "@/components/Dialog";
 
+/** 包分组：有名包或未分组 */
 type PackageGroup = {
   id: number | "none";
   name: string;
   scripts: ScriptRow[];
 };
 
+/**
+ * 终端左侧脚本面板：分组列表 + 一键在当前会话运行。
+ */
 export function ScriptsPane({ sessionId }: { sessionId: string | null }) {
   const { t } = useTranslation();
   const dialog = useDialog();
@@ -76,7 +88,7 @@ export function ScriptsPane({ sessionId }: { sessionId: string | null }) {
   }, [packages, filtered, t]);
 
   const isCollapsed = (id: number | "none") => {
-    // While searching, force expand so matches are visible
+    // 搜索时强制展开，保证匹配项可见
     if (q.trim()) return false;
     return !!collapsed[String(id)];
   };
@@ -106,6 +118,7 @@ export function ScriptsPane({ sessionId }: { sessionId: string | null }) {
 
   return (
     <div className="panel flex h-full flex-col">
+      {/* —— 标题与管理入口 —— */}
       <div className="panel-header flex items-center gap-2">
         <span className="text-xs font-medium">{t("termTab.scripts")}</span>
         <button
@@ -115,6 +128,8 @@ export function ScriptsPane({ sessionId }: { sessionId: string | null }) {
           {t("termTab.manageScripts")}
         </button>
       </div>
+
+      {/* —— 搜索 —— */}
       <div className="border-b border-[var(--border)] px-2 py-2">
         <div className="field-icon-wrap">
           <Search size={13} className="field-icon" />
@@ -126,6 +141,8 @@ export function ScriptsPane({ sessionId }: { sessionId: string | null }) {
           />
         </div>
       </div>
+
+      {/* —— 按包分组的脚本列表 —— */}
       <div className="panel-body panel-list min-h-0 flex-1 overflow-y-auto p-1.5">
         {filtered.length === 0 ? (
           <div className="px-2 py-6 text-center text-xs muted">

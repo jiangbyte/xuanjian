@@ -1,3 +1,7 @@
+//! 本地伪终端（PTY）会话：探测 Shell、打开、读写与一次性 exec。
+//!
+//! Author: Charlie
+
 use super::{emit_closed, emit_output, LocalShellInfo};
 use anyhow::{anyhow, Context, Result};
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
@@ -227,7 +231,11 @@ fn list_linux_shells() -> Vec<LocalShellInfo> {
         }
     }
     if shells.is_empty() {
-        for (name, path) in [("bash", "/bin/bash"), ("zsh", "/bin/zsh"), ("sh", "/bin/sh")] {
+        for (name, path) in [
+            ("bash", "/bin/bash"),
+            ("zsh", "/bin/zsh"),
+            ("sh", "/bin/sh"),
+        ] {
             if Path::new(path).exists() {
                 shells.push(LocalShellInfo {
                     id: format!("local:{name}"),
@@ -323,17 +331,7 @@ fn output_to_string(output: std::process::Output) -> String {
     text
 }
 
-/// Run a command in the same environment family as the interactive shell.
-pub async fn exec_for_session(session: &LocalSession, command: &str) -> Result<String> {
-    exec_with_shell(
-        &session.shell_id,
-        &session.shell_path,
-        &session.shell_args,
-        command,
-    )
-    .await
-}
-
+/// 按与交互 Shell 同类的环境执行一次性命令（供 session_exec 使用）。
 pub async fn exec_with_shell(
     shell_id: &str,
     shell_path: &str,
@@ -343,10 +341,7 @@ pub async fn exec_with_shell(
     #[cfg(target_os = "windows")]
     {
         let output = if shell_id.starts_with("local:wsl:") {
-            let distro = shell_id
-                .strip_prefix("local:wsl:")
-                .unwrap_or("")
-                .trim();
+            let distro = shell_id.strip_prefix("local:wsl:").unwrap_or("").trim();
             // Prefer distro from shell args (-d Name) when present.
             let distro = shell_args
                 .windows(2)
@@ -388,27 +383,6 @@ pub async fn exec_with_shell(
     #[cfg(not(target_os = "windows"))]
     {
         let _ = (shell_id, shell_path, shell_args);
-        let output = tokio::process::Command::new("sh")
-            .args(["-lc", command])
-            .output()
-            .await
-            .context("local exec")?;
-        Ok(output_to_string(output))
-    }
-}
-
-pub async fn exec(command: &str) -> Result<String> {
-    #[cfg(target_os = "windows")]
-    {
-        let output = tokio::process::Command::new("cmd.exe")
-            .args(["/C", command])
-            .output()
-            .await
-            .context("local exec")?;
-        Ok(output_to_string(output))
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
         let output = tokio::process::Command::new("sh")
             .args(["-lc", command])
             .output()

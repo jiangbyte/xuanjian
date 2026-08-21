@@ -1,13 +1,18 @@
+//! 会话领域：本地 PTY、SSH、SFTP 与共享应用状态。
+//!
+//! Author: Charlie
+
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use parking_lot::Mutex;
 use tauri::AppHandle;
 
 pub mod local;
-pub mod ssh;
 pub mod sftp;
+pub mod ssh;
 
+/// 本机可探测到的 Shell 信息（供前端列表展示）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalShellInfo {
@@ -18,6 +23,7 @@ pub struct LocalShellInfo {
     pub is_default: bool,
 }
 
+/// 会话类型：本地 Shell 或 SSH。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SessionKind {
@@ -25,6 +31,7 @@ pub enum SessionKind {
     Ssh,
 }
 
+/// 返回给前端的会话摘要。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionInfo {
@@ -33,16 +40,17 @@ pub struct SessionInfo {
     pub title: String,
 }
 
+/// 进程内共享状态：活动会话与传输取消标志。
 pub struct AppState {
     pub sessions: Mutex<HashMap<String, SessionHandle>>,
-    /// Active transfer abort controls (transfer_id → flag).
+    /// 进行中的传输取消控制（transfer_id → 标志）。
     pub transfer_cancels: Mutex<HashMap<String, Arc<TransferAbort>>>,
 }
 
-/// Shared abort signal for an in-flight SFTP transfer.
+/// 单次 SFTP 传输的取消/暂停信号。
 pub struct TransferAbort {
     pub requested: std::sync::atomic::AtomicBool,
-    /// true = pause (resumable), false = cancel (abort).
+    /// true = 暂停（可续传），false = 取消（中止）。
     pub as_pause: std::sync::atomic::AtomicBool,
 }
 

@@ -1,11 +1,19 @@
-import { getHost, touchHostConnected } from "./db";
-import { api } from "./tauri";
-import { useUiStore, type TermTab } from "../stores/ui";
+/**
+ * @file 会话连接与标签重连
+ * @author Charlie
+ * @description 打开 SSH / 本地 Shell、就地重连终端标签（保留回滚缓冲），
+ * 以及处理后端 session-closed 事件时的标签状态更新。
+ */
+
+import { getHost, touchHostConnected } from "@/lib/db";
+import { api } from "@/lib/tauri";
+import { useUiStore, type TermTab } from "@/stores/ui";
 import {
   endSessionRecording,
   startRecordingForOpenTab,
-} from "./sessionRecorder";
+} from "@/lib/sessionRecorder";
 
+/** 判断标签是否具备重连所需信息（SSH 需有 hostId） */
 export function canReconnect(tab: TermTab): boolean {
   if (tab.kind === "ssh") return tab.hostId != null;
   return true;
@@ -14,15 +22,17 @@ export function canReconnect(tab: TermTab): boolean {
 async function resolveShellId(tab: TermTab): Promise<string> {
   if (tab.shellId) return tab.shellId;
   const shells = await api.listLocalShells();
-  const byName = shells.find(
-    (s) => s.name === tab.title || s.id === tab.title,
-  );
+  const byName = shells.find((s) => s.name === tab.title || s.id === tab.title);
   if (byName) return byName.id;
   const def = shells.find((s) => s.isDefault) || shells[0];
   if (!def) throw new Error("No local shell available");
   return def.id;
 }
 
+/**
+ * 按主机记录建立 SSH 会话。
+ * 默认会在连接后写入 startup_cmd（可用 runStartup: false 跳过）。
+ */
 export async function connectSshHost(
   hostId: number,
   opts?: { cols?: number; rows?: number; runStartup?: boolean },
@@ -49,7 +59,10 @@ export async function connectSshHost(
   return { session, host };
 }
 
-/** Reconnect an existing tab in place (keeps scrollback). */
+/**
+ * 就地重连已有标签（保留滚动回滚缓冲）。
+ * 会先结束旧会话录制并关闭旧 session，再开新会话并启动录制。
+ */
 export async function reconnectTermTab(
   tabId: string,
   opts?: { cols?: number; rows?: number },
@@ -90,11 +103,7 @@ export async function reconnectTermTab(
     }
 
     const shellId = await resolveShellId(tab);
-    const session = await api.localShellOpen(
-      shellId,
-      opts?.cols,
-      opts?.rows,
-    );
+    const session = await api.localShellOpen(shellId, opts?.cols, opts?.rows);
     const recording = startRecordingForOpenTab(tabId, session.id);
     updateTab(tabId, {
       sessionId: session.id,
@@ -109,7 +118,9 @@ export async function reconnectTermTab(
   }
 }
 
-/** Mark tab closed when backend emits session-closed (no auto reconnect). */
+/**
+ * 后端发出 session-closed 时标记标签已关闭（不自动重连）。
+ */
 export function handleSessionClosed(sessionId: string) {
   void endSessionRecording(sessionId, "closed");
   const { tabs, updateTab } = useUiStore.getState();

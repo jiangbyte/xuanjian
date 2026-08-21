@@ -7,7 +7,12 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check --formatter-enabled=false --assist-enabled=false .",
+    "format": "biome format --write .",
+    "check": "biome check --write .",
+    "ci": "pnpm typecheck && pnpm lint && pnpm build"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -31,8 +36,10 @@
     "zustand": "^5.0.7"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.9",
     "@tailwindcss/vite": "^4.1.11",
     "@tauri-apps/cli": "^2",
+    "@types/node": "^26.2.0",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",

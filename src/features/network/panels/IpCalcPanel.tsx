@@ -1,3 +1,9 @@
+/**
+ * @file IP / 子网计算器面板
+ * @author Charlie
+ * @description 展示 CIDR 网段详情、IP 归属检测，以及按数量 / 主机数划分的子网表。
+ */
+
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -5,9 +11,10 @@ import {
   calcCidr,
   ipInNetwork,
   splitSubnets,
-} from "../../../lib/ipcalc";
-import { clipboardWriteText } from "../../../lib/clipboard";
+} from "@/lib/ipcalc";
+import { clipboardWriteText } from "@/lib/clipboard";
 
+/** IPv4 CIDR 与子网划分面板 */
 export function IpCalcPanel() {
   const { t } = useTranslation();
   const [cidr, setCidr] = useState("192.168.1.0/24");
@@ -93,7 +100,9 @@ export function IpCalcPanel() {
         </div>
 
         <div className="border-t border-[var(--border)] pt-3">
-          <div className="mb-2 text-sm font-medium">{t("network.splitSubnets")}</div>
+          <div className="mb-2 text-sm font-medium">
+            {t("network.splitSubnets")}
+          </div>
           <div className="flex flex-wrap items-end gap-2">
             <label className="flex w-32 flex-col gap-1 text-xs muted">
               {t("network.subnetCount")}
@@ -151,7 +160,10 @@ export function IpCalcPanel() {
                 </thead>
                 <tbody>
                   {rows.map((r) => (
-                    <tr key={r.index} className="border-t border-[var(--border)]">
+                    <tr
+                      key={r.index}
+                      className="border-t border-[var(--border)]"
+                    >
                       <td className="px-2 py-1">{r.index}</td>
                       <td className="px-2 py-1 font-mono">{r.cidr}</td>
                       <td className="px-2 py-1 font-mono">{r.network}</td>
