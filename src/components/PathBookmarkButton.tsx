@@ -4,8 +4,8 @@
  * @description 本地 / SSH 路径收藏入口：切换当前路径书签并列出同 scope 书签。
  */
 
-import { useTranslation } from "react-i18next";
 import { Bookmark, BookmarkCheck, Folder, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -53,7 +53,11 @@ export function PathBookmarkButton({
               size="icon-sm"
               aria-label={t("terminal.bookmark")}
             >
-              {bookmarked ? <BookmarkCheck size={14} /> : <Bookmark size={14} />}
+              {bookmarked ? (
+                <BookmarkCheck size={14} />
+              ) : (
+                <Bookmark size={14} />
+              )}
             </Button>
           </DropdownMenuTrigger>
         </TooltipTrigger>

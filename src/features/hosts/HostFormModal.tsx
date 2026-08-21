@@ -4,9 +4,10 @@
  * @description 主机基础信息、认证、连接与元数据的表单模态框。
  */
 
-import { useState, type ReactNode } from "react";
-import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
+import { type ReactNode, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -25,10 +26,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
-import { HostInput, HostRow, GroupRow } from "@/lib/db";
-import { api } from "@/lib/tauri";
 import { HOST_COLORS } from "@/features/hosts/hostColors";
+import { GroupRow, HostInput, HostRow } from "@/lib/db";
+import { api } from "@/lib/tauri";
+import { cn } from "@/lib/utils";
 
 const NONE = "none";
 
@@ -79,6 +80,7 @@ export function HostFormModal({
     initial?.jump_host_id ?? "",
   );
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
 
   const jumpOptions = hosts.filter((h) => h.id !== initial?.id);
 
@@ -94,6 +96,49 @@ export function HostFormModal({
   const toNumber = (v: string | number, fallback: number) => {
     const n = typeof v === "number" ? v : Number(v);
     return Number.isFinite(n) ? n : fallback;
+  };
+
+  const testConnect = async () => {
+    if (!host.trim()) {
+      toast.error(t("hosts.testConnectNeedHost"));
+      return;
+    }
+    let passwordValue: string | null = null;
+    let passphraseValue: string | null = null;
+    if (authType === "password") {
+      passwordValue = password.trim() || initial?.password_enc || null;
+      if (!passwordValue) {
+        toast.error(t("hosts.testConnectNeedAuth"));
+        return;
+      }
+    } else {
+      if (!privateKeyPath.trim()) {
+        toast.error(t("hosts.testConnectNeedAuth"));
+        return;
+      }
+      passphraseValue = passphrase.trim() || initial?.passphrase_enc || null;
+    }
+    setTesting(true);
+    try {
+      const session = await api.sshConnect({
+        host: host.trim(),
+        port,
+        username: username.trim() || "root",
+        authType: authType === "privateKey" ? "privateKey" : "password",
+        password: authType === "password" ? passwordValue : null,
+        privateKeyPath:
+          authType === "privateKey" ? privateKeyPath.trim() || null : null,
+        passphrase: authType === "privateKey" ? passphraseValue : null,
+        title: name || host,
+        terminalType,
+      });
+      await api.sessionClose(session.id);
+      toast.success(t("hosts.testConnectOk"));
+    } catch (e) {
+      toast.error(`${t("hosts.testConnectFail")}: ${String(e)}`);
+    } finally {
+      setTesting(false);
+    }
   };
 
   return (
@@ -125,7 +170,7 @@ export function HostFormModal({
                       className={cn(
                         "h-7 w-7 rounded-md border",
                         color === c.value
-                          ? "border-primary ring-2 ring-primary/30"
+                          ? "border-primary ring-1 ring-primary"
                           : "border-border",
                         !c.value && "bg-muted",
                       )}
@@ -159,9 +204,7 @@ export function HostFormModal({
               <Field label={t("hosts.group")}>
                 <Select
                   value={groupId === "" ? NONE : String(groupId)}
-                  onValueChange={(v) =>
-                    setGroupId(v === NONE ? "" : Number(v))
-                  }
+                  onValueChange={(v) => setGroupId(v === NONE ? "" : Number(v))}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue />
@@ -224,7 +267,10 @@ export function HostFormModal({
                       </Button>
                     </div>
                   </div>
-                  <Field label={t("hosts.passphrase")} className="sm:col-span-2">
+                  <Field
+                    label={t("hosts.passphrase")}
+                    className="sm:col-span-2"
+                  >
                     <Input
                       type="password"
                       value={passphrase}
@@ -265,7 +311,9 @@ export function HostFormModal({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="xterm-256color">xterm-256color</SelectItem>
+                    <SelectItem value="xterm-256color">
+                      xterm-256color
+                    </SelectItem>
                     <SelectItem value="xterm">xterm</SelectItem>
                     <SelectItem value="vt100">vt100</SelectItem>
                   </SelectContent>
@@ -328,57 +376,73 @@ export function HostFormModal({
           </Section>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>
-            {t("hosts.cancel")}
-          </Button>
+        <DialogFooter className="sm:justify-between">
           <Button
-            disabled={saving || !host}
-            onClick={async () => {
-              setSaving(true);
-              try {
-                let password_enc = initial?.password_enc ?? null;
-                if (authType === "password" && password) {
-                  password_enc = await api.encryptSecret(password);
-                }
-                let passphrase_enc = initial?.passphrase_enc ?? null;
-                if (authType === "privateKey" && passphrase) {
-                  passphrase_enc = await api.encryptSecret(passphrase);
-                }
-                await onSave({
-                  name: name || host,
-                  host,
-                  port,
-                  username,
-                  auth_type:
-                    authType === "privateKey" ? "privateKey" : "password",
-                  password_enc: authType === "password" ? password_enc : null,
-                  private_key_path:
-                    authType === "privateKey" ? privateKeyPath || null : null,
-                  passphrase_enc:
-                    authType === "privateKey" ? passphrase_enc : null,
-                  group_id: groupId === "" ? null : groupId,
-                  tags: tags
-                    .split(",")
-                    .map((x) => x.trim())
-                    .filter(Boolean),
-                  color: color || null,
-                  remark: remark || null,
-                  connect_timeout: connectTimeout,
-                  keepalive_interval: keepalive,
-                  terminal_type: terminalType,
-                  startup_cmd: startupCmd || null,
-                  remote_path: remotePath || null,
-                  jump_host_id: jumpHostId === "" ? null : jumpHostId,
-                });
-              } finally {
-                setSaving(false);
-              }
-            }}
+            type="button"
+            variant="outline"
+            className="sm:mr-auto"
+            disabled={saving || testing || !host.trim()}
+            onClick={() => void testConnect()}
           >
-            {saving ? <Loader2 className="animate-spin" /> : null}
-            {t("hosts.save")}
+            {testing ? <Loader2 className="animate-spin" size={14} /> : null}
+            {t("hosts.testConnect")}
           </Button>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            <Button
+              variant="outline"
+              onClick={onClose}
+              disabled={saving || testing}
+            >
+              {t("hosts.cancel")}
+            </Button>
+            <Button
+              disabled={saving || testing || !host}
+              onClick={async () => {
+                setSaving(true);
+                try {
+                  let password_enc = initial?.password_enc ?? null;
+                  if (authType === "password" && password) {
+                    password_enc = await api.encryptSecret(password);
+                  }
+                  let passphrase_enc = initial?.passphrase_enc ?? null;
+                  if (authType === "privateKey" && passphrase) {
+                    passphrase_enc = await api.encryptSecret(passphrase);
+                  }
+                  await onSave({
+                    name: name || host,
+                    host,
+                    port,
+                    username,
+                    auth_type:
+                      authType === "privateKey" ? "privateKey" : "password",
+                    password_enc: authType === "password" ? password_enc : null,
+                    private_key_path:
+                      authType === "privateKey" ? privateKeyPath || null : null,
+                    passphrase_enc:
+                      authType === "privateKey" ? passphrase_enc : null,
+                    group_id: groupId === "" ? null : groupId,
+                    tags: tags
+                      .split(",")
+                      .map((x) => x.trim())
+                      .filter(Boolean),
+                    color: color || null,
+                    remark: remark || null,
+                    connect_timeout: connectTimeout,
+                    keepalive_interval: keepalive,
+                    terminal_type: terminalType,
+                    startup_cmd: startupCmd || null,
+                    remote_path: remotePath || null,
+                    jump_host_id: jumpHostId === "" ? null : jumpHostId,
+                  });
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              {saving ? <Loader2 className="animate-spin" /> : null}
+              {t("hosts.save")}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

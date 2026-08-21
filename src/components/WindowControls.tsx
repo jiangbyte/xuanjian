@@ -2,12 +2,14 @@
  * @file 窗口控制按钮
  * @author Charlie
  * @description Tauri 窗口的最小化 / 最大化 / 关闭按钮组。
+ * macOS 使用系统红绿灯，本组件不渲染。
  */
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Minus, Square, X, Copy } from "lucide-react";
+import { Copy, Minus, Square, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { isMacOs } from "@/lib/platform";
 
 /**
  * 标题栏右侧窗口控制：最小化、切换最大化、关闭。
@@ -17,11 +19,14 @@ export function WindowControls() {
   const win = getCurrentWindow();
 
   useEffect(() => {
+    if (isMacOs()) return;
     win
       .isMaximized()
       .then(setMaximized)
       .catch(() => undefined);
   }, [win]);
+
+  if (isMacOs()) return null;
 
   return (
     <div className="flex shrink-0 items-center">

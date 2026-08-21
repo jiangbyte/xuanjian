@@ -1,23 +1,32 @@
 /**
  * @file 主机分组侧边栏
  * @author Charlie
- * @description 分组列表、右键菜单与新建分组入口。
+ * @description 分组列表、右键菜单；新建入口在标题旁。
  */
 
-import type { MouseEvent } from "react";
-import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { useTranslation } from "react-i18next";
+import { openContextMenu, useContextMenu } from "@/components/ContextMenu";
+import {
+  SectionAsideHeader,
+  SectionNavItem,
+  sectionAsideClass,
+  sectionAsideIconBtnClass,
+  sectionAsideListClass,
+} from "@/components/SectionSidebar";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   createGroup,
   deleteGroup,
+  GroupRow,
   moveGroup,
   renameGroup,
-  GroupRow,
 } from "@/lib/db";
-import { openContextMenu, useContextMenu } from "@/components/ContextMenu";
 import { dialogs } from "@/lib/dialogs";
 
 /** 主机分组侧边栏 */
@@ -39,22 +48,48 @@ export function GroupSidebar({
   const { t } = useTranslation();
   const { open: openMenu } = useContextMenu();
 
+  const createNewGroup = async () => {
+    const name = await dialogs.prompt(t("hosts.groupNamePrompt"), {
+      title: t("hosts.newGroup"),
+    });
+    if (!name?.trim()) return;
+    try {
+      const id = await createGroup(name);
+      await onReload();
+      onSelectGroup(id);
+    } catch (err) {
+      await dialogs.alert(String(err));
+    }
+  };
+
   return (
-    <aside className="flex w-52 shrink-0 flex-col border-r border-border bg-background">
-      <div className="px-3 py-3">
-        <span className="text-xs font-medium uppercase text-muted-foreground">
-          {t("hosts.groupsTitle")}
-        </span>
-      </div>
-      <div className="flex flex-1 flex-col gap-1 overflow-y-auto px-2 pb-2">
-        <SidebarNavItem
+    <aside className={sectionAsideClass}>
+      <SectionAsideHeader title={t("hosts.groupsTitle")}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className={sectionAsideIconBtnClass}
+              aria-label={t("hosts.newGroup")}
+              onClick={() => createNewGroup()}
+            >
+              <Plus size={14} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{t("hosts.newGroup")}</TooltipContent>
+        </Tooltip>
+      </SectionAsideHeader>
+      <div className={sectionAsideListClass}>
+        <SectionNavItem
           active={groupId == null}
           label={t("hosts.allGroups")}
           count={hostTotal}
           onClick={() => onSelectGroup(null)}
         />
         {groups.map((g, idx) => (
-          <SidebarNavItem
+          <SectionNavItem
             key={g.id}
             active={groupId === g.id}
             label={g.name}
@@ -121,69 +156,13 @@ export function GroupSidebar({
             }
           />
         ))}
-        <SidebarNavItem
+        <SectionNavItem
           active={groupId === -1}
           label={t("hosts.ungrouped")}
           count={groupCounts.get("none") || 0}
           onClick={() => onSelectGroup(-1)}
         />
       </div>
-      <div className="border-t border-border p-2">
-        <Button
-          size="xs"
-          variant="outline"
-          className="w-full"
-          onClick={async () => {
-            const name = await dialogs.prompt(t("hosts.groupNamePrompt"), {
-              title: t("hosts.newGroup"),
-            });
-            if (!name?.trim()) return;
-            try {
-              const id = await createGroup(name);
-              await onReload();
-              onSelectGroup(id);
-            } catch (err) {
-              await dialogs.alert(String(err));
-            }
-          }}
-        >
-          <Plus size={13} />
-          {t("hosts.newGroup")}
-        </Button>
-      </div>
     </aside>
-  );
-}
-
-function SidebarNavItem({
-  active,
-  label,
-  count,
-  onClick,
-  onContextMenu,
-}: {
-  active: boolean;
-  label: string;
-  count: number;
-  onClick: () => void;
-  onContextMenu?: (e: MouseEvent) => void;
-}) {
-  return (
-    <button
-      type="button"
-      className={cn(
-        "flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
-        active
-          ? "bg-accent text-accent-foreground"
-          : "text-foreground hover:bg-muted",
-      )}
-      onClick={onClick}
-      onContextMenu={onContextMenu}
-    >
-      <span className="truncate">{label}</span>
-      <Badge variant="secondary" className="shrink-0">
-        {count}
-      </Badge>
-    </button>
   );
 }

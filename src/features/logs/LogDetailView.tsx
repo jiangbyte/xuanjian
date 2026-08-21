@@ -5,29 +5,19 @@
  * 写入路径经单飞 dump 避免异步 term.write 重叠导致内容翻倍。
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { dialogs } from "@/lib/dialogs";
-import { useNavigate, useParams } from "react-router-dom";
-import { useTranslation } from "react-i18next";
-import { Terminal } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
-import { ArrowLeft, Download, Gauge, Pin } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { save } from "@tauri-apps/plugin-dialog";
+import { FitAddon } from "@xterm/addon-fit";
+import { Terminal } from "@xterm/xterm";
+import { ArrowLeft, Download, Gauge, Pin } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useNavigate, useParams } from "react-router-dom";
 import {
-  getSessionLog,
-  listSessionLogChunks,
-  SessionLogChunkRow,
-  SessionLogRow,
-  setSessionLogPinned,
-} from "@/lib/db";
-import { api } from "@/lib/tauri";
-import { clipboardWriteText } from "@/lib/clipboard";
-import {
+  type ContextMenuItem,
   openContextMenu,
   useContextMenu,
-  type ContextMenuItem,
 } from "@/components/ContextMenu";
+import { Button } from "@/components/ui/button";
 import { LogPlaybackBar } from "@/features/logs/LogPlaybackBar";
 import {
   buildAsciinemaCast,
@@ -35,6 +25,17 @@ import {
   formatBytes,
   formatLogTimeRange,
 } from "@/features/logs/logExport";
+import { clipboardWriteText } from "@/lib/clipboard";
+import { modKeyLabel } from "@/lib/platform";
+import {
+  getSessionLog,
+  listSessionLogChunks,
+  SessionLogChunkRow,
+  SessionLogRow,
+  setSessionLogPinned,
+} from "@/lib/db";
+import { dialogs } from "@/lib/dialogs";
+import { api } from "@/lib/tauri";
 import { useSettingsStore } from "@/stores/settings";
 
 /** 单条会话日志的只读终端详情页 */
@@ -393,7 +394,7 @@ export function LogDetailView() {
           </Button>
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-semibold">{log.title}</div>
-            <div className="truncate text-[11px] text-muted-foreground">
+            <div className="truncate text-xs text-muted-foreground">
               {formatLogTimeRange(log.started_at, log.ended_at, t("logs.live"))}{" "}
               · {meta} · {formatBytes(log.bytes_out)} · {t("logs.readonly")}
             </div>
@@ -446,7 +447,7 @@ export function LogDetailView() {
           const items: ContextMenuItem[] = [
             {
               id: "copy",
-              label: t("context.copy"),
+              label: t("context.copy", { mod: modKeyLabel() }),
               disabled: !hasSelection,
               onClick: () => copySelection(),
             },

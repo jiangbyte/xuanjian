@@ -162,6 +162,7 @@ pub async fn network_ping(
             } else {
                 c.args(["-n", &n.to_string(), &target_c]);
             }
+            crate::win_process::hide_console(&mut c);
             c
         };
         #[cfg(not(windows))]
@@ -174,7 +175,9 @@ pub async fn network_ping(
             }
             c
         };
-        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+        cmd.stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .stdin(Stdio::null());
         let mut seq_hint: u32 = 0;
         match cmd.spawn() {
             Ok(mut child) => {
@@ -220,12 +223,27 @@ pub async fn network_traceroute(
 
     tokio::task::spawn_blocking(move || {
         #[cfg(windows)]
-        let mut cmd = Command::new("tracert");
+        let mut cmd = {
+            let mut c = Command::new("tracert");
+            crate::win_process::hide_console(&mut c);
+            c
+        };
         #[cfg(not(windows))]
-        let mut cmd = Command::new("traceroute");
+        let mut cmd = {
+            // macOS / Linux：优先 traceroute，缺省时尝试 tracepath
+            let bin = if which::which("traceroute").is_ok() {
+                "traceroute"
+            } else if which::which("tracepath").is_ok() {
+                "tracepath"
+            } else {
+                "traceroute"
+            };
+            Command::new(bin)
+        };
         cmd.arg(&target_c)
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+            .stderr(Stdio::piped())
+            .stdin(Stdio::null());
         let mut seq_hint: u32 = 0;
         match cmd.spawn() {
             Ok(mut child) => {
@@ -274,10 +292,10 @@ pub async fn network_dns_lookup(host: String, record_type: String) -> Result<Str
         }
         #[cfg(windows)]
         {
-            let output = Command::new("nslookup")
-                .args(["-type", &rtype, &host])
-                .output()
-                .map_err(|e| e.to_string())?;
+            let mut cmd = Command::new("nslookup");
+            cmd.args(["-type", &rtype, &host]);
+            crate::win_process::hide_console(&mut cmd);
+            let output = cmd.output().map_err(|e| e.to_string())?;
             let text = String::from_utf8_lossy(&output.stdout);
             let err = String::from_utf8_lossy(&output.stderr);
             Ok(format!("{text}{err}"))
@@ -411,18 +429,18 @@ pub async fn network_tls_cert(host_port: String) -> Result<TlsCertInfo, String> 
     tokio::task::spawn_blocking(move || {
         // Prefer openssl if available
         if let Some(openssl) = which_bin("openssl") {
-            let output = Command::new(openssl)
-                .args([
-                    "s_client",
-                    "-connect",
-                    &target,
-                    "-servername",
-                    target.split(':').next().unwrap_or(&target),
-                    "-showcerts",
-                ])
-                .stdin(Stdio::null())
-                .output()
-                .map_err(|e| e.to_string())?;
+            let mut cmd = Command::new(openssl);
+            cmd.args([
+                "s_client",
+                "-connect",
+                &target,
+                "-servername",
+                target.split(':').next().unwrap_or(&target),
+                "-showcerts",
+            ])
+            .stdin(Stdio::null());
+            crate::win_process::hide_console(&mut cmd);
+            let output = cmd.output().map_err(|e| e.to_string())?;
             let raw = String::from_utf8_lossy(&output.stdout);
             let subject = extract_field(&raw, "subject=").unwrap_or_default();
             let issuer = extract_field(&raw, "issuer=").unwrap_or_default();
@@ -451,10 +469,10 @@ fn extract_field(raw: &str, prefix: &str) -> Option<String> {
 pub async fn network_whois(query: String) -> Result<String, String> {
     tokio::task::spawn_blocking(move || {
         if let Some(bin) = which_bin("whois") {
-            let output = Command::new(bin)
-                .arg(&query)
-                .output()
-                .map_err(|e| e.to_string())?;
+            let mut cmd = Command::new(bin);
+            cmd.arg(&query);
+            crate::win_process::hide_console(&mut cmd);
+            let output = cmd.output().map_err(|e| e.to_string())?;
             return Ok(String::from_utf8_lossy(&output.stdout).to_string());
         }
         // Minimal WHOIS over TCP 43 to whois.iana.org then follow

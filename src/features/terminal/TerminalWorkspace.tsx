@@ -5,24 +5,38 @@
  * 拖拽中只写 ref / body class，松手再 persist，避免 Zustand 重渲染打断拖动手势。
  */
 
-import { useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { useUiStore } from "@/stores/ui";
-import { XtermView } from "@/features/terminal/XtermView";
-import { TerminalLeftPanel } from "@/features/terminal/TerminalLeftPanel";
-import { TerminalRightPanel } from "@/features/terminal/TerminalRightPanel";
-import { onSessionClosed } from "@/lib/tauri";
-import { handleSessionClosed } from "@/lib/sessionConnect";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
+import { XtermView } from "@/features/terminal/XtermView";
+import { handleSessionClosed } from "@/lib/sessionConnect";
+import { onSessionClosed } from "@/lib/tauri";
+import { useUiStore } from "@/stores/ui";
+
+const TerminalLeftPanel = lazy(() =>
+  import("@/features/terminal/TerminalLeftPanel").then((m) => ({
+    default: m.TerminalLeftPanel,
+  })),
+);
+const TerminalRightPanel = lazy(() =>
+  import("@/features/terminal/TerminalRightPanel").then((m) => ({
+    default: m.TerminalRightPanel,
+  })),
+);
 
 /**
  * 终端主工作区：左栏 + 多标签 xterm + 右栏。
+ * @param workspaceActive 是否在终端页可见；离页时只保留 xterm，卸载左右侧栏以停止轮询/MD 编辑器。
  */
-export function TerminalWorkspace() {
+export function TerminalWorkspace({
+  workspaceActive = true,
+}: {
+  workspaceActive?: boolean;
+}) {
   const { t } = useTranslation();
   const tabs = useUiStore((s) => s.tabs);
   const activeTabId = useUiStore((s) => s.activeTabId);
@@ -32,7 +46,7 @@ export function TerminalWorkspace() {
   const rightWidth = useUiStore((s) => s.rightWidth);
   const setLeftWidth = useUiStore((s) => s.setLeftWidth);
   const setRightWidth = useUiStore((s) => s.setRightWidth);
-  const active = tabs.find((tab) => tab.id === activeTabId) ?? null;
+  const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
   const leftPx = useRef(leftWidth);
   const rightPx = useRef(rightWidth);
   const dragging = useRef(false);
@@ -77,7 +91,6 @@ export function TerminalWorkspace() {
 
   return (
     <ResizablePanelGroup
-      key={`term-${leftCollapsed ? 0 : 1}-${rightCollapsed ? 0 : 1}`}
       orientation="horizontal"
       className="h-full min-w-0"
       onLayoutChange={beginDrag}
@@ -92,7 +105,7 @@ export function TerminalWorkspace() {
         }
       }}
     >
-      {!leftCollapsed && (
+      {workspaceActive && !leftCollapsed && (
         <>
           <ResizablePanel
             id="left"
@@ -104,12 +117,20 @@ export function TerminalWorkspace() {
               leftPx.current = size.inPixels;
             }}
           >
-            <TerminalLeftPanel
-              sessionId={active?.sessionId ?? null}
-              kind={active?.kind ?? null}
-              hostId={active?.hostId ?? null}
-              shellId={active?.shellId ?? null}
-            />
+            <Suspense
+              fallback={
+                <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                  …
+                </div>
+              }
+            >
+              <TerminalLeftPanel
+                sessionId={activeTab?.sessionId ?? null}
+                kind={activeTab?.kind ?? null}
+                hostId={activeTab?.hostId ?? null}
+                shellId={activeTab?.shellId ?? null}
+              />
+            </Suspense>
           </ResizablePanel>
           <ResizableHandle />
         </>
@@ -136,14 +157,17 @@ export function TerminalWorkspace() {
                   zIndex: tab.id === activeTabId ? 1 : 0,
                 }}
               >
-                <XtermView tab={tab} active={tab.id === activeTabId} />
+                <XtermView
+                  tab={tab}
+                  active={workspaceActive && tab.id === activeTabId}
+                />
               </div>
             ))
           )}
         </div>
       </ResizablePanel>
 
-      {!rightCollapsed && (
+      {workspaceActive && !rightCollapsed && (
         <>
           <ResizableHandle />
           <ResizablePanel
@@ -156,7 +180,15 @@ export function TerminalWorkspace() {
               rightPx.current = size.inPixels;
             }}
           >
-            <TerminalRightPanel />
+            <Suspense
+              fallback={
+                <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                  …
+                </div>
+              }
+            >
+              <TerminalRightPanel />
+            </Suspense>
           </ResizablePanel>
         </>
       )}

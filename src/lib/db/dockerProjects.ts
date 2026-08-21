@@ -6,11 +6,15 @@
 
 import { getDb } from "@/lib/db/client";
 
+/** 项目形态：纯 Compose / 纯 Dockerfile / 两者皆有 */
+export type DockerProjectKind = "compose" | "dockerfile" | "full";
+
 /** docker_projects 表行 */
 export type DockerProjectRow = {
   id: number;
   name: string;
   description: string;
+  kind: DockerProjectKind;
   compose_json: string;
   dockerfiles_json: string;
   layout_json: string;
@@ -23,17 +27,28 @@ export type DockerProjectRow = {
 export type DockerProjectInput = {
   name: string;
   description?: string;
+  kind?: DockerProjectKind;
   compose_json?: string;
   dockerfiles_json?: string;
   layout_json?: string;
 };
 
+function normalizeKind(raw: unknown): DockerProjectKind {
+  if (raw === "compose" || raw === "dockerfile" || raw === "full") return raw;
+  return "full";
+}
+
+function mapRow(row: DockerProjectRow & { kind?: string }): DockerProjectRow {
+  return { ...row, kind: normalizeKind(row.kind) };
+}
+
 /** 按更新时间倒序列出项目 */
 export async function listDockerProjects(): Promise<DockerProjectRow[]> {
   const db = await getDb();
-  return db.select<DockerProjectRow[]>(
+  const rows = await db.select<(DockerProjectRow & { kind?: string })[]>(
     "SELECT * FROM docker_projects ORDER BY updated_at DESC, id DESC",
   );
+  return rows.map(mapRow);
 }
 
 /** 按 id 读取项目 */
@@ -41,11 +56,11 @@ export async function getDockerProject(
   id: number,
 ): Promise<DockerProjectRow | null> {
   const db = await getDb();
-  const rows = await db.select<DockerProjectRow[]>(
+  const rows = await db.select<(DockerProjectRow & { kind?: string })[]>(
     "SELECT * FROM docker_projects WHERE id = ?",
     [id],
   );
-  return rows[0] ?? null;
+  return rows[0] ? mapRow(rows[0]) : null;
 }
 
 /**
@@ -58,17 +73,19 @@ export async function createDockerProject(
   const db = await getDb();
   const name = input.name.trim();
   if (!name) throw new Error("project name required");
+  const kind = normalizeKind(input.kind ?? "full");
   const maxRows = await db.select<{ m: number | null }[]>(
     "SELECT MAX(sort_order) as m FROM docker_projects",
   );
   const sort = (maxRows[0]?.m ?? -1) + 1;
   const result = await db.execute(
     `INSERT INTO docker_projects
-      (name, description, compose_json, dockerfiles_json, layout_json, sort_order)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+      (name, description, kind, compose_json, dockerfiles_json, layout_json, sort_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [
       name,
       input.description?.trim() ?? "",
+      kind,
       input.compose_json ?? "{}",
       input.dockerfiles_json ?? "{}",
       input.layout_json ?? "{}",
@@ -92,6 +109,7 @@ export async function updateDockerProject(
     `UPDATE docker_projects SET
       name = ?,
       description = ?,
+      kind = ?,
       compose_json = ?,
       dockerfiles_json = ?,
       layout_json = ?,
@@ -100,6 +118,7 @@ export async function updateDockerProject(
     [
       name,
       input.description ?? cur.description,
+      normalizeKind(input.kind ?? cur.kind),
       input.compose_json ?? cur.compose_json,
       input.dockerfiles_json ?? cur.dockerfiles_json,
       input.layout_json ?? cur.layout_json,

@@ -5,15 +5,15 @@
  * 用于表单弹层等；点击遮罩关闭，标题栏拖动，边缘手柄缩放。
  */
 
+import { X } from "lucide-react";
 import {
+  type ReactNode,
+  type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
   useRef,
   useState,
-  type ReactNode,
-  type PointerEvent as ReactPointerEvent,
 } from "react";
-import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -166,10 +166,7 @@ export function FloatingWindow({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[70] bg-black/40"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-[70] bg-black/40" onClick={onClose}>
       <div
         className="floating-window absolute flex flex-col overflow-hidden"
         style={{

@@ -6,10 +6,9 @@
  * 清空会确认后调用 cmdHistory store。
  */
 
-import { useMemo, useState } from "react";
-import { dialogs } from "@/lib/dialogs";
-import { useTranslation } from "react-i18next";
 import { Copy, Play, Search, Terminal, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
   InputGroup,
@@ -21,8 +20,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { api } from "@/lib/tauri";
 import { clipboardWriteText } from "@/lib/clipboard";
+import { dialogs } from "@/lib/dialogs";
+import { api } from "@/lib/tauri";
 import { useCmdHistory } from "@/stores/cmdHistory";
 
 const listRowClass =
@@ -143,11 +143,7 @@ export function HistoryPane({ sessionId }: { sessionId: string | null }) {
           </p>
         ) : (
           filtered.map((item) => (
-            <div
-              key={item.id}
-              className={listRowClass}
-              title={item.cmd}
-            >
+            <div key={item.id} className={listRowClass} title={item.cmd}>
               <span className="min-w-0 flex-1 truncate text-left font-mono text-sm font-semibold">
                 {item.cmd}
               </span>

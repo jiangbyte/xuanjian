@@ -1,9 +1,10 @@
 /**
  * @file Docker 编排内置模板
  * @author Charlie
- * @description 一键新建项目的 Compose + Dockerfile 种子数据。
+ * @description 按项目形态（compose / dockerfile / full）提供种子数据。
  */
 
+import type { DockerProjectKind } from "@/lib/db/dockerProjects";
 import type { ComposeDoc, DockerfilesMap } from "../model/composeTypes";
 import { stringifyComposeYaml } from "../model/composeYaml";
 
@@ -11,9 +12,21 @@ export type DockerTemplate = {
   id: string;
   nameKey: string;
   descriptionKey: string;
+  kind: DockerProjectKind;
   compose: ComposeDoc;
   dockerfiles: DockerfilesMap;
 };
+
+const emptyCompose = (): ComposeDoc => ({
+  services: {},
+  networks: {},
+  volumes: {},
+});
+
+const starterDockerfile = `FROM alpine:3.20
+WORKDIR /app
+CMD ["sh"]
+`;
 
 const nginxDockerfile = `FROM nginx:alpine
 COPY ./html /usr/share/nginx/html
@@ -40,16 +53,34 @@ CMD ["node", "dist/index.js"]
 
 export const DOCKER_TEMPLATES: DockerTemplate[] = [
   {
-    id: "blank",
-    nameKey: "docker.tplBlank",
-    descriptionKey: "docker.tplBlankDesc",
-    compose: { services: {}, networks: {}, volumes: {} },
+    id: "blank-compose",
+    nameKey: "docker.tplBlankCompose",
+    descriptionKey: "docker.tplBlankComposeDesc",
+    kind: "compose",
+    compose: emptyCompose(),
+    dockerfiles: {},
+  },
+  {
+    id: "blank-dockerfile",
+    nameKey: "docker.tplBlankDockerfile",
+    descriptionKey: "docker.tplBlankDockerfileDesc",
+    kind: "dockerfile",
+    compose: emptyCompose(),
+    dockerfiles: { Dockerfile: starterDockerfile },
+  },
+  {
+    id: "blank-full",
+    nameKey: "docker.tplBlankFull",
+    descriptionKey: "docker.tplBlankFullDesc",
+    kind: "full",
+    compose: emptyCompose(),
     dockerfiles: {},
   },
   {
     id: "nginx",
     nameKey: "docker.tplNginx",
     descriptionKey: "docker.tplNginxDesc",
+    kind: "full",
     compose: {
       name: "nginx-static",
       services: {
@@ -77,6 +108,7 @@ export const DOCKER_TEMPLATES: DockerTemplate[] = [
     id: "redis",
     nameKey: "docker.tplRedis",
     descriptionKey: "docker.tplRedisDesc",
+    kind: "compose",
     compose: {
       name: "redis",
       services: {
@@ -84,9 +116,7 @@ export const DOCKER_TEMPLATES: DockerTemplate[] = [
           image: "redis:7-alpine",
           ports: [{ published: "6379", target: "6379" }],
           restart: "unless-stopped",
-          volumes: [
-            { type: "volume", source: "redis_data", target: "/data" },
-          ],
+          volumes: [{ type: "volume", source: "redis_data", target: "/data" }],
           command: "redis-server --appendonly yes",
           networks: [{ name: "cache" }],
         },
@@ -100,6 +130,7 @@ export const DOCKER_TEMPLATES: DockerTemplate[] = [
     id: "mysql",
     nameKey: "docker.tplMysql",
     descriptionKey: "docker.tplMysqlDesc",
+    kind: "compose",
     compose: {
       name: "mysql",
       services: {
@@ -135,6 +166,7 @@ export const DOCKER_TEMPLATES: DockerTemplate[] = [
     id: "node-postgres",
     nameKey: "docker.tplNodePg",
     descriptionKey: "docker.tplNodePgDesc",
+    kind: "full",
     compose: {
       name: "api-postgres",
       services: {
@@ -157,7 +189,11 @@ export const DOCKER_TEMPLATES: DockerTemplate[] = [
             POSTGRES_DB: "app",
           },
           volumes: [
-            { type: "volume", source: "pg_data", target: "/var/lib/postgresql/data" },
+            {
+              type: "volume",
+              source: "pg_data",
+              target: "/var/lib/postgresql/data",
+            },
           ],
           networks: [{ name: "appnet" }],
           healthcheck: {
@@ -177,6 +213,7 @@ export const DOCKER_TEMPLATES: DockerTemplate[] = [
     id: "fullstack",
     nameKey: "docker.tplFullstack",
     descriptionKey: "docker.tplFullstackDesc",
+    kind: "full",
     compose: {
       name: "fullstack",
       services: {
@@ -214,7 +251,11 @@ export const DOCKER_TEMPLATES: DockerTemplate[] = [
             POSTGRES_DB: "app",
           },
           volumes: [
-            { type: "volume", source: "pg_data", target: "/var/lib/postgresql/data" },
+            {
+              type: "volume",
+              source: "pg_data",
+              target: "/var/lib/postgresql/data",
+            },
           ],
           networks: [{ name: "backend" }],
           healthcheck: {
@@ -227,9 +268,7 @@ export const DOCKER_TEMPLATES: DockerTemplate[] = [
         redis: {
           image: "redis:7-alpine",
           networks: [{ name: "backend" }],
-          volumes: [
-            { type: "volume", source: "redis_data", target: "/data" },
-          ],
+          volumes: [{ type: "volume", source: "redis_data", target: "/data" }],
         },
       },
       networks: {
@@ -247,19 +286,15 @@ export const DOCKER_TEMPLATES: DockerTemplate[] = [
     id: "multistage-df",
     nameKey: "docker.tplMultistage",
     descriptionKey: "docker.tplMultistageDesc",
-    compose: {
-      services: {
-        app: {
-          build: { context: ".", dockerfile: "Dockerfile", target: "runner" },
-          ports: [{ published: "3000", target: "3000" }],
-        },
-      },
-      networks: {},
-      volumes: {},
-    },
+    kind: "dockerfile",
+    compose: emptyCompose(),
     dockerfiles: { Dockerfile: apiDockerfile },
   },
 ];
+
+export function templatesForKind(kind: DockerProjectKind): DockerTemplate[] {
+  return DOCKER_TEMPLATES.filter((t) => t.kind === kind);
+}
 
 export function templateSeedYaml(tpl: DockerTemplate): string {
   return stringifyComposeYaml(tpl.compose);

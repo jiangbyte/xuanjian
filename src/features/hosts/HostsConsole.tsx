@@ -6,32 +6,36 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+import { GroupSidebar } from "@/features/hosts/GroupSidebar";
+import { HostCard } from "@/features/hosts/HostCard";
+import { HostFormModal } from "@/features/hosts/HostFormModal";
+import { HostToolbar } from "@/features/hosts/HostToolbar";
+import { BatchActionBar } from "@/features/share/BatchActionBar";
 import {
   createHost,
+  deleteHost,
+  GroupRow,
   HostRow,
   listGroups,
   listHosts,
   listTags,
+  TagRow,
   touchHostConnected,
   updateHost,
-  GroupRow,
-  TagRow,
 } from "@/lib/db";
-import { api } from "@/lib/tauri";
-import { useUiStore } from "@/stores/ui";
-import { useNavigate } from "react-router-dom";
-import { startRecordingForOpenTab } from "@/lib/sessionRecorder";
 import { dialogs } from "@/lib/dialogs";
+import { startRecordingForOpenTab } from "@/lib/sessionRecorder";
+import { exportToFile, formatImportToast, importFromFile } from "@/lib/share";
 import {
   findHostByTarget,
   hostMatchesQuery,
   parseSshTarget,
   type SshTarget,
 } from "@/lib/sshTarget";
-import { HostToolbar } from "@/features/hosts/HostToolbar";
-import { GroupSidebar } from "@/features/hosts/GroupSidebar";
-import { HostCard } from "@/features/hosts/HostCard";
-import { HostFormModal } from "@/features/hosts/HostFormModal";
+import { api } from "@/lib/tauri";
+import { useUiStore } from "@/stores/ui";
 
 /** 主机管理控制台主组件 */
 export function HostsConsole() {
@@ -41,6 +45,7 @@ export function HostsConsole() {
   const [tags, setTags] = useState<TagRow[]>([]);
   const [editing, setEditing] = useState<HostRow | null>(null);
   const [creating, setCreating] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [createPrefill, setCreatePrefill] = useState<Partial<HostRow> | null>(
     null,
   );
@@ -226,8 +231,70 @@ export function HostsConsole() {
           setCreating(true);
           setEditing(null);
         }}
+        onImport={() => {
+          importFromFile()
+            .then(async (r) => {
+              if (!r) return;
+              await reload();
+              toast.success(
+                `${t("share.importDone")} (${formatImportToast(r)})`,
+              );
+              if (r.errors.length) console.warn(r.errors);
+            })
+            .catch((e) => toast.error(String(e)));
+        }}
         onConnectMatched={(host) => connectHost(host).catch(console.error)}
         onCreateFromTarget={openCreateFromTarget}
+      />
+
+      <BatchActionBar
+        selectedCount={selectedIds.size}
+        totalCount={filtered.length}
+        onSelectAll={() => setSelectedIds(new Set(filtered.map((h) => h.id)))}
+        onClear={() => setSelectedIds(new Set())}
+        onExport={() => {
+          const ids = [...selectedIds];
+          if (!ids.length) {
+            toast.error(t("batch.needSelect"));
+            return;
+          }
+          const includeSecrets = window.confirm(
+            t("share.exportSecretsConfirm"),
+          );
+          exportToFile(
+            {
+              includeHostSecrets: includeSecrets,
+              sections: {
+                hosts: true,
+                scripts: false,
+                notes: false,
+                dockerProjects: false,
+              },
+              hostIds: ids,
+            },
+            "xuanjian-hosts.json",
+          )
+            .then((ok) => {
+              if (ok) toast.success(t("share.exportDone"));
+            })
+            .catch((e) => toast.error(String(e)));
+        }}
+        onDelete={() => {
+          const ids = [...selectedIds];
+          if (!ids.length) return;
+          void (async () => {
+            if (
+              !(await dialogs.confirm(
+                t("batch.deleteConfirm", { count: ids.length }),
+                { danger: true },
+              ))
+            )
+              return;
+            for (const id of ids) await deleteHost(id);
+            setSelectedIds(new Set());
+            await reload();
+          })();
+        }}
       />
 
       <div className="flex min-h-0 flex-1">
@@ -246,7 +313,7 @@ export function HostsConsole() {
             {t("hosts.hostsCount", { count: filtered.length })}
           </p>
           {filtered.length === 0 ? (
-            <div className="flex items-center justify-center rounded-lg border border-dashed border-border p-10">
+            <div className="flex items-center justify-center rounded-md border border-dashed border-border p-10">
               <span className="text-muted-foreground">{t("hosts.empty")}</span>
             </div>
           ) : (
@@ -255,6 +322,15 @@ export function HostsConsole() {
                 <HostCard
                   key={host.id}
                   host={host}
+                  selected={selectedIds.has(host.id)}
+                  onSelectedChange={(sel) => {
+                    setSelectedIds((prev) => {
+                      const next = new Set(prev);
+                      if (sel) next.add(host.id);
+                      else next.delete(host.id);
+                      return next;
+                    });
+                  }}
                   onConnect={(h) => connectHost(h).catch(console.error)}
                   onEdit={(h) => {
                     setEditing(h);

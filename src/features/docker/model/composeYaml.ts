@@ -6,13 +6,13 @@
 
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import {
-  emptyComposeDoc,
   type BuildConfig,
   type ComposeDoc,
   type ComposeNetwork,
   type ComposeService,
   type ComposeVolume,
   type DependsOnEntry,
+  emptyComposeDoc,
   type Healthcheck,
   type PortMapping,
   type ServiceNetwork,
@@ -40,7 +40,9 @@ function parsePorts(raw: unknown): PortMapping[] | undefined {
   for (const item of raw) {
     if (typeof item === "string" || typeof item === "number") {
       const s = String(item);
-      const m = s.match(/^(\d+(?:-\d+)?)(?::(\d+(?:-\d+)?))?(?:\/(tcp|udp))?$/i);
+      const m = s.match(
+        /^(\d+(?:-\d+)?)(?::(\d+(?:-\d+)?))?(?:\/(tcp|udp))?$/i,
+      );
       if (m) {
         if (m[2]) {
           out.push({
@@ -49,7 +51,10 @@ function parsePorts(raw: unknown): PortMapping[] | undefined {
             protocol: (m[3]?.toLowerCase() as "tcp" | "udp") || undefined,
           });
         } else {
-          out.push({ target: m[1], protocol: (m[3]?.toLowerCase() as "tcp" | "udp") || undefined });
+          out.push({
+            target: m[1],
+            protocol: (m[3]?.toLowerCase() as "tcp" | "udp") || undefined,
+          });
         }
       } else {
         out.push({ target: s });
@@ -60,7 +65,9 @@ function parsePorts(raw: unknown): PortMapping[] | undefined {
       out.push({
         published: asString(item.published),
         target: asString(item.target) ?? asString(item.container_port) ?? "80",
-        protocol: (asString(item.protocol)?.toLowerCase() as "tcp" | "udp") || undefined,
+        protocol:
+          (asString(item.protocol)?.toLowerCase() as "tcp" | "udp") ||
+          undefined,
         mode: asString(item.mode),
       });
     }
@@ -100,7 +107,10 @@ function parseVolumes(raw: unknown): VolumeMount[] | undefined {
         const source = parts[0];
         const target = parts[1];
         const flags = parts[2] ?? "";
-        const isBind = source.startsWith("/") || source.startsWith("./") || source.startsWith("~");
+        const isBind =
+          source.startsWith("/") ||
+          source.startsWith("./") ||
+          source.startsWith("~");
         out.push({
           type: isBind ? "bind" : "volume",
           source,
@@ -215,7 +225,9 @@ function parseService(raw: unknown): ComposeService {
     tty: raw.tty === true ? true : undefined,
     ports: parsePorts(raw.ports),
     environment: parseEnv(raw.environment),
-    env_file: asStringArray(raw.env_file) ?? (typeof raw.env_file === "string" ? [raw.env_file] : undefined),
+    env_file:
+      asStringArray(raw.env_file) ??
+      (typeof raw.env_file === "string" ? [raw.env_file] : undefined),
     volumes: parseVolumes(raw.volumes),
     networks: parseServiceNetworks(raw.networks),
     depends_on: parseDependsOn(raw.depends_on),
@@ -313,14 +325,17 @@ export function parseComposeYaml(text: string): ComposeDoc {
 function dumpPorts(ports?: PortMapping[]): unknown[] | undefined {
   if (!ports?.length) return undefined;
   return ports.map((p) => {
-    if (p.published && p.protocol) return `${p.published}:${p.target}/${p.protocol}`;
+    if (p.published && p.protocol)
+      return `${p.published}:${p.target}/${p.protocol}`;
     if (p.published) return `${p.published}:${p.target}`;
     if (p.protocol) return `${p.target}/${p.protocol}`;
     return p.target;
   });
 }
 
-function dumpEnv(env?: Record<string, string>): Record<string, string> | undefined {
+function dumpEnv(
+  env?: Record<string, string>,
+): Record<string, string> | undefined {
   if (!env || !Object.keys(env).length) return undefined;
   return { ...env };
 }
@@ -365,7 +380,8 @@ function dumpService(svc: ComposeService): Record<string, unknown> {
     const b: Record<string, unknown> = { context: svc.build.context || "." };
     if (svc.build.dockerfile) b.dockerfile = svc.build.dockerfile;
     if (svc.build.target) b.target = svc.build.target;
-    if (svc.build.args && Object.keys(svc.build.args).length) b.args = svc.build.args;
+    if (svc.build.args && Object.keys(svc.build.args).length)
+      b.args = svc.build.args;
     o.build = b;
   }
   if (svc.container_name) o.container_name = svc.container_name;
@@ -395,7 +411,8 @@ function dumpService(svc: ComposeService): Record<string, unknown> {
     if (svc.healthcheck.interval) h.interval = svc.healthcheck.interval;
     if (svc.healthcheck.timeout) h.timeout = svc.healthcheck.timeout;
     if (svc.healthcheck.retries != null) h.retries = svc.healthcheck.retries;
-    if (svc.healthcheck.start_period) h.start_period = svc.healthcheck.start_period;
+    if (svc.healthcheck.start_period)
+      h.start_period = svc.healthcheck.start_period;
     o.healthcheck = h;
   }
   if (svc.extra_hosts?.length) o.extra_hosts = svc.extra_hosts;

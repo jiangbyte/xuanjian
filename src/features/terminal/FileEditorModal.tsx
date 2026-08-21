@@ -6,12 +6,12 @@
  * 主题与字号等跟随设置 store。
  */
 
-import { api } from "@/lib/tauri";
-import { FloatingWindow } from "@/components/FloatingWindow";
-import { useTranslation } from "react-i18next";
-import Editor from "@monaco-editor/react";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { FloatingWindow } from "@/components/FloatingWindow";
+import Editor from "@/components/MonacoEditor";
 import { Button } from "@/components/ui/button";
+import { api } from "@/lib/tauri";
 import { resolveMonacoTheme, useSettingsStore } from "@/stores/settings";
 
 /** 根据路径扩展名推断 Monaco language id */

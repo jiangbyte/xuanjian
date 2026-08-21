@@ -27,8 +27,13 @@ export type TraceHop = {
 
 export const PING_SAMPLE_CAP = 300;
 
-export function derivePingStats(samples: PingSample[], summary: PingSummary | null) {
-  const ok = samples.filter((s) => s.rttMs != null).map((s) => s.rttMs as number);
+export function derivePingStats(
+  samples: PingSample[],
+  summary: PingSummary | null,
+) {
+  const ok = samples
+    .filter((s) => s.rttMs != null)
+    .map((s) => s.rttMs as number);
   const lost = samples.filter((s) => s.rttMs == null).length;
   const fromSamples =
     ok.length > 0

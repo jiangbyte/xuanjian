@@ -19,10 +19,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { api, type TcpProbeResult } from "@/lib/tauri";
-import { COMMON_PORTS } from "@/lib/ipcalc";
-import { addNetworkHistory } from "@/lib/db";
 import { clipboardWriteText } from "@/lib/clipboard";
+import { addNetworkHistory } from "@/lib/db";
+import { COMMON_PORTS } from "@/lib/ipcalc";
+import { api, type TcpProbeResult } from "@/lib/tauri";
 
 /** 解析 `22,80,443` 或 `8000-8010` 等形式，最多 500 个端口 */
 function parsePorts(input: string): number[] {
@@ -126,15 +126,17 @@ export function PortsPanel() {
             id="ports-timeout"
             type="number"
             value={timeoutMs}
-            onChange={(e) =>
-              setTimeoutMs(Number(e.target.value) || 800)
-            }
+            onChange={(e) => setTimeoutMs(Number(e.target.value) || 800)}
           />
         </div>
         <Button disabled={busy} onClick={probe}>
           {busy ? `${progress}%` : t("network.probe")}
         </Button>
-        <Button variant="outline" disabled={!results.length} onClick={exportCsv}>
+        <Button
+          variant="outline"
+          disabled={!results.length}
+          onClick={exportCsv}
+        >
           {t("network.export")}
         </Button>
       </div>

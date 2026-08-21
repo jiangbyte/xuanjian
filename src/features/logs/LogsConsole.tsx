@@ -4,11 +4,11 @@
  * @description 按 SSH/本地筛选与搜索浏览历史会话录制，支持置顶、打开详情与删除。
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { dialogs } from "@/lib/dialogs";
-import { useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import { Monitor, Pin, ScrollText, Search, Server, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
+import { openContextMenu, useContextMenu } from "@/components/ContextMenu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,14 +16,14 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group";
+import { formatBytes, formatLogTimeRange } from "@/features/logs/logExport";
 import {
   deleteSessionLog,
   listSessionLogs,
   SessionLogRow,
   setSessionLogPinned,
 } from "@/lib/db";
-import { openContextMenu, useContextMenu } from "@/components/ContextMenu";
-import { formatBytes, formatLogTimeRange } from "@/features/logs/logExport";
+import { dialogs } from "@/lib/dialogs";
 
 type KindFilter = "all" | "ssh" | "local";
 
@@ -101,7 +101,7 @@ export function LogsConsole() {
 
       <div className="min-h-0 flex-1 overflow-auto p-5">
         {filtered.length === 0 ? (
-          <div className="flex items-center justify-center rounded-lg border border-dashed border-border p-10">
+          <div className="flex items-center justify-center rounded-md border border-dashed border-border p-10">
             <span className="text-muted-foreground">{t("logs.empty")}</span>
           </div>
         ) : (
@@ -154,7 +154,9 @@ export function LogsConsole() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="truncate font-medium">{row.title}</span>
+                        <span className="truncate font-medium">
+                          {row.title}
+                        </span>
                         {row.pinned ? (
                           <Pin size={12} className="shrink-0 text-primary" />
                         ) : null}

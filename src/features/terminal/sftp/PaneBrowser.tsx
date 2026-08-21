@@ -4,9 +4,7 @@
  * @description 本地/远程目录浏览、勾选、右键菜单与上传等文件操作。
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { dialogs } from "@/lib/dialogs";
-import { useTranslation } from "react-i18next";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   ArrowLeftRight,
   ArrowUpToLine,
@@ -26,33 +24,35 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import {
+  type ContextMenuItem,
+  openContextMenu,
+  useContextMenu,
+} from "@/components/ContextMenu";
+import { PathBookmarkButton } from "@/components/PathBookmarkButton";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import type { HostRow } from "@/lib/db";
-import { api, type SftpEntry } from "@/lib/tauri";
-import { enqueueDownload, enqueueUpload } from "@/stores/transfer";
-import { clipboardWriteText } from "@/lib/clipboard";
-import { useUiStore } from "@/stores/ui";
-import {
-  openContextMenu,
-  useContextMenu,
-  type ContextMenuItem,
-} from "@/components/ContextMenu";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { PermissionsModal } from "@/features/terminal/PermissionsModal";
-import { PathBookmarkButton } from "@/components/PathBookmarkButton";
-import { bookmarkScope } from "@/stores/pathBookmarks";
-import {
-  askOverwrite,
-  findDestEntry,
-  prepareOverwrite,
-  type ConflictCtx,
-  type DestEndpoint,
-} from "@/lib/transferConflict";
-import type { PaneTab, SideSnapshot } from "@/features/terminal/sftp/types";
 import { joinPath, parentPath } from "@/features/terminal/sftp/pathUtils";
 import { connectHost } from "@/features/terminal/sftp/transferEnqueue";
+import type { PaneTab, SideSnapshot } from "@/features/terminal/sftp/types";
+import { clipboardWriteText } from "@/lib/clipboard";
+import type { HostRow } from "@/lib/db";
+import { dialogs } from "@/lib/dialogs";
+import { api, type SftpEntry } from "@/lib/tauri";
+import {
+  askOverwrite,
+  type ConflictCtx,
+  type DestEndpoint,
+  findDestEntry,
+  prepareOverwrite,
+} from "@/lib/transferConflict";
+import { bookmarkScope } from "@/stores/pathBookmarks";
+import { enqueueDownload, enqueueUpload } from "@/stores/transfer";
+import { useUiStore } from "@/stores/ui";
 
 /** 单侧文件浏览器：目录列表、勾选与上下文操作 */
 export function PaneBrowser({
@@ -68,7 +68,7 @@ export function PaneBrowser({
 }) {
   const { t } = useTranslation();
   const { open: openMenu } = useContextMenu();
-    const termTabs = useUiStore((s) => s.tabs);
+  const termTabs = useUiStore((s) => s.tabs);
   const remote = tab.kind === "host";
   const [cwd, setCwd] = useState(remote ? "/" : "");
   const [entries, setEntries] = useState<SftpEntry[]>([]);
@@ -594,7 +594,7 @@ export function PaneBrowser({
         </div>
       )}
 
-      <div className="grid shrink-0 grid-cols-[24px_20px_minmax(100px,1.5fr)_108px_86px_60px_48px] items-center gap-2 border-b border-border bg-muted/40 px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
+      <div className="grid shrink-0 grid-cols-[24px_20px_minmax(100px,1.5fr)_108px_86px_60px_48px] items-center gap-2 border-b border-border bg-muted/40 px-2 py-1.5 text-xs font-medium text-muted-foreground">
         <span className="flex items-center justify-center">
           <Checkbox
             checked={allVisibleChecked}
@@ -611,7 +611,7 @@ export function PaneBrowser({
       </div>
       <div className="min-h-0 flex-1 overflow-auto p-1">
         {error && (
-          <div className="px-2 py-1 text-[11px] text-destructive">{error}</div>
+          <div className="px-2 py-1 text-xs text-destructive">{error}</div>
         )}
         <button
           type="button"
@@ -667,7 +667,7 @@ export function PaneBrowser({
             <span className="truncate text-muted-foreground">
               {e.modifiedAt || "--"}
             </span>
-            <span className="truncate font-mono text-[11px] text-muted-foreground">
+            <span className="truncate font-mono text-xs text-muted-foreground">
               {e.permissions || "--"}
             </span>
             <span className="truncate text-muted-foreground">
@@ -679,12 +679,12 @@ export function PaneBrowser({
           </button>
         ))}
         {loading && (
-          <div className="px-2 py-2 text-[11px] text-muted-foreground">
+          <div className="px-2 py-2 text-xs text-muted-foreground">
             {t("terminal.loading")}
           </div>
         )}
       </div>
-      <div className="flex items-center justify-between border-t border-border px-2 py-1 text-[11px] text-muted-foreground">
+      <div className="flex items-center justify-between border-t border-border px-2 py-1 text-xs text-muted-foreground">
         <span>
           {visible.length} {t("terminal.items")}
           {checkedList.length > 0

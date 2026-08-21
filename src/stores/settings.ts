@@ -5,6 +5,7 @@
  * 多数项同步 localStorage；`hydrate` 可从 DB 覆盖。模块加载时立即 applyTheme。
  */
 
+import { startTransition } from "react";
 import { create } from "zustand";
 
 /** 应用主题：亮 / 暗 / 跟随系统 */
@@ -146,7 +147,7 @@ export const TERM_FONT_FAMILIES = [
  * 设置 Zustand store；setter 多数会同步 localStorage。
  */
 export const useSettingsStore = create<SettingsState>((set) => ({
-  theme: (localStorage.getItem("xuanjian.theme") as ThemeMode) || "dark",
+  theme: (localStorage.getItem("xuanjian.theme") as ThemeMode) || "light",
   locale: localStorage.getItem("xuanjian.locale") || "zh-CN",
   defaultLocalShell: "",
   termFontSize: clamp(
@@ -170,7 +171,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     "follow",
   setTheme: (theme) => {
     applyTheme(theme);
-    set({ theme });
+    startTransition(() => set({ theme }));
   },
   setLocale: (locale) => {
     localStorage.setItem("xuanjian.locale", locale);
@@ -221,6 +222,6 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   },
 }));
 
-applyTheme((localStorage.getItem("xuanjian.theme") as ThemeMode) || "dark");
+applyTheme((localStorage.getItem("xuanjian.theme") as ThemeMode) || "light");
 
-export { TERM_FONT_MIN, TERM_FONT_MAX, EDITOR_FONT_MIN, EDITOR_FONT_MAX };
+export { EDITOR_FONT_MAX, EDITOR_FONT_MIN, TERM_FONT_MAX, TERM_FONT_MIN };

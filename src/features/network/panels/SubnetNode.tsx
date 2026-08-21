@@ -4,13 +4,8 @@
  * @description React Flow 节点：展示 CIDR、主机数与可选标签，选中态用主题色描边。
  */
 
+import { Handle, type Node, type NodeProps, Position } from "@xyflow/react";
 import { memo } from "react";
-import {
-  Handle,
-  Position,
-  type Node,
-  type NodeProps,
-} from "@xyflow/react";
 import type { SubnetFlowNodeData } from "@/lib/ipcalc";
 
 export type SubnetFlowNode = Node<SubnetFlowNodeData, "subnet">;
@@ -21,7 +16,11 @@ function SubnetNodeInner({ data }: NodeProps<SubnetFlowNode>) {
     <div
       className={`subnet-node ${data.selected ? "subnet-node--selected" : ""}`}
     >
-      <Handle type="target" position={Position.Left} className="subnet-handle" />
+      <Handle
+        type="target"
+        position={Position.Left}
+        className="subnet-handle"
+      />
       {data.label ? (
         <div className="subnet-node__label">{data.label}</div>
       ) : null}

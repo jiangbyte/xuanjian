@@ -6,10 +6,9 @@
  * 无会话时提示需先连接。
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { dialogs } from "@/lib/dialogs";
-import { useTranslation } from "react-i18next";
 import { RefreshCw, Search, Skull, XCircle } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,8 +21,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { api } from "@/lib/tauri";
+import { dialogs } from "@/lib/dialogs";
 import { killCmd, processesCmd, resolveProbeEnv } from "@/lib/probeEnv";
+import { api } from "@/lib/tauri";
 
 type Proc = {
   pid: string;
@@ -254,7 +254,10 @@ export function ProcessesPane({
             const tags = buildTags(p, t);
             const name = shortProcName(p.cmd);
             return (
-              <div key={p.pid} className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-accent">
+              <div
+                key={p.pid}
+                className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
+              >
                 <div
                   className={`mt-1.5 size-2 shrink-0 rounded-full ${
                     p.cpu >= 30
@@ -269,11 +272,14 @@ export function ProcessesPane({
                     {name}
                   </div>
                   {name !== p.cmd && (
-                    <div className="text-xs text-muted-foreground truncate" title={p.cmd}>
+                    <div
+                      className="text-xs text-muted-foreground truncate"
+                      title={p.cmd}
+                    >
                       {p.cmd}
                     </div>
                   )}
-                  <div className="text-[10px] text-muted-foreground">
+                  <div className="text-xs text-muted-foreground">
                     PID {p.pid} · CPU {p.cpu.toFixed(1)}% · MEM{" "}
                     {p.mem.toFixed(1)}%
                   </div>

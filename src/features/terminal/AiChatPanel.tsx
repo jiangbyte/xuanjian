@@ -7,9 +7,9 @@
  * 注意：本组件为占位/未接后端，勿当作生产能力使用。
  */
 
+import { Plus, Send, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Send, Plus, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";

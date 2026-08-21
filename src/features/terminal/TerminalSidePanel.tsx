@@ -6,12 +6,11 @@
  * 可打开双栏 SFTP 传输、Monaco 编辑器与权限弹窗。
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { dialogs } from "@/lib/dialogs";
-import { useTranslation } from "react-i18next";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { openPath } from "@tauri-apps/plugin-opener";
 import {
-  ArrowUpToLine,
   ArrowLeftRight,
+  ArrowUpToLine,
   ChevronRight,
   Download,
   ExternalLink,
@@ -29,65 +28,43 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { open, save } from "@tauri-apps/plugin-dialog";
-import { openPath } from "@tauri-apps/plugin-opener";
-import { api, SftpEntry } from "@/lib/tauri";
-import { enqueueDownload, enqueueUpload } from "@/stores/transfer";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
-  askOverwrite,
-  findDestEntry,
-  prepareOverwrite,
-  type ConflictCtx,
-  type DestEndpoint,
-} from "@/lib/transferConflict";
-import { clipboardWriteText } from "@/lib/clipboard";
-import { FileEditorModal, FileEditorTarget } from "@/features/terminal/FileEditorModal";
-import { SftpTransferModal } from "@/features/terminal/SftpTransferModal";
-import { PermissionsModal } from "@/features/terminal/PermissionsModal";
-import {
+  type ContextMenuItem,
   openContextMenu,
   useContextMenu,
-  type ContextMenuItem,
 } from "@/components/ContextMenu";
 import { PathBookmarkButton } from "@/components/PathBookmarkButton";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import type { FileEditorTarget } from "@/features/terminal/FileEditorModal";
+import { PermissionsModal } from "@/features/terminal/PermissionsModal";
+import { SftpTransferModal } from "@/features/terminal/SftpTransferModal";
+import { clipboardWriteText } from "@/lib/clipboard";
+import { dialogs } from "@/lib/dialogs";
+import { api, SftpEntry } from "@/lib/tauri";
+import {
+  askOverwrite,
+  type ConflictCtx,
+  type DestEndpoint,
+  findDestEntry,
+  prepareOverwrite,
+} from "@/lib/transferConflict";
 import { bookmarkScope } from "@/stores/pathBookmarks";
+import { enqueueDownload, enqueueUpload } from "@/stores/transfer";
+import { isWindowsOs } from "@/lib/platform";
+import {
+  isWindowsPath,
+  joinPath,
+  parentPath,
+} from "@/features/terminal/sftp/pathUtils";
 
-/** 是否为 Windows 盘符路径 */
-function isWindowsPath(path: string) {
-  return /^[a-zA-Z]:[\\/]/.test(path) || path.includes("\\");
-}
-
-/** 拼接子路径（远程用 /，本地按现有分隔符） */
-function joinPath(base: string, name: string, remote: boolean) {
-  if (remote) {
-    return base.endsWith("/") ? `${base}${name}` : `${base}/${name}`;
-  }
-  const sep = base.includes("/") && !base.includes("\\") ? "/" : "\\";
-  if (base.endsWith("\\") || base.endsWith("/")) return `${base}${name}`;
-  return `${base}${sep}${name}`;
-}
-
-/** 取父目录路径 */
-function parentPath(path: string, remote: boolean) {
-  if (remote) {
-    const parts = path.replace(/\/+$/, "").split("/");
-    parts.pop();
-    return parts.length ? parts.join("/") || "/" : "/";
-  }
-  if (isWindowsPath(path)) {
-    const normalized = path.replace(/\\/g, "/");
-    const parts = normalized.split("/").filter(Boolean);
-    if (parts.length <= 1) return `${parts[0] || "C:"}\\`;
-    parts.pop();
-    const drive = parts[0].endsWith(":") ? parts[0] : parts[0];
-    return parts.length === 1 ? `${drive}\\` : parts.join("\\");
-  }
-  const parts = path.replace(/\/+$/, "").split("/").filter(Boolean);
-  parts.pop();
-  return "/" + parts.join("/");
-}
+const FileEditorModal = lazy(() =>
+  import("@/features/terminal/FileEditorModal").then((m) => ({
+    default: m.FileEditorModal,
+  })),
+);
 
 /** 拆成面包屑段（名称 + 绝对路径） */
 function pathSegments(path: string, remote: boolean) {
@@ -155,7 +132,7 @@ export function TerminalSidePanel({
 }) {
   const { t } = useTranslation();
   const { open: openMenu } = useContextMenu();
-    const remote = kind === "ssh";
+  const remote = kind === "ssh";
   const [cwd, setCwd] = useState(kind === "ssh" ? "/" : "");
   const [pathInput, setPathInput] = useState("");
   const [entries, setEntries] = useState<SftpEntry[]>([]);
@@ -531,14 +508,18 @@ export function TerminalSidePanel({
           renameEntry(entry).catch(console.error);
         },
       },
-      {
-        id: "perms",
-        label: t("context.permissions"),
-        icon: <Shield size={14} />,
-        onClick: () => {
-          chmodEntry(entry);
-        },
-      },
+      ...(remote || !isWindowsOs()
+        ? [
+            {
+              id: "perms",
+              label: t("context.permissions"),
+              icon: <Shield size={14} />,
+              onClick: () => {
+                chmodEntry(entry);
+              },
+            } satisfies ContextMenuItem,
+          ]
+        : []),
       {
         id: "delete",
         label: t("context.delete"),
@@ -608,7 +589,7 @@ export function TerminalSidePanel({
           }}
         />
         {pathFocus && suggestions.length > 0 && (
-          <div className="absolute top-full right-2 left-2 z-20 mt-1 max-h-48 overflow-auto rounded-md border border-border bg-popover p-1 shadow-md">
+          <div className="absolute top-full right-2 left-2 z-20 mt-1 max-h-48 overflow-auto rounded-md border border-border bg-popover p-1 shadow-sm">
             {suggestions.map((p) => (
               <button
                 type="button"
@@ -732,7 +713,7 @@ export function TerminalSidePanel({
       )}
 
       {/* —— 表头 —— */}
-      <div className="grid shrink-0 grid-cols-[20px_minmax(100px,1.5fr)_108px_86px_60px_48px] items-center gap-2 border-b border-border bg-muted/40 px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
+      <div className="grid shrink-0 grid-cols-[20px_minmax(100px,1.5fr)_108px_86px_60px_48px] items-center gap-2 border-b border-border bg-muted/40 px-2 py-1.5 text-xs font-medium text-muted-foreground">
         <span />
         <button
           type="button"
@@ -754,7 +735,7 @@ export function TerminalSidePanel({
         onContextMenu={(e) => openContextMenu(e, openMenu, blankMenuItems())}
       >
         {error && (
-          <div className="px-3 py-2 text-[11px] text-destructive">{error}</div>
+          <div className="px-3 py-2 text-xs text-destructive">{error}</div>
         )}
         <button
           type="button"
@@ -799,7 +780,7 @@ export function TerminalSidePanel({
             <span className="truncate text-muted-foreground">
               {e.modifiedAt || "--"}
             </span>
-            <span className="truncate font-mono text-[11px] text-muted-foreground">
+            <span className="truncate font-mono text-xs text-muted-foreground">
               {e.permissions || "--"}
             </span>
             <span className="truncate text-muted-foreground">
@@ -820,11 +801,13 @@ export function TerminalSidePanel({
         />
       )}
       {editorTarget && (
-        <FileEditorModal
-          target={editorTarget}
-          onClose={() => setEditorTarget(null)}
-          onSaved={() => reload()}
-        />
+        <Suspense fallback={null}>
+          <FileEditorModal
+            target={editorTarget}
+            onClose={() => setEditorTarget(null)}
+            onSaved={() => reload()}
+          />
+        </Suspense>
       )}
       {permTarget && (
         <PermissionsModal

@@ -45,4 +45,9 @@ http-body-util = "0.1"
 which = "7"
 regex = "1"
 tauri-plugin-clipboard-manager = "2.3.2"
+
+[target.'cfg(windows)'.dependencies]
 tauri-plugin-prevent-default = { version = "5.0.2", features = ["platform-windows"] }
+
+[target.'cfg(not(windows))'.dependencies]
+tauri-plugin-prevent-default = "5.0.2"

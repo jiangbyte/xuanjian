@@ -18,8 +18,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { api, type HttpResponse, type TlsCertInfo } from "@/lib/tauri";
 import { addNetworkHistory } from "@/lib/db";
+import { api, type HttpResponse, type TlsCertInfo } from "@/lib/tauri";
 
 /** 将多行 `Key: Value` 文本解析为请求头数组 */
 function parseHeaders(raw: string): [string, string][] {

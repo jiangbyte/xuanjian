@@ -6,12 +6,12 @@
  */
 
 import { getHost, touchHostConnected } from "@/lib/db";
-import { api } from "@/lib/tauri";
-import { useUiStore, type TermTab } from "@/stores/ui";
 import {
   endSessionRecording,
   startRecordingForOpenTab,
 } from "@/lib/sessionRecorder";
+import { api } from "@/lib/tauri";
+import { type TermTab, useUiStore } from "@/stores/ui";
 
 /** 判断标签是否具备重连所需信息（SSH 需有 hostId） */
 export function canReconnect(tab: TermTab): boolean {

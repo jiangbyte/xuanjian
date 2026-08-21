@@ -6,21 +6,22 @@
  * 非激活标签隐藏但仍挂载，切换时 fit + focus。
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { dialogs } from "@/lib/dialogs";
-import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { Terminal } from "@xterm/xterm";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, onSessionClosed, onSessionOutput } from "@/lib/tauri";
-import { clipboardReadText, clipboardWriteText } from "@/lib/clipboard";
 import {
+  type ContextMenuItem,
   openContextMenu,
   useContextMenu,
-  type ContextMenuItem,
 } from "@/components/ContextMenu";
+import { clipboardReadText, clipboardWriteText } from "@/lib/clipboard";
+import { dialogs } from "@/lib/dialogs";
+import { modKeyLabel } from "@/lib/platform";
 import { canReconnect, reconnectTermTab } from "@/lib/sessionConnect";
-import type { TermTab } from "@/stores/ui";
+import { api, onSessionClosed, onSessionOutput } from "@/lib/tauri";
 import { useSettingsStore } from "@/stores/settings";
+import type { TermTab } from "@/stores/ui";
 
 /** 避免 StrictMode / 重挂载对同一次断线重复弹出确认框 */
 const promptedClosed = new Set<string>();
@@ -30,7 +31,7 @@ const promptedClosed = new Set<string>();
  */
 export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
   const { t } = useTranslation();
-    const { open: openMenu } = useContextMenu();
+  const { open: openMenu } = useContextMenu();
   const termFontSize = useSettingsStore((s) => s.termFontSize);
   const termFontFamily = useSettingsStore((s) => s.termFontFamily);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -76,7 +77,7 @@ export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
       cursorBlink: true,
       fontSize: useSettingsStore.getState().termFontSize,
       fontFamily: useSettingsStore.getState().termFontFamily,
-      scrollback: 10000,
+      scrollback: 5000,
       theme: {
         background: "#0f1115",
         foreground: "#e8eaed",
@@ -197,7 +198,9 @@ export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
     let unOut: (() => void) | undefined;
     let unClose: (() => void) | undefined;
     onSessionOutput((p) => {
-      if (p.sessionId === sessionRef.current) term.write(p.data);
+      if (p.sessionId !== sessionRef.current) return;
+      // 页面不可见时仍写入以保留缓冲，但不额外触发 fit
+      term.write(p.data);
     }).then((u) => {
       unOut = u;
     });
@@ -328,7 +331,7 @@ export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
           const items: ContextMenuItem[] = [
             {
               id: "copy",
-              label: t("context.copy"),
+              label: t("context.copy", { mod: modKeyLabel() }),
               disabled: !hasSelection,
               onClick: () => {
                 const text = termRef.current?.getSelection() || "";
@@ -337,7 +340,7 @@ export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
             },
             {
               id: "paste",
-              label: t("context.paste"),
+              label: t("context.paste", { mod: modKeyLabel() }),
               disabled: !tab.sessionId,
               onClick: async () => {
                 const sid = sessionRef.current;

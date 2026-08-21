@@ -9,7 +9,14 @@ export type DockerfileInstruction =
   | { id: string; kind: "ARG"; name: string; defaultValue?: string }
   | { id: string; kind: "ENV"; pairs: { key: string; value: string }[] }
   | { id: string; kind: "WORKDIR"; path: string }
-  | { id: string; kind: "COPY"; src: string; dest: string; from?: string; chown?: string }
+  | {
+      id: string;
+      kind: "COPY";
+      src: string;
+      dest: string;
+      from?: string;
+      chown?: string;
+    }
   | { id: string; kind: "ADD"; src: string; dest: string }
   | { id: string; kind: "RUN"; command: string }
   | { id: string; kind: "EXPOSE"; ports: string[] }
@@ -144,7 +151,8 @@ export function parseDockerfile(text: string): DockerfileInstruction[] {
           const parts = splitShellWords(rest);
           for (const p of parts) {
             const i = p.indexOf("=");
-            if (i >= 0) pairs.push({ key: p.slice(0, i), value: p.slice(i + 1) });
+            if (i >= 0)
+              pairs.push({ key: p.slice(0, i), value: p.slice(i + 1) });
             else pairs.push({ key: p, value: "" });
           }
         } else {
@@ -166,7 +174,7 @@ export function parseDockerfile(text: string): DockerfileInstruction[] {
         const fromM = rest.match(/--from=(\S+)\s+(.*)/);
         const chownM = (fromM ? fromM[2] : rest).match(/--chown=(\S+)\s+(.*)/);
         let body = fromM ? fromM[2] : rest;
-        let from = fromM?.[1];
+        const from = fromM?.[1];
         let chown: string | undefined;
         if (chownM) {
           chown = chownM[1];
@@ -245,7 +253,9 @@ export function parseDockerfile(text: string): DockerfileInstruction[] {
 }
 
 /** 指令列表 → Dockerfile 源码 */
-export function stringifyDockerfile(instructions: DockerfileInstruction[]): string {
+export function stringifyDockerfile(
+  instructions: DockerfileInstruction[],
+): string {
   const lines: string[] = [];
   for (const ins of instructions) {
     switch (ins.kind) {

@@ -1,26 +1,33 @@
 /**
  * @file 主机卡片
  * @author Charlie
- * @description 单个主机的展示卡片，含连接 / 编辑 / 删除与右键菜单。
+ * @description 单个主机的展示卡片，含多选、连接 / 编辑 / 删除与右键菜单。
  */
 
-import { useTranslation } from "react-i18next";
 import { Server } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { openContextMenu, useContextMenu } from "@/components/ContextMenu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { deleteHost, HostRow } from "@/lib/db";
-import { openContextMenu, useContextMenu } from "@/components/ContextMenu";
 import { dialogs } from "@/lib/dialogs";
+import { selectionCard, selectionCheckboxClass } from "@/lib/selection";
+import { cn } from "@/lib/utils";
 
 /** 单个主机卡片 */
 export function HostCard({
   host,
+  selected,
+  onSelectedChange,
   onConnect,
   onEdit,
   onReload,
 }: {
   host: HostRow;
+  selected?: boolean;
+  onSelectedChange?: (selected: boolean) => void;
   onConnect: (host: HostRow) => void;
   onEdit: (host: HostRow) => void;
   onReload: () => Promise<void>;
@@ -30,7 +37,10 @@ export function HostCard({
 
   return (
     <Card
-      className="relative overflow-hidden p-4"
+      className={cn(
+        "relative overflow-hidden p-4 transition-colors",
+        selectionCard(!!selected),
+      )}
       onContextMenu={(e) =>
         openContextMenu(e, openMenu, [
           {
@@ -73,16 +83,24 @@ export function HostCard({
         />
       ) : null}
       <div className="flex items-start gap-3">
+        {onSelectedChange ? (
+          <Checkbox
+            className={cn("mt-1", selected && selectionCheckboxClass)}
+            checked={!!selected}
+            onCheckedChange={(v) => onSelectedChange(v === true)}
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : null}
         <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
           <Server size={18} />
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold">{host.name || host.host}</p>
-          <p className="truncate text-xs text-muted-foreground">
+          <p className="truncate text-sm text-muted-foreground">
             {host.username}@{host.host}:{host.port}
           </p>
           {host.remark ? (
-            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+            <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
               {host.remark}
             </p>
           ) : null}

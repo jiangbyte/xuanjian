@@ -23,7 +23,10 @@ export type PortMapping = {
 /** depends_on 条目 */
 export type DependsOnEntry = {
   service: string;
-  condition?: "service_started" | "service_healthy" | "service_completed_successfully";
+  condition?:
+    | "service_started"
+    | "service_healthy"
+    | "service_completed_successfully";
 };
 
 /** 服务附加网络 */

@@ -191,7 +191,12 @@ export function PermissionsModal({
         </div>
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            disabled={saving}
+          >
             {t("hosts.cancel")}
           </Button>
           <Button

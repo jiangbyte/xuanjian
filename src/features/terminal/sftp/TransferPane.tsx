@@ -7,11 +7,15 @@
 import { Computer, Plus, Server, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { PaneBrowser } from "@/features/terminal/sftp/PaneBrowser";
+import type {
+  PaneTab,
+  Side,
+  SideSnapshot,
+} from "@/features/terminal/sftp/types";
 import type { HostRow } from "@/lib/db";
 import type { SftpEntry } from "@/lib/tauri";
-import type { PaneTab, Side, SideSnapshot } from "@/features/terminal/sftp/types";
-import { PaneBrowser } from "@/features/terminal/sftp/PaneBrowser";
+import { cn } from "@/lib/utils";
 
 /** 单侧面板：标签栏 + PaneBrowser */
 export function TransferPane({

@@ -8,11 +8,11 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { api, onNetworkToolOutput } from "@/lib/tauri";
 import { addNetworkHistory } from "@/lib/db";
+import { api, onNetworkToolOutput } from "@/lib/tauri";
 import { PingViz } from "./PingViz";
 import { RawLog } from "./RawLog";
-import { pushPingSample, type PingSample, type PingSummary } from "./types";
+import { type PingSample, type PingSummary, pushPingSample } from "./types";
 
 /** Ping：原文 + 延迟可视化，状态与其它模式隔离 */
 export function PingPage() {
@@ -147,7 +147,12 @@ export function PingPage() {
             {t("network.stop")}
           </Button>
         )}
-        <Button className="h-8" variant="outline" onClick={clear} disabled={busy}>
+        <Button
+          className="h-8"
+          variant="outline"
+          onClick={clear}
+          disabled={busy}
+        >
           {t("network.clear")}
         </Button>
       </div>

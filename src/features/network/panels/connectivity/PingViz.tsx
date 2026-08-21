@@ -20,7 +20,7 @@ import { derivePingStats, type PingSample, type PingSummary } from "./types";
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 rounded-md bg-muted/40 px-2.5 py-1.5">
-      <div className="text-[10px] text-muted-foreground">{label}</div>
+      <div className="text-xs text-muted-foreground">{label}</div>
       <div className="mt-0.5 truncate font-mono text-xs" title={value}>
         {value}
       </div>
@@ -82,8 +82,15 @@ export function PingViz({
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+            <LineChart
+              data={chartData}
+              margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+            >
+              <CartesianGrid
+                stroke="var(--border)"
+                strokeDasharray="3 3"
+                vertical={false}
+              />
               <XAxis
                 dataKey="seq"
                 tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
@@ -107,8 +114,10 @@ export function PingViz({
                 }}
                 labelFormatter={(seq) => `#${seq}`}
                 formatter={(value, _name, item) => {
-                  const lost = (item?.payload as { lost?: boolean } | undefined)?.lost;
-                  if (lost || value == null) return [t("network.timeout"), t("network.rtt")];
+                  const lost = (item?.payload as { lost?: boolean } | undefined)
+                    ?.lost;
+                  if (lost || value == null)
+                    return [t("network.timeout"), t("network.rtt")];
                   return [`${Number(value).toFixed(1)} ms`, t("network.rtt")];
                 }}
               />

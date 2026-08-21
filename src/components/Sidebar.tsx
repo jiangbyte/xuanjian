@@ -1,11 +1,9 @@
 /**
- * @file 主导航侧栏
+ * @file 主导航侧栏 — GitHub Primer
  * @author Charlie
  * @description 品牌标识与主机 / 网络 / Docker / 脚本 / 笔记 / 日志等路由入口。
  */
 
-import { NavLink as RouterNavLink } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import {
   Container,
   Network,
@@ -14,11 +12,13 @@ import {
   Server,
   Zap,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { NavLink as RouterNavLink } from "react-router-dom";
 
 const navLinkClass =
-  "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground aria-[current=page]:bg-sidebar-accent aria-[current=page]:text-sidebar-accent-foreground";
+  "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[15px] font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground aria-[current=page]:bg-sidebar-accent aria-[current=page]:text-sidebar-accent-foreground";
 
-/** 左侧导航：react-router NavLink + shadcn sidebar tokens */
+/** 左侧导航 */
 export function Sidebar() {
   const { t } = useTranslation();
 
@@ -32,10 +32,8 @@ export function Sidebar() {
   ] as const;
 
   return (
-    <aside
-      className="flex w-[208px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar"
-    >
-      <div className="flex items-center gap-2 px-4 py-4">
+    <aside className="flex w-[240px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
+      <div className="flex items-center gap-2.5 border-b border-sidebar-border px-4 py-3.5">
         <img
           src="/app-icon.png?v=20260821d"
           alt=""
@@ -43,9 +41,11 @@ export function Sidebar() {
           width={28}
           height={28}
         />
-        <span className="text-sm font-semibold tracking-wide">{t("brand")}</span>
+        <span className="text-base font-semibold tracking-tight">
+          {t("brand")}
+        </span>
       </div>
-      <nav className="flex flex-1 flex-col gap-1 px-2">
+      <nav className="flex flex-1 flex-col gap-0.5 p-2.5">
         {items.map((item) => {
           const Icon = item.icon;
           return (
@@ -55,7 +55,7 @@ export function Sidebar() {
               end={"end" in item ? item.end : undefined}
               className={navLinkClass}
             >
-              <Icon size={16} />
+              <Icon size={18} className="opacity-70" />
               {item.label}
             </RouterNavLink>
           );

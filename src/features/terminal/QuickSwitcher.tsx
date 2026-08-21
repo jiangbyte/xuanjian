@@ -6,23 +6,19 @@
  * 连接成功后会启动会话录制并导航到 /terminal。
  */
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { dialogs } from "@/lib/dialogs";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { api, LocalShellInfo } from "@/lib/tauri";
 import { HostRow, listHosts, touchHostConnected } from "@/lib/db";
-import { useUiStore } from "@/stores/ui";
-import { useSettingsStore } from "@/stores/settings";
+import { dialogs } from "@/lib/dialogs";
 import { startRecordingForOpenTab } from "@/lib/sessionRecorder";
+import { api, LocalShellInfo } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
+import { useSettingsStore } from "@/stores/settings";
+import { useUiStore } from "@/stores/ui";
 
 const rowClass =
   "flex w-full items-center gap-2 rounded-md p-2 text-left hover:bg-accent";
@@ -151,7 +147,10 @@ export function QuickSwitcher() {
   };
 
   return (
-    <Dialog open={open} onOpenChange={(next) => !next && setSwitcherOpen(false)}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => !next && setSwitcherOpen(false)}
+    >
       <DialogContent
         showCloseButton={false}
         className="gap-0 overflow-hidden p-0 sm:max-w-lg"

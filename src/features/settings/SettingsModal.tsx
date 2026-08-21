@@ -5,9 +5,21 @@
  * 变更同步到 zustand store 与本地 settings 表。
  */
 
-import { useEffect, useState, type ReactNode } from "react";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import {
+  AppWindow,
+  Archive,
+  Code2,
+  FolderOpen,
+  HardDrive,
+  Info,
+  Terminal,
+} from "lucide-react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AppWindow, Code2, Terminal } from "lucide-react";
+import { toast } from "sonner";
+import { FloatingWindow } from "@/components/FloatingWindow";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,25 +30,46 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import {
+  DEFAULT_EXPORT_ALL,
+  ShareExportDialog,
+} from "@/features/share/ShareExportDialog";
+import i18n from "@/i18n";
+import {
+  APP_AUTHOR,
+  APP_GITHUB_ISSUES_URL,
+  APP_GITHUB_URL,
+  APP_ID,
+  APP_LICENSE,
+  APP_NAME,
+  APP_NAME_EN,
+  APP_RELEASES_URL,
+  APP_VERSION,
+} from "@/lib/appMeta";
+import { getSetting, setSetting } from "@/lib/db";
+import { formatImportToast, importFromFile } from "@/lib/share";
+import { api, type DataDirInfo, LocalShellInfo } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import {
-  useSettingsStore,
-  ThemeMode,
-  EditorThemeMode,
-  EditorPreviewMode,
-  TERM_FONT_FAMILIES,
-  TERM_FONT_MIN,
-  TERM_FONT_MAX,
-  EDITOR_FONT_MIN,
   EDITOR_FONT_MAX,
+  EDITOR_FONT_MIN,
+  EditorPreviewMode,
+  EditorThemeMode,
+  TERM_FONT_FAMILIES,
+  TERM_FONT_MAX,
+  TERM_FONT_MIN,
+  ThemeMode,
+  useSettingsStore,
 } from "@/stores/settings";
-import { getSetting, setSetting } from "@/lib/db";
-import { api, LocalShellInfo } from "@/lib/tauri";
 import { useUiStore } from "@/stores/ui";
-import { FloatingWindow } from "@/components/FloatingWindow";
-import i18n from "@/i18n";
 
-type SectionId = "appearance" | "terminal" | "editor";
+type SectionId =
+  | "appearance"
+  | "terminal"
+  | "editor"
+  | "data"
+  | "backup"
+  | "about";
 
 const SYSTEM_SHELL = "none";
 
@@ -52,9 +85,9 @@ function SettingRow({
 }) {
   return (
     <div className="mb-5">
-      <div className="mb-1 text-sm font-medium">{label}</div>
+      <div className="mb-1.5 text-sm font-medium text-foreground">{label}</div>
       {hint ? (
-        <p className="mb-2 text-[11px] text-muted-foreground">{hint}</p>
+        <p className="mb-2 text-xs text-muted-foreground">{hint}</p>
       ) : null}
       {children}
     </div>
@@ -68,6 +101,10 @@ export function SettingsModal() {
   const { t } = useTranslation();
   const [section, setSection] = useState<SectionId>("appearance");
   const [shells, setShells] = useState<LocalShellInfo[]>([]);
+  const [dataInfo, setDataInfo] = useState<DataDirInfo | null>(null);
+  const [dataBusy, setDataBusy] = useState(false);
+  const [dataMsg, setDataMsg] = useState<string | null>(null);
+  const [backupExportOpen, setBackupExportOpen] = useState(false);
 
   const theme = useSettingsStore((s) => s.theme);
   const locale = useSettingsStore((s) => s.locale);
@@ -92,6 +129,7 @@ export function SettingsModal() {
   useEffect(() => {
     if (!open) return;
     api.listLocalShells().then(setShells).catch(console.error);
+    api.getDataDirInfo().then(setDataInfo).catch(console.error);
     (async () => {
       const themeVal = (await getSetting("theme")) as ThemeMode | null;
       const localeVal = await getSetting("locale");
@@ -107,7 +145,7 @@ export function SettingsModal() {
         "markdown_color_mode",
       )) as EditorPreviewMode | null;
       useSettingsStore.getState().hydrate({
-        theme: themeVal || "dark",
+        theme: themeVal || "light",
         locale: localeVal || "zh-CN",
         defaultLocalShell: shellVal || "",
         termFontSize: termSize ? Number(termSize) : undefined,
@@ -140,7 +178,44 @@ export function SettingsModal() {
       label: t("settings.editor"),
       icon: <Code2 size={15} />,
     },
+    {
+      id: "data",
+      label: t("settings.data"),
+      icon: <HardDrive size={15} />,
+    },
+    {
+      id: "backup",
+      label: t("settings.backup"),
+      icon: <Archive size={15} />,
+    },
+    {
+      id: "about",
+      label: t("settings.about"),
+      icon: <Info size={15} />,
+    },
   ];
+
+  const changeDataDir = async (path: string | null) => {
+    setDataBusy(true);
+    setDataMsg(null);
+    try {
+      const copy = window.confirm(t("settings.dataCopyConfirm"));
+      const info = await api.setDataDir(path, copy);
+      setDataInfo(info);
+      setDataMsg(t("settings.dataRestartHint"));
+    } catch (e) {
+      setDataMsg(String(e));
+    } finally {
+      setDataBusy(false);
+    }
+  };
+
+  const pickDataDir = async () => {
+    const dir = await openDialog({ directory: true, multiple: false });
+    if (typeof dir === "string" && dir) {
+      await changeDataDir(dir);
+    }
+  };
 
   const applyFontSize = async (
     n: string | number,
@@ -154,271 +229,440 @@ export function SettingsModal() {
   };
 
   return (
-    <FloatingWindow
-      title={t("settings.title")}
-      onClose={() => setSettingsOpen(false)}
-      initialWidth={720}
-      initialHeight={560}
-      bodyClassName="p-0"
-    >
-      <div className="flex h-full min-h-0">
-        <aside className="flex w-44 shrink-0 flex-col border-r border-border bg-background">
-          <div className="px-3 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            {t("settings.title")}
-          </div>
-          <nav className="flex flex-1 flex-col gap-0.5 px-2 pb-3">
-            {nav.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
-                  section === item.id
-                    ? "bg-accent text-accent-foreground"
-                    : "hover:bg-muted",
-                )}
-                onClick={() => setSection(item.id)}
-              >
-                <span className="flex items-center gap-2 truncate">
-                  {item.icon}
-                  {item.label}
-                </span>
-              </button>
-            ))}
-          </nav>
-        </aside>
+    <>
+      <FloatingWindow
+        title={t("settings.title")}
+        onClose={() => setSettingsOpen(false)}
+        initialWidth={720}
+        initialHeight={560}
+        bodyClassName="p-0"
+      >
+        <div className="flex h-full min-h-0">
+          <aside className="flex w-52 shrink-0 flex-col border-r border-border bg-muted/30">
+            <div className="px-3 py-3 text-sm font-semibold text-muted-foreground">
+              {t("settings.title")}
+            </div>
+            <nav className="flex flex-1 flex-col gap-0.5 px-2 pb-3">
+              {nav.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
+                    section === item.id
+                      ? "bg-accent font-medium text-accent-foreground"
+                      : "text-foreground hover:bg-muted",
+                  )}
+                  onClick={() => setSection(item.id)}
+                >
+                  <span className="flex items-center gap-2 truncate">
+                    {item.icon}
+                    {item.label}
+                  </span>
+                </button>
+              ))}
+            </nav>
+          </aside>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">
-          {section === "appearance" && (
-            <section>
-              <h3 className="mb-4 text-base font-semibold">
-                {t("settings.appearance")}
-              </h3>
-              <SettingRow label={t("settings.theme")}>
+          <div className="min-h-0 flex-1 overflow-y-auto p-5">
+            {section === "appearance" && (
+              <section>
+                <h3 className="mb-4 text-base font-semibold tracking-tight">
+                  {t("settings.appearance")}
+                </h3>
+                <SettingRow label={t("settings.theme")}>
+                  <div className="flex flex-wrap gap-2">
+                    {(
+                      [
+                        ["light", t("settings.themeLight")],
+                        ["system", t("settings.themeSystem")],
+                        ["dark", t("settings.themeDark")],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <Button
+                        key={value}
+                        variant="outline"
+                        className={
+                          theme === value
+                            ? "border-border bg-accent font-medium text-accent-foreground hover:bg-accent"
+                            : undefined
+                        }
+                        onClick={async () => {
+                          setTheme(value);
+                          await setSetting("theme", value);
+                        }}
+                      >
+                        {label}
+                      </Button>
+                    ))}
+                  </div>
+                </SettingRow>
+                <SettingRow label={t("settings.language")}>
+                  <Select
+                    value={locale}
+                    onValueChange={async (value) => {
+                      setLocale(value);
+                      await i18n.changeLanguage(value);
+                      await setSetting("locale", value);
+                    }}
+                  >
+                    <SelectTrigger className="w-full max-w-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="zh-CN">简体中文</SelectItem>
+                      <SelectItem value="en">English</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </SettingRow>
+                <SettingRow
+                  label={t("settings.defaultShell")}
+                  hint={t("settings.defaultShellHint")}
+                >
+                  <Select
+                    value={defaultLocalShell || SYSTEM_SHELL}
+                    onValueChange={async (value) => {
+                      const next = value === SYSTEM_SHELL ? "" : value;
+                      setDefaultLocalShell(next);
+                      await setSetting("default_local_shell", next);
+                    }}
+                  >
+                    <SelectTrigger className="w-full max-w-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={SYSTEM_SHELL}>
+                        {t("settings.system")}
+                      </SelectItem>
+                      {shells.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </SettingRow>
+              </section>
+            )}
+
+            {section === "terminal" && (
+              <section>
+                <h3 className="mb-4 text-base font-semibold">
+                  {t("settings.terminal")}
+                </h3>
+                <SettingRow
+                  label={t("settings.termFont")}
+                  hint={t("settings.termFontHint")}
+                >
+                  <Select
+                    value={termFontFamily}
+                    onValueChange={async (value) => {
+                      setTermFontFamily(value);
+                      await setSetting("term_font_family", value);
+                    }}
+                  >
+                    <SelectTrigger className="w-full max-w-md">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TERM_FONT_FAMILIES.map((f) => (
+                        <SelectItem key={f.id} value={f.id}>
+                          {f.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </SettingRow>
+                <SettingRow label={t("settings.termFontSize")}>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      className="w-[140px]"
+                      value={termFontSize}
+                      min={TERM_FONT_MIN}
+                      max={TERM_FONT_MAX}
+                      onChange={(e) =>
+                        applyFontSize(
+                          e.currentTarget.value,
+                          setTermFontSize,
+                          "term_font_size",
+                        )
+                      }
+                    />
+                    <span className="text-sm text-muted-foreground">px</span>
+                  </div>
+                </SettingRow>
+                <SettingRow
+                  label={t("settings.termWordWrap")}
+                  hint={t("settings.termWordWrapHint")}
+                >
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={editorWordWrap}
+                      aria-label={t("settings.termWordWrap")}
+                      onCheckedChange={async (v) => {
+                        setEditorWordWrap(v);
+                        await setSetting("editor_word_wrap", v ? "1" : "0");
+                      }}
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      {editorWordWrap
+                        ? t("settings.wordWrapOn")
+                        : t("settings.wordWrapOff")}
+                    </span>
+                  </div>
+                </SettingRow>
+              </section>
+            )}
+
+            {section === "editor" && (
+              <section>
+                <h3 className="mb-4 text-base font-semibold">
+                  {t("settings.editor")}
+                </h3>
+                <SettingRow
+                  label={t("settings.editorTheme")}
+                  hint={t("settings.editorThemeHint")}
+                >
+                  <Select
+                    value={editorTheme}
+                    onValueChange={async (value) => {
+                      setEditorTheme(value as EditorThemeMode);
+                      await setSetting("editor_theme", value);
+                    }}
+                  >
+                    <SelectTrigger className="w-full max-w-md">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="follow">
+                        {t("settings.editorThemeFollow")}
+                      </SelectItem>
+                      <SelectItem value="vs-dark">
+                        {t("settings.editorThemeDark")}
+                      </SelectItem>
+                      <SelectItem value="light">
+                        {t("settings.editorThemeLight")}
+                      </SelectItem>
+                      <SelectItem value="hc-black">
+                        {t("settings.editorThemeHighContrast")}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </SettingRow>
+                <SettingRow label={t("settings.editorFontSize")}>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      className="w-[140px]"
+                      value={editorFontSize}
+                      min={EDITOR_FONT_MIN}
+                      max={EDITOR_FONT_MAX}
+                      onChange={(e) =>
+                        applyFontSize(
+                          e.currentTarget.value,
+                          setEditorFontSize,
+                          "editor_font_size",
+                        )
+                      }
+                    />
+                    <span className="text-sm text-muted-foreground">px</span>
+                  </div>
+                </SettingRow>
+                <SettingRow
+                  label={t("settings.markdownStyle")}
+                  hint={t("settings.markdownStyleHint")}
+                >
+                  <Select
+                    value={markdownColorMode}
+                    onValueChange={async (value) => {
+                      setMarkdownColorMode(value as EditorPreviewMode);
+                      await setSetting("markdown_color_mode", value);
+                    }}
+                  >
+                    <SelectTrigger className="w-full max-w-md">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="follow">
+                        {t("settings.editorThemeFollow")}
+                      </SelectItem>
+                      <SelectItem value="dark">
+                        {t("settings.themeDark")}
+                      </SelectItem>
+                      <SelectItem value="light">
+                        {t("settings.themeLight")}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </SettingRow>
+              </section>
+            )}
+
+            {section === "data" && (
+              <section>
+                <h3 className="mb-4 text-base font-semibold">
+                  {t("settings.data")}
+                </h3>
+                <SettingRow
+                  label={t("settings.dataDir")}
+                  hint={t("settings.dataDirHint")}
+                >
+                  <div className="rounded-md border border-border bg-muted/40 px-3 py-2 font-mono text-xs break-all">
+                    {dataInfo?.dataDir ?? "…"}
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {dataInfo?.isCustom
+                      ? t("settings.dataDirCustom")
+                      : t("settings.dataDirDefault")}
+                  </p>
+                </SettingRow>
+                <SettingRow label={t("settings.dbPath")}>
+                  <div className="rounded-md border border-border bg-muted/40 px-3 py-2 font-mono text-xs break-all">
+                    {dataInfo?.dbPath ?? "…"}
+                  </div>
+                </SettingRow>
                 <div className="flex flex-wrap gap-2">
-                  {(
-                    [
-                      ["light", t("settings.themeLight")],
-                      ["system", t("settings.themeSystem")],
-                      ["dark", t("settings.themeDark")],
-                    ] as const
-                  ).map(([value, label]) => (
+                  <Button
+                    type="button"
+                    disabled={dataBusy}
+                    onClick={() => pickDataDir().catch(console.error)}
+                  >
+                    <FolderOpen size={14} className="mr-1.5" />
+                    {t("settings.dataChange")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={dataBusy || !dataInfo?.isCustom}
+                    onClick={() => changeDataDir(null).catch(console.error)}
+                  >
+                    {t("settings.dataReset")}
+                  </Button>
+                </div>
+                {dataMsg ? (
+                  <p className="mt-3 text-sm text-amber-700 dark:text-amber-400">
+                    {dataMsg}
+                  </p>
+                ) : null}
+              </section>
+            )}
+
+            {section === "backup" && (
+              <section>
+                <h3 className="mb-4 text-base font-semibold">
+                  {t("settings.backup")}
+                </h3>
+                <SettingRow
+                  label={t("settings.backup")}
+                  hint={t("settings.backupHint")}
+                >
+                  <div className="flex flex-wrap gap-2">
                     <Button
-                      key={value}
-                      variant={theme === value ? "default" : "outline"}
-                      onClick={async () => {
-                        setTheme(value);
-                        await setSetting("theme", value);
+                      type="button"
+                      onClick={() => setBackupExportOpen(true)}
+                    >
+                      {t("settings.backupExport")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        importFromFile()
+                          .then((r) => {
+                            if (!r) return;
+                            toast.success(
+                              `${t("share.importDone")} (${formatImportToast(r)})`,
+                            );
+                            if (r.errors.length) console.warn(r.errors);
+                          })
+                          .catch((e) => toast.error(String(e)));
                       }}
                     >
-                      {label}
+                      {t("settings.backupImport")}
                     </Button>
-                  ))}
-                </div>
-              </SettingRow>
-              <SettingRow label={t("settings.language")}>
-                <Select
-                  value={locale}
-                  onValueChange={async (value) => {
-                    setLocale(value);
-                    await i18n.changeLanguage(value);
-                    await setSetting("locale", value);
-                  }}
-                >
-                  <SelectTrigger className="w-full max-w-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="zh-CN">简体中文</SelectItem>
-                    <SelectItem value="en">English</SelectItem>
-                  </SelectContent>
-                </Select>
-              </SettingRow>
-              <SettingRow
-                label={t("settings.defaultShell")}
-                hint={t("settings.defaultShellHint")}
-              >
-                <Select
-                  value={defaultLocalShell || SYSTEM_SHELL}
-                  onValueChange={async (value) => {
-                    const next = value === SYSTEM_SHELL ? "" : value;
-                    setDefaultLocalShell(next);
-                    await setSetting("default_local_shell", next);
-                  }}
-                >
-                  <SelectTrigger className="w-full max-w-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={SYSTEM_SHELL}>
-                      {t("settings.system")}
-                    </SelectItem>
-                    {shells.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </SettingRow>
-            </section>
-          )}
+                  </div>
+                </SettingRow>
+              </section>
+            )}
 
-          {section === "terminal" && (
-            <section>
-              <h3 className="mb-4 text-base font-semibold">
-                {t("settings.terminal")}
-              </h3>
-              <SettingRow
-                label={t("settings.termFont")}
-                hint={t("settings.termFontHint")}
-              >
-                <Select
-                  value={termFontFamily}
-                  onValueChange={async (value) => {
-                    setTermFontFamily(value);
-                    await setSetting("term_font_family", value);
-                  }}
-                >
-                  <SelectTrigger className="w-full max-w-md">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TERM_FONT_FAMILIES.map((f) => (
-                      <SelectItem key={f.id} value={f.id}>
-                        {f.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </SettingRow>
-              <SettingRow label={t("settings.termFontSize")}>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="number"
-                    className="w-[140px]"
-                    value={termFontSize}
-                    min={TERM_FONT_MIN}
-                    max={TERM_FONT_MAX}
-                    onChange={(e) =>
-                      applyFontSize(
-                        e.currentTarget.value,
-                        setTermFontSize,
-                        "term_font_size",
-                      )
-                    }
-                  />
-                  <span className="text-sm text-muted-foreground">px</span>
+            {section === "about" && (
+              <section>
+                <h3 className="mb-4 text-base font-semibold">
+                  {t("settings.about")}
+                </h3>
+                <div className="mb-5">
+                  <div className="text-lg font-semibold tracking-tight">
+                    {APP_NAME}
+                    <span className="ml-2 text-sm font-normal text-muted-foreground">
+                      {APP_NAME_EN}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {t("settings.aboutDesc")}
+                  </p>
                 </div>
-              </SettingRow>
-              <SettingRow
-                label={t("settings.termWordWrap")}
-                hint={t("settings.termWordWrapHint")}
-              >
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={editorWordWrap}
-                    aria-label={t("settings.termWordWrap")}
-                    onCheckedChange={async (v) => {
-                      setEditorWordWrap(v);
-                      await setSetting("editor_word_wrap", v ? "1" : "0");
-                    }}
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    {editorWordWrap
-                      ? t("settings.wordWrapOn")
-                      : t("settings.wordWrapOff")}
-                  </span>
-                </div>
-              </SettingRow>
-            </section>
-          )}
-
-          {section === "editor" && (
-            <section>
-              <h3 className="mb-4 text-base font-semibold">
-                {t("settings.editor")}
-              </h3>
-              <SettingRow
-                label={t("settings.editorTheme")}
-                hint={t("settings.editorThemeHint")}
-              >
-                <Select
-                  value={editorTheme}
-                  onValueChange={async (value) => {
-                    setEditorTheme(value as EditorThemeMode);
-                    await setSetting("editor_theme", value);
-                  }}
+                <SettingRow label={t("settings.aboutVersion")}>
+                  <div className="font-mono text-sm">v{APP_VERSION}</div>
+                </SettingRow>
+                <SettingRow label={t("settings.aboutAuthor")}>
+                  <div className="text-sm">{APP_AUTHOR}</div>
+                </SettingRow>
+                <SettingRow label={t("settings.aboutLicense")}>
+                  <div className="text-sm">{APP_LICENSE}</div>
+                </SettingRow>
+                <SettingRow label={t("settings.aboutAppId")}>
+                  <div className="font-mono text-xs break-all text-muted-foreground">
+                    {APP_ID}
+                  </div>
+                </SettingRow>
+                <SettingRow
+                  label={t("settings.aboutRepo")}
+                  hint={t("settings.aboutRepoHint")}
                 >
-                  <SelectTrigger className="w-full max-w-md">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="follow">
-                      {t("settings.editorThemeFollow")}
-                    </SelectItem>
-                    <SelectItem value="vs-dark">
-                      {t("settings.editorThemeDark")}
-                    </SelectItem>
-                    <SelectItem value="light">
-                      {t("settings.editorThemeLight")}
-                    </SelectItem>
-                    <SelectItem value="hc-black">
-                      {t("settings.editorThemeHighContrast")}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </SettingRow>
-              <SettingRow label={t("settings.editorFontSize")}>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="number"
-                    className="w-[140px]"
-                    value={editorFontSize}
-                    min={EDITOR_FONT_MIN}
-                    max={EDITOR_FONT_MAX}
-                    onChange={(e) =>
-                      applyFontSize(
-                        e.currentTarget.value,
-                        setEditorFontSize,
-                        "editor_font_size",
-                      )
-                    }
-                  />
-                  <span className="text-sm text-muted-foreground">px</span>
-                </div>
-              </SettingRow>
-              <SettingRow
-                label={t("settings.markdownStyle")}
-                hint={t("settings.markdownStyleHint")}
-              >
-                <Select
-                  value={markdownColorMode}
-                  onValueChange={async (value) => {
-                    setMarkdownColorMode(value as EditorPreviewMode);
-                    await setSetting("markdown_color_mode", value);
-                  }}
-                >
-                  <SelectTrigger className="w-full max-w-md">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="follow">
-                      {t("settings.editorThemeFollow")}
-                    </SelectItem>
-                    <SelectItem value="dark">
-                      {t("settings.themeDark")}
-                    </SelectItem>
-                    <SelectItem value="light">
-                      {t("settings.themeLight")}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </SettingRow>
-            </section>
-          )}
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        openUrl(APP_GITHUB_URL).catch(console.error)
+                      }
+                    >
+                      GitHub
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        openUrl(APP_RELEASES_URL).catch(console.error)
+                      }
+                    >
+                      {t("settings.aboutReleases")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        openUrl(APP_GITHUB_ISSUES_URL).catch(console.error)
+                      }
+                    >
+                      {t("settings.aboutIssues")}
+                    </Button>
+                  </div>
+                  <p className="mt-2 font-mono text-xs break-all text-muted-foreground">
+                    {APP_GITHUB_URL}
+                  </p>
+                </SettingRow>
+              </section>
+            )}
+          </div>
         </div>
-      </div>
-    </FloatingWindow>
+      </FloatingWindow>
+      <ShareExportDialog
+        open={backupExportOpen}
+        onOpenChange={setBackupExportOpen}
+        defaults={DEFAULT_EXPORT_ALL}
+      />
+    </>
   );
 }

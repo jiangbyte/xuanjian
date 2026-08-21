@@ -6,18 +6,18 @@
  * 轨按钮位于最右侧，内容区占满剩余宽度。
  */
 
+import { NotebookPen, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { NotebookPen, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
 import { AiChatPanel } from "@/features/terminal/AiChatPanel";
 import { NotesPane } from "@/features/terminal/panes/NotesPane";
+import { cn } from "@/lib/utils";
 
 /** 右侧边栏标签：AI（占位）或笔记 */
 export type RightTabId = "ai" | "notes";

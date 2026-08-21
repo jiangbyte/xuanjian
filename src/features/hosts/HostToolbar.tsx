@@ -4,8 +4,8 @@
  * @description 搜索框、标签 / 排序筛选，以及 SSH 目标快捷操作。
  */
 
+import { Plus, Search, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   InputGroup,
@@ -40,6 +40,7 @@ export function HostToolbar({
   onSearchEnter,
   onSearchEscape,
   onNewHost,
+  onImport,
   onConnectMatched,
   onCreateFromTarget,
 }: {
@@ -57,6 +58,7 @@ export function HostToolbar({
   onSearchEnter: () => void;
   onSearchEscape: () => void;
   onNewHost: () => void;
+  onImport?: () => void;
   onConnectMatched: (host: HostRow) => void;
   onCreateFromTarget: (target: SshTarget) => void;
 }) {
@@ -99,7 +101,10 @@ export function HostToolbar({
             ))}
           </SelectContent>
         </Select>
-        <Select value={sortBy} onValueChange={(v) => onSortChange(v as typeof sortBy)}>
+        <Select
+          value={sortBy}
+          onValueChange={(v) => onSortChange(v as typeof sortBy)}
+        >
           <SelectTrigger className="w-[140px]" aria-label={t("hosts.sortName")}>
             <SelectValue />
           </SelectTrigger>
@@ -109,6 +114,10 @@ export function HostToolbar({
             <SelectItem value="status">{t("hosts.sortStatus")}</SelectItem>
           </SelectContent>
         </Select>
+        <Button variant="outline" onClick={onImport} disabled={!onImport}>
+          <Upload size={14} />
+          {t("share.import")}
+        </Button>
         <Button onClick={onNewHost}>
           <Plus size={14} />
           {t("hosts.newHost")}

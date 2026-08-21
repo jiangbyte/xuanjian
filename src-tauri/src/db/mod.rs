@@ -232,5 +232,36 @@ CREATE INDEX IF NOT EXISTS idx_docker_projects_updated ON docker_projects(update
 "#,
             kind: MigrationKind::Up,
         },
+        // —— 迁移 v9：移除 v3 预置样例脚本（保留空「常用」包） ——
+        Migration {
+            version: 9,
+            description: "remove_sample_scripts",
+            sql: r#"
+DELETE FROM scripts WHERE
+  (name = '磁盘空间' AND body = 'df -h')
+  OR (name = '系统日志' AND body = 'tail -f /var/log/syslog')
+  OR (name = '监听端口' AND body = 'ss -lntup');
+"#,
+            kind: MigrationKind::Up,
+        },
+        // —— 迁移 v10：默认主题改为明亮 ——
+        Migration {
+            version: 10,
+            description: "default_theme_light",
+            sql: r#"
+UPDATE app_settings SET value = 'light' WHERE key = 'theme' AND value = 'dark';
+INSERT OR IGNORE INTO app_settings (key, value) VALUES ('theme', 'light');
+"#,
+            kind: MigrationKind::Up,
+        },
+        // —— 迁移 v11：Docker 项目类型（compose / dockerfile / full） ——
+        Migration {
+            version: 11,
+            description: "docker_project_kind",
+            sql: r#"
+ALTER TABLE docker_projects ADD COLUMN kind TEXT NOT NULL DEFAULT 'full';
+"#,
+            kind: MigrationKind::Up,
+        },
     ]
 }

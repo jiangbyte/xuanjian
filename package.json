@@ -4,6 +4,14 @@
   "version": "0.1.0",
   "license": "MIT",
   "author": "Charlie",
+  "homepage": "https://github.com/jiangbyte/xuanjian",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jiangbyte/xuanjian.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jiangbyte/xuanjian/issues"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",

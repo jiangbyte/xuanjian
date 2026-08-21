@@ -6,10 +6,10 @@
  * 「管理脚本」跳转到独立脚本页。
  */
 
-import { useEffect, useMemo, useState } from "react";
-import { dialogs } from "@/lib/dialogs";
-import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight, Play, Search, Zap } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,9 +23,9 @@ import {
   ScriptPackageRow,
   ScriptRow,
 } from "@/lib/db";
-import { previewScriptBody } from "@/lib/scriptVars";
+import { dialogs } from "@/lib/dialogs";
 import { runScriptOnSession } from "@/lib/runScript";
-import { useNavigate } from "react-router-dom";
+import { previewScriptBody } from "@/lib/scriptVars";
 import { cn } from "@/lib/utils";
 
 const listRowClass =
@@ -201,10 +201,7 @@ export function ScriptsPane({ sessionId }: { sessionId: string | null }) {
                       disabled={runningId != null}
                       onClick={() => run(s)}
                     >
-                      <Zap
-                        size={14}
-                        className="mt-0.5 shrink-0 text-primary"
-                      />
+                      <Zap size={14} className="mt-0.5 shrink-0 text-primary" />
                       <div className="min-w-0 flex-1 space-y-0.5 text-left">
                         <div className="truncate text-sm font-semibold">
                           {s.name}

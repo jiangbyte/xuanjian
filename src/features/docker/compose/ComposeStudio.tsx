@@ -4,27 +4,28 @@
  * @description 左侧资源类型页签 + 列表/表单，右侧 YAML 对照编辑。
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
-import Editor from "@monaco-editor/react";
 import {
   AlertTriangle,
   Copy,
   Download,
   Plus,
+  Terminal,
   Trash2,
   Upload,
 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
+import Editor from "@/components/MonacoEditor";
 import { Button } from "@/components/ui/button";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
-import { cn } from "@/lib/utils";
 import { clipboardWriteText } from "@/lib/clipboard";
+import { cn } from "@/lib/utils";
 import { resolveMonacoTheme, useSettingsStore } from "@/stores/settings";
-import { toast } from "sonner";
 import type { ComposeDoc, DockerfilesMap } from "../model/composeTypes";
 import { emptyService } from "../model/composeTypes";
 import {
@@ -70,7 +71,9 @@ export function ComposeStudio({
   onExportYaml,
 }: Props) {
   const { t } = useTranslation();
-  const monacoTheme = useSettingsStore((s) => resolveMonacoTheme(s.editorTheme));
+  const monacoTheme = useSettingsStore((s) =>
+    resolveMonacoTheme(s.editorTheme),
+  );
   const [kind, setKind] = useState<ResourceKind>("service");
   const [selection, setSelection] = useState<ComposeSelection>(() =>
     firstSelection(doc),
@@ -325,10 +328,10 @@ export function ComposeStudio({
                   type="button"
                   onClick={() => switchKind(id)}
                   className={cn(
-                    "rounded-md px-2.5 py-1 text-xs transition-colors",
+                    "rounded-md px-2.5 py-1 text-sm transition-colors",
                     kind === id
                       ? "bg-accent font-medium text-accent-foreground"
-                      : "text-muted-foreground hover:bg-muted/70",
+                      : "text-muted-foreground hover:bg-muted",
                   )}
                 >
                   {label}
@@ -341,26 +344,27 @@ export function ComposeStudio({
                   </span>
                 </button>
               ))}
-              <div className="ml-auto flex gap-1">
+              <div className="ml-auto flex items-center gap-0.5">
                 <Button
                   type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7"
+                  size="icon-sm"
+                  variant="ghost"
+                  title={t("docker.add")}
+                  aria-label={t("docker.add")}
                   onClick={addCurrent}
                 >
-                  <Plus size={13} className="mr-1" />
-                  {t("docker.add")}
+                  <Plus size={14} />
                 </Button>
                 <Button
                   type="button"
-                  size="sm"
+                  size="icon-sm"
                   variant="ghost"
-                  className="h-7"
                   disabled={!selection}
+                  title={t("docker.delete")}
+                  aria-label={t("docker.delete")}
                   onClick={deleteSelected}
                 >
-                  <Trash2 size={13} />
+                  <Trash2 size={14} />
                 </Button>
               </div>
             </div>
@@ -369,7 +373,7 @@ export function ComposeStudio({
               <div className="flex w-36 shrink-0 flex-col border-r border-border bg-muted/15">
                 <div className="min-h-0 flex-1 overflow-auto p-1">
                   {names.length === 0 ? (
-                    <div className="px-2 py-6 text-center text-[11px] text-muted-foreground">
+                    <div className="px-2 py-6 text-center text-xs text-muted-foreground">
                       {t("docker.emptyKind")}
                     </div>
                   ) : (
@@ -389,15 +393,15 @@ export function ComposeStudio({
                           type="button"
                           onClick={() => setSelection({ kind, name })}
                           className={cn(
-                            "mb-0.5 flex w-full flex-col rounded-md px-2 py-1.5 text-left",
+                            "mb-0.5 flex w-full flex-col rounded-md px-2 py-1.5 text-left text-sm transition-colors",
                             active
-                              ? "bg-accent font-medium"
-                              : "hover:bg-muted/60",
+                              ? "bg-accent font-medium text-accent-foreground"
+                              : "hover:bg-muted",
                           )}
                         >
-                          <span className="truncate text-xs">{name}</span>
+                          <span className="truncate">{name}</span>
                           {sub ? (
-                            <span className="truncate text-[10px] text-muted-foreground">
+                            <span className="truncate text-xs text-muted-foreground">
                               {sub}
                             </span>
                           ) : null}
@@ -435,46 +439,46 @@ export function ComposeStudio({
               <span className="text-xs font-medium text-muted-foreground">
                 docker-compose.yml
               </span>
-              <div className="ml-auto flex gap-1">
+              <div className="ml-auto flex items-center gap-0.5">
                 <Button
                   type="button"
-                  size="sm"
+                  size="icon-sm"
                   variant="ghost"
-                  className="h-7"
+                  title={t("docker.import")}
+                  aria-label={t("docker.import")}
                   onClick={importFile}
                 >
-                  <Upload size={13} className="mr-1" />
-                  {t("docker.import")}
+                  <Upload size={14} />
                 </Button>
                 <Button
                   type="button"
-                  size="sm"
+                  size="icon-sm"
                   variant="ghost"
-                  className="h-7"
+                  title={t("docker.export")}
+                  aria-label={t("docker.export")}
                   onClick={onExportYaml}
                 >
-                  <Download size={13} className="mr-1" />
-                  {t("docker.export")}
+                  <Download size={14} />
                 </Button>
                 <Button
                   type="button"
-                  size="sm"
+                  size="icon-sm"
                   variant="ghost"
-                  className="h-7"
+                  title="YAML"
+                  aria-label="YAML"
                   onClick={copyYaml}
                 >
-                  <Copy size={13} className="mr-1" />
-                  YAML
+                  <Copy size={14} />
                 </Button>
                 <Button
                   type="button"
-                  size="sm"
+                  size="icon-sm"
                   variant="ghost"
-                  className="h-7"
+                  title="docker compose up"
+                  aria-label="docker compose up"
                   onClick={copyUpCmd}
                 >
-                  <Copy size={13} className="mr-1" />
-                  up
+                  <Terminal size={14} />
                 </Button>
               </div>
             </div>

@@ -4,9 +4,6 @@
  * @description 指令列表编辑 + Monaco 源码双向同步；管理项目内多 Dockerfile。
  */
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useTranslation } from "react-i18next";
-import Editor from "@monaco-editor/react";
 import {
   ArrowDown,
   ArrowUp,
@@ -17,9 +14,18 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
+import Editor from "@/components/MonacoEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
 import {
   Select,
   SelectContent,
@@ -28,21 +34,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@/components/ui/resizable";
-import { cn } from "@/lib/utils";
 import { clipboardWriteText } from "@/lib/clipboard";
+import { cn } from "@/lib/utils";
 import { resolveMonacoTheme, useSettingsStore } from "@/stores/settings";
-import { toast } from "sonner";
 import type { DockerfilesMap } from "../model/composeTypes";
 import {
   createInstruction,
+  type DockerfileInstruction,
   parseDockerfile,
   stringifyDockerfile,
-  type DockerfileInstruction,
 } from "../model/dockerfileModel";
 
 const KINDS: DockerfileInstruction["kind"][] = [
@@ -73,12 +73,14 @@ type Props = {
 /** Dockerfile 可视化编辑 */
 export function DockerfileStudio({ dockerfiles, onChange, onExport }: Props) {
   const { t } = useTranslation();
-  const monacoTheme = useSettingsStore((s) => resolveMonacoTheme(s.editorTheme));
+  const monacoTheme = useSettingsStore((s) =>
+    resolveMonacoTheme(s.editorTheme),
+  );
   const paths = Object.keys(dockerfiles).sort();
   const [activePath, setActivePath] = useState(paths[0] ?? "");
   const content = dockerfiles[activePath] ?? "";
-  const [instructions, setInstructions] = useState<DockerfileInstruction[]>(() =>
-    parseDockerfile(content),
+  const [instructions, setInstructions] = useState<DockerfileInstruction[]>(
+    () => parseDockerfile(content),
   );
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     const list = parseDockerfile(content);
@@ -156,7 +158,7 @@ export function DockerfileStudio({ dockerfiles, onChange, onExport }: Props) {
       path = `Dockerfile.${i}`;
       i += 1;
     }
-    const text = "FROM alpine:latest\nCMD [\"sh\"]\n";
+    const text = 'FROM alpine:latest\nCMD ["sh"]\n';
     onChange({ ...dockerfiles, [path]: text });
     setActivePath(path);
   };
@@ -194,9 +196,7 @@ export function DockerfileStudio({ dockerfiles, onChange, onExport }: Props) {
   };
 
   const updateSelected = (ins: DockerfileInstruction) => {
-    commitInstructions(
-      instructions.map((i) => (i.id === ins.id ? ins : i)),
-    );
+    commitInstructions(instructions.map((i) => (i.id === ins.id ? ins : i)));
   };
 
   const copyDf = async () => {
@@ -222,7 +222,9 @@ export function DockerfileStudio({ dockerfiles, onChange, onExport }: Props) {
   if (!paths.length) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-6">
-        <p className="text-sm text-muted-foreground">{t("docker.noDockerfile")}</p>
+        <p className="text-sm text-muted-foreground">
+          {t("docker.noDockerfile")}
+        </p>
         <Button type="button" onClick={addFile}>
           <FilePlus size={14} className="mr-1" />
           {t("docker.addDockerfile")}
@@ -311,7 +313,10 @@ export function DockerfileStudio({ dockerfiles, onChange, onExport }: Props) {
               </div>
             </div>
 
-            <ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
+            <ResizablePanelGroup
+              orientation="vertical"
+              className="min-h-0 flex-1"
+            >
               <ResizablePanel defaultSize={48} minSize={25}>
                 <div className="h-full overflow-auto p-1">
                   {instructions.map((ins, idx) => {
@@ -323,10 +328,10 @@ export function DockerfileStudio({ dockerfiles, onChange, onExport }: Props) {
                         type="button"
                         onClick={() => setSelectedId(ins.id)}
                         className={cn(
-                          "mb-0.5 flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-xs",
+                          "mb-0.5 flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
                           selectedId === ins.id
-                            ? "bg-accent font-medium"
-                            : "hover:bg-muted/60",
+                            ? "bg-accent font-medium text-accent-foreground"
+                            : "hover:bg-muted",
                           ins.kind === "FROM" &&
                             idx > 0 &&
                             "mt-2 border-t border-border pt-2",
@@ -388,36 +393,36 @@ export function DockerfileStudio({ dockerfiles, onChange, onExport }: Props) {
                 {activePath}
                 {sourceError ? ` · ${sourceError}` : ""}
               </span>
-              <div className="ml-auto flex gap-1">
+              <div className="ml-auto flex items-center gap-0.5">
                 <Button
                   type="button"
-                  size="sm"
+                  size="icon-sm"
                   variant="ghost"
-                  className="h-7"
+                  title={t("docker.import")}
+                  aria-label={t("docker.import")}
                   onClick={importFile}
                 >
-                  <Upload size={13} className="mr-1" />
-                  {t("docker.import")}
+                  <Upload size={14} />
                 </Button>
                 <Button
                   type="button"
-                  size="sm"
+                  size="icon-sm"
                   variant="ghost"
-                  className="h-7"
+                  title={t("docker.export")}
+                  aria-label={t("docker.export")}
                   onClick={() => onExport(activePath, source)}
                 >
-                  <Download size={13} className="mr-1" />
-                  {t("docker.export")}
+                  <Download size={14} />
                 </Button>
                 <Button
                   type="button"
-                  size="sm"
+                  size="icon-sm"
                   variant="ghost"
-                  className="h-7"
+                  title={t("docker.copy")}
+                  aria-label={t("docker.copy")}
                   onClick={copyDf}
                 >
-                  <Copy size={13} className="mr-1" />
-                  {t("docker.copy")}
+                  <Copy size={14} />
                 </Button>
               </div>
             </div>
@@ -489,13 +494,31 @@ function InstructionForm({
       <div className="flex items-center gap-1">
         <div className="text-sm font-semibold">{ins.kind}</div>
         <div className="ml-auto flex gap-1">
-          <Button type="button" size="icon" variant="ghost" className="size-7" onClick={onUp}>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-7"
+            onClick={onUp}
+          >
             <ArrowUp size={12} />
           </Button>
-          <Button type="button" size="icon" variant="ghost" className="size-7" onClick={onDown}>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-7"
+            onClick={onDown}
+          >
             <ArrowDown size={12} />
           </Button>
-          <Button type="button" size="icon" variant="ghost" className="size-7" onClick={onDelete}>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-7"
+            onClick={onDelete}
+          >
             <Trash2 size={12} />
           </Button>
         </div>
@@ -766,16 +789,12 @@ function InstructionForm({
   );
 }
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="space-y-1">
-      <Label className="text-[11px] text-muted-foreground">{label}</Label>
+      <Label className="text-xs font-normal text-muted-foreground">
+        {label}
+      </Label>
       {children}
     </div>
   );

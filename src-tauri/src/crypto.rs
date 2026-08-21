@@ -1,6 +1,6 @@
 //! 主机口令加解密（AES-256-GCM）。
 //!
-//! 密钥存放于本机用户数据目录 `xuanjian/secret.key`，首次使用时自动生成。
+//! 密钥存放于应用数据目录 `secret.key`（与 SQLite 同目录），首次使用时自动生成。
 //! 密文格式：Base64(nonce || ciphertext)。
 //!
 //! Author: Charlie
@@ -13,14 +13,15 @@ use rand::RngCore;
 use std::fs;
 use std::path::PathBuf;
 
+use crate::data_dir;
+
 /// 返回密钥文件路径（确保目录存在）。
 fn key_path() -> Result<PathBuf> {
-    let dir = dirs::data_local_dir()
-        .or_else(dirs::data_dir)
-        .ok_or_else(|| anyhow!("no data dir"))?
-        .join("xuanjian");
-    fs::create_dir_all(&dir)?;
-    Ok(dir.join("secret.key"))
+    let path = data_dir::key_path()?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    Ok(path)
 }
 
 /// 加载或创建 32 字节主密钥。

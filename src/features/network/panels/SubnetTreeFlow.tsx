@@ -4,27 +4,24 @@
  * @description 用 @xyflow/react + dagre LR 布局渲染 SubnetTreeNode，支持选中与适应视图。
  */
 
-import { useEffect, useMemo } from "react";
+import dagre from "@dagrejs/dagre";
 import {
   Background,
   Controls,
+  type Edge,
   MiniMap,
+  type NodeTypes,
+  Position,
   ReactFlow,
+  ReactFlowProvider,
   useEdgesState,
   useNodesState,
   useReactFlow,
-  ReactFlowProvider,
-  Position,
-  type Edge,
-  type NodeTypes,
 } from "@xyflow/react";
-import dagre from "@dagrejs/dagre";
+import { useEffect, useMemo } from "react";
 import "@xyflow/react/dist/style.css";
-import {
-  treeToFlow,
-  type SubnetTreeNode,
-} from "@/lib/ipcalc";
-import { SubnetNode, type SubnetFlowNode } from "./SubnetNode";
+import { type SubnetTreeNode, treeToFlow } from "@/lib/ipcalc";
+import { type SubnetFlowNode, SubnetNode } from "./SubnetNode";
 
 const NODE_W = 168;
 const NODE_H = 64;
@@ -85,7 +82,7 @@ function SubnetTreeFlowInner({ tree, selectedId, onSelect }: InnerProps) {
       ...e,
       type: "smoothstep",
       animated: false,
-      style: { stroke: "var(--primary)", strokeWidth: 1.5 },
+      style: { stroke: "var(--border)", strokeWidth: 1.25 },
     }));
     return layoutWithDagre(nodes, edges);
   }, [rawNodes, rawEdges]);

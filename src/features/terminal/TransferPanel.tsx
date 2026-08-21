@@ -4,26 +4,26 @@
  * @description 展示上传/下载/复制任务队列；筛选与操作用 Tabs / 卡片行。
  */
 
+import { ArrowDownUp, Pause, Play, RotateCcw, Trash2, X } from "lucide-react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowDownUp, Pause, Play, RotateCcw, Trash2, X } from "lucide-react";
+import {
+  type ContextMenuItem,
+  openContextMenu,
+  useContextMenu,
+} from "@/components/ContextMenu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 import {
   filterJobs,
   formatBytes,
   TransferFilter,
-  useTransferStore,
   type TransferJob,
+  useTransferStore,
 } from "@/stores/transfer";
-import {
-  openContextMenu,
-  useContextMenu,
-  type ContextMenuItem,
-} from "@/components/ContextMenu";
-import { cn } from "@/lib/utils";
 
 const TABS: { id: TransferFilter; labelKey: string }[] = [
   { id: "all", labelKey: "transfer.tabAll" },
@@ -146,7 +146,8 @@ function TransferRow({ job }: { job: TransferJob }) {
             value={pct}
             className={cn(
               "h-1.5",
-              job.status === "failed" && "[&_[data-slot=progress-indicator]]:bg-destructive",
+              job.status === "failed" &&
+                "[&_[data-slot=progress-indicator]]:bg-destructive",
               job.status === "completed" &&
                 "[&_[data-slot=progress-indicator]]:bg-success",
             )}
@@ -265,15 +266,30 @@ export function TransferPanel() {
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
         <h2 className="text-sm font-medium">{t("transfer.title")}</h2>
         <div className="flex shrink-0 items-center gap-1">
-          <Button type="button" size="xs" variant="outline" onClick={() => pauseAll()}>
+          <Button
+            type="button"
+            size="xs"
+            variant="outline"
+            onClick={() => pauseAll()}
+          >
             <Pause size={13} />
             {t("transfer.pauseAll")}
           </Button>
-          <Button type="button" size="xs" variant="outline" onClick={() => resumeAll()}>
+          <Button
+            type="button"
+            size="xs"
+            variant="outline"
+            onClick={() => resumeAll()}
+          >
             <Play size={13} />
             {t("transfer.resumeAll")}
           </Button>
-          <Button type="button" size="xs" variant="outline" onClick={() => clearFinished()}>
+          <Button
+            type="button"
+            size="xs"
+            variant="outline"
+            onClick={() => clearFinished()}
+          >
             <Trash2 size={13} />
             {t("transfer.clearFinished")}
           </Button>
@@ -285,7 +301,10 @@ export function TransferPanel() {
         onValueChange={(v) => setFilter(v as TransferFilter)}
         className="flex min-h-0 flex-1 flex-col gap-0"
       >
-        <TabsList variant="line" className="h-auto w-full shrink-0 justify-start overflow-x-auto overflow-y-hidden rounded-none border-b border-border bg-transparent p-0">
+        <TabsList
+          variant="line"
+          className="h-auto w-full shrink-0 justify-start overflow-x-auto overflow-y-hidden rounded-none border-b border-border bg-transparent p-0"
+        >
           {TABS.map((tab) => (
             <TabsTrigger
               key={tab.id}

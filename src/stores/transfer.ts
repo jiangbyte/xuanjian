@@ -521,16 +521,39 @@ export function initTransferProgressListener() {
   if (progressListening) return () => undefined;
   progressListening = true;
   let unlisten: (() => void) | undefined;
+  let raf = 0;
+  let pending: {
+    transferId: string;
+    bytesDone: number;
+    bytesTotal: number;
+  } | null = null;
+
+  const flush = () => {
+    raf = 0;
+    const p = pending;
+    pending = null;
+    if (!p) return;
+    useTransferStore
+      .getState()
+      .updateProgress(p.transferId, p.bytesDone, p.bytesTotal);
+  };
+
   void import("@/lib/tauri").then(({ onTransferProgress }) => {
     onTransferProgress((p) => {
-      useTransferStore
-        .getState()
-        .updateProgress(p.transferId, p.bytesDone, p.bytesTotal);
+      pending = {
+        transferId: p.transferId,
+        bytesDone: p.bytesDone,
+        bytesTotal: p.bytesTotal,
+      };
+      if (!raf) {
+        raf = window.setTimeout(flush, 120);
+      }
     }).then((fn) => {
       unlisten = fn;
     });
   });
   return () => {
+    if (raf) window.clearTimeout(raf);
     unlisten?.();
     progressListening = false;
   };

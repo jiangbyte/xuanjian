@@ -6,8 +6,8 @@
 
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
-import zhCN from "@/i18n/locales/zh-CN";
 import en from "@/i18n/locales/en";
+import zhCN from "@/i18n/locales/zh-CN";
 
 const resources = {
   "zh-CN": { translation: zhCN },

@@ -7,20 +7,6 @@
  */
 
 import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { useTranslation } from "react-i18next";
-import {
   Activity,
   Cpu,
   HardDrive,
@@ -29,9 +15,23 @@ import {
   RefreshCw,
   Server,
 } from "lucide-react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { useTranslation } from "react-i18next";
 import { Area, AreaChart, ResponsiveContainer } from "recharts";
-import { api } from "@/lib/tauri";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { metricsCmd, resolveProbeEnv } from "@/lib/probeEnv";
+import { api } from "@/lib/tauri";
 
 type Sample = {
   t: number;
@@ -355,11 +355,20 @@ export function OverviewPane({
   }, [sessionId, t, env, shellId]);
 
   useEffect(() => {
-    refresh().catch(() => undefined);
-    const id = window.setInterval(() => {
+    const tick = () => {
+      if (document.visibilityState === "hidden") return;
       refresh().catch(() => undefined);
-    }, 3000);
-    return () => window.clearInterval(id);
+    };
+    tick();
+    const id = window.setInterval(tick, 3000);
+    const onVis = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, [refresh]);
 
   const memPct = pct(metrics?.memUsed ?? 0, metrics?.memTotal ?? 0);
@@ -402,15 +411,15 @@ export function OverviewPane({
                   <div className="truncate text-sm font-semibold">
                     {metrics?.host || "-"}
                   </div>
-                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
                     {metrics?.ips || "-"}
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {metrics?.uptime || "-"}
                   </p>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  <p className="mt-0.5 text-xs text-muted-foreground">
                     {t("termTab.load")} {metrics?.load || "-"}
                   </p>
                 </div>
@@ -483,8 +492,10 @@ export function OverviewPane({
 
             {(metrics?.swapTotal ?? 0) > 0 && (
               <div className="rounded-md border border-border bg-background px-2.5 py-2">
-                <div className="mb-1 flex items-center justify-between text-[11px]">
-                  <span className="text-muted-foreground">{t("termTab.swap")}</span>
+                <div className="mb-1 flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">
+                    {t("termTab.swap")}
+                  </span>
                   <span className="font-medium">
                     {fmtBytes(metrics!.swapUsed)} /{" "}
                     {fmtBytes(metrics!.swapTotal)}
@@ -508,12 +519,12 @@ export function OverviewPane({
             {/* —— Top 进程 —— */}
             {metrics && metrics.top.length > 0 && (
               <div className="rounded-md border border-border bg-background px-2 py-2">
-                <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                   <Activity size={12} />
                   {t("termTab.topProcesses")}
                 </div>
                 <div className="space-y-1.5">
-                  <div className="flex items-center gap-2 px-0.5 text-[10px] text-muted-foreground">
+                  <div className="flex items-center gap-2 px-0.5 text-xs text-muted-foreground">
                     <span className="w-16 shrink-0">PID</span>
                     <span className="min-w-0 flex-1">
                       {t("termTab.procName")}
@@ -524,7 +535,7 @@ export function OverviewPane({
                   {metrics.top.map((p) => (
                     <div
                       key={`${p.pid}-${p.name}`}
-                      className="flex items-center gap-2 text-[11px]"
+                      className="flex items-center gap-2 text-xs"
                     >
                       <span className="w-16 shrink-0 truncate font-mono tabular-nums text-muted-foreground">
                         {p.pid}
@@ -578,16 +589,20 @@ function ResourceCard({
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <div
-            className="flex items-center gap-1.5 text-[11px] font-medium"
+            className="flex items-center gap-1.5 text-xs font-medium"
             style={{ color }}
           >
             {icon}
             {title}
           </div>
           <div className="mt-1 text-xl font-semibold leading-none">{value}</div>
-          <p className="mt-1 truncate text-[11px] text-muted-foreground">{detail}</p>
+          <p className="mt-1 truncate text-xs text-muted-foreground">
+            {detail}
+          </p>
           {extra && (
-            <p className="mt-0.5 truncate text-[10px] text-muted-foreground">{extra}</p>
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+              {extra}
+            </p>
           )}
         </div>
       </div>

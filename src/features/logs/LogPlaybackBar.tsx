@@ -5,9 +5,9 @@
  * 由日志详情页在回放模式下挂载。
  */
 
-import { Button } from "@/components/ui/button";
-import { useTranslation } from "react-i18next";
 import { FastForward, Pause, Play, SkipForward } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { Button } from "@/components/ui/button";
 import { formatDurationMs } from "@/features/logs/logExport";
 
 const SPEEDS = [0.5, 1, 2, 4, 8] as const;
@@ -55,7 +55,7 @@ export function LogPlaybackBar({
         <SkipForward size={16} />
       </Button>
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        <span className="w-12 shrink-0 text-right font-mono text-[11px] text-muted-foreground">
+        <span className="w-12 shrink-0 text-right font-mono text-xs text-muted-foreground">
           {formatDurationMs(currentMs)}
         </span>
         <input
@@ -68,7 +68,7 @@ export function LogPlaybackBar({
           onChange={(e) => onSeek(Number(e.target.value))}
           aria-label={t("logs.scrub")}
         />
-        <span className="w-12 shrink-0 font-mono text-[11px] text-muted-foreground">
+        <span className="w-12 shrink-0 font-mono text-xs text-muted-foreground">
           {formatDurationMs(durationMs)}
         </span>
       </div>
@@ -85,7 +85,7 @@ export function LogPlaybackBar({
           </Button>
         ))}
       </div>
-      <div className="hidden w-10 text-right text-[10px] text-muted-foreground sm:block">
+      <div className="hidden w-10 text-right text-xs text-muted-foreground sm:block">
         {pct.toFixed(0)}%
       </div>
     </div>

@@ -6,10 +6,9 @@
  * 常见端口会打上服务名标签。
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { dialogs } from "@/lib/dialogs";
-import { useTranslation } from "react-i18next";
 import { Copy, RefreshCw, Search, Skull, XCircle } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,9 +21,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { api } from "@/lib/tauri";
 import { clipboardWriteText } from "@/lib/clipboard";
+import { dialogs } from "@/lib/dialogs";
 import { killCmd, portsCmd, resolveProbeEnv } from "@/lib/probeEnv";
+import { api } from "@/lib/tauri";
 
 type PortRow = {
   id: string;
@@ -73,8 +73,31 @@ function parsePorts(raw: string): PortRow[] {
       /^Netid\b/i.test(line) ||
       /^Proto\b/i.test(line) ||
       /^Active\b/i.test(line) ||
-      /^Active Connections/i.test(line)
+      /^Active Connections/i.test(line) ||
+      /^COMMAND\b/i.test(line) ||
+      line === "---"
     ) {
+      continue;
+    }
+
+    // macOS lsof: node  123 user  12u  IPv4 ...  TCP *:3000 (LISTEN)
+    const lsof = line.match(
+      /^(\S+)\s+(\d+)\s+\S+\s+\S+\s+IPv[46]\s+\S+\s+\S+\s+(TCP|UDP)\s+(\S+?)(?:\s+\(([^)]+)\))?$/i,
+    );
+    if (lsof) {
+      const process = lsof[1];
+      const pid = lsof[2];
+      const proto = lsof[3].toLowerCase().startsWith("udp") ? "udp" : "tcp";
+      const endpoint = lsof[4];
+      const state = (lsof[5] || "").toUpperCase() || "LISTEN";
+      const portMatch = endpoint.match(/:(\d+)$/);
+      if (!portMatch) continue;
+      const port = Number(portMatch[1]);
+      const addr = endpoint.replace(/:\d+$/, "").replace(/^\*$/, "0.0.0.0");
+      const id = `${proto}:${addr}:${port}:${pid}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push({ id, proto, addr, port, state, pid, process });
       continue;
     }
 
@@ -353,7 +376,10 @@ export function PortsPane({
                 ? `PID ${row.pid}`
                 : t("termTab.unknownProc");
             return (
-              <div key={row.id} className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-accent">
+              <div
+                key={row.id}
+                className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
+              >
                 <div
                   className={`mt-1.5 size-2 shrink-0 rounded-full ${
                     isPublic(row.addr) ? "bg-destructive" : "bg-success"
@@ -364,11 +390,17 @@ export function PortsPane({
                     <span className="shrink-0 font-mono text-sm font-medium">
                       :{row.port}
                     </span>
-                    <span className="text-sm font-medium truncate" title={procLabel}>
+                    <span
+                      className="text-sm font-medium truncate"
+                      title={procLabel}
+                    >
                       {procLabel}
                     </span>
                   </div>
-                  <div className="text-xs text-muted-foreground truncate" title={endpoint}>
+                  <div
+                    className="text-xs text-muted-foreground truncate"
+                    title={endpoint}
+                  >
                     {endpoint} · {row.state}
                     {row.process && row.pid ? ` · PID ${row.pid}` : ""}
                   </div>

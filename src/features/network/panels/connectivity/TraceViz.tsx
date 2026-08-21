@@ -46,14 +46,16 @@ export function TraceViz({
       <ol className="flex flex-col gap-0">
         <li className="flex items-start gap-3 pb-3">
           <div className="flex w-8 flex-col items-center">
-            <span className="flex size-6 items-center justify-center rounded-full bg-muted text-[10px] font-medium">
+            <span className="flex size-6 items-center justify-center rounded-full bg-muted text-xs font-medium">
               0
             </span>
             <span className="mt-1 w-px flex-1 min-h-4 bg-border" />
           </div>
           <div className="min-w-0 pt-0.5">
             <div className="text-xs font-medium">{t("network.hopLocal")}</div>
-            <div className="text-[11px] text-muted-foreground">{t("network.hopStart")}</div>
+            <div className="text-xs text-muted-foreground">
+              {t("network.hopStart")}
+            </div>
           </div>
         </li>
         {hops.map((h, i) => {
@@ -65,7 +67,7 @@ export function TraceViz({
               <div className="flex w-8 flex-col items-center">
                 <span
                   className={cn(
-                    "flex size-6 items-center justify-center rounded-full text-[10px] font-medium",
+                    "flex size-6 items-center justify-center rounded-full text-xs font-medium",
                     highlight
                       ? "bg-primary text-primary-foreground"
                       : lost
@@ -75,18 +77,20 @@ export function TraceViz({
                 >
                   {h.hop}
                 </span>
-                {!isLast && <span className="mt-1 w-px flex-1 min-h-4 bg-border" />}
+                {!isLast && (
+                  <span className="mt-1 w-px flex-1 min-h-4 bg-border" />
+                )}
               </div>
               <div className="min-w-0 flex-1 pt-0.5">
                 <div className="truncate text-xs font-medium">
                   {h.host || h.ip || (lost ? t("network.timeout") : "—")}
                 </div>
                 {h.host && h.ip && (
-                  <div className="truncate font-mono text-[11px] text-muted-foreground">
+                  <div className="truncate font-mono text-xs text-muted-foreground">
                     {h.ip}
                   </div>
                 )}
-                <div className="mt-1 flex flex-wrap gap-1.5 font-mono text-[11px] text-muted-foreground">
+                <div className="mt-1 flex flex-wrap gap-1.5 font-mono text-xs text-muted-foreground">
                   {h.rtts.map((r, idx) => (
                     <span
                       key={idx}

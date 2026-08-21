@@ -6,9 +6,11 @@
 
 mod commands;
 mod crypto;
+mod data_dir;
 mod db;
 mod network;
 mod session;
+mod win_process;
 
 use commands::*;
 use network::NetworkState;
@@ -53,6 +55,7 @@ fn build_prevent_default_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 pub fn run() {
     let state: SharedState = Arc::new(AppState::new());
     let network_state = Arc::new(NetworkState::new());
+    let db_url = data_dir::db_url().expect("resolve sqlite url");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -62,13 +65,14 @@ pub fn run() {
         .plugin(build_prevent_default_plugin())
         .plugin(
             tauri_plugin_sql::Builder::default()
-                .add_migrations("sqlite:xuanjian.db", db::migrations())
+                .add_migrations(&db_url, db::migrations())
                 .build(),
         )
         .manage(state)
         .manage(network_state)
         .invoke_handler(tauri::generate_handler![
             list_local_shells,
+            host_platform,
             local_shell_open,
             ssh_connect,
             session_write,
@@ -88,6 +92,7 @@ pub fn run() {
             sftp_rename,
             sftp_chmod,
             encrypt_secret,
+            decrypt_secret,
             get_home_dir,
             get_temp_dir,
             list_local_dir,
@@ -97,6 +102,9 @@ pub fn run() {
             rename_local_path,
             chmod_local_path,
             remove_local_path,
+            get_data_dir_info,
+            get_db_url,
+            set_data_dir,
             network::network_list_interfaces,
             network::network_ping,
             network::network_traceroute,

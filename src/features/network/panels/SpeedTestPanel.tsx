@@ -4,6 +4,7 @@
  * @description 内网测速服务 / 自定义 URL；预热 + 多轮中位数，多连接并行。
  */
 
+import { ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -15,7 +16,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import { addNetworkHistory } from "@/lib/db";
 import {
   api,
   onNetworkSpeedProgress,
@@ -35,7 +35,7 @@ import {
   type SpeedServerInfo,
   type SpeedTestResult,
 } from "@/lib/tauri";
-import { addNetworkHistory } from "@/lib/db";
+import { cn } from "@/lib/utils";
 
 type PresetId = "intranet" | "custom";
 
@@ -50,7 +50,7 @@ function urlsFromBase(base: string) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 rounded-md bg-muted/40 px-3 py-2.5">
-      <div className="text-[11px] text-muted-foreground">{label}</div>
+      <div className="text-xs text-muted-foreground">{label}</div>
       <div className="mt-0.5 truncate font-mono text-sm" title={value}>
         {value}
       </div>
@@ -97,7 +97,8 @@ export function SpeedTestPanel() {
   const sampleIdx = useRef(0);
 
   useEffect(() => {
-    api.networkSpeedServerStatus()
+    api
+      .networkSpeedServerStatus()
       .then(setServer)
       .catch(() => undefined);
   }, []);
@@ -115,10 +116,7 @@ export function SpeedTestPanel() {
       if (p.mbps != null) setMbps(p.mbps);
       if (p.bytesDone != null) setBytesDone(p.bytesDone);
       if (p.bytesTotal != null) setBytesTotal(p.bytesTotal);
-      if (
-        (p.phase === "download" || p.phase === "warmup") &&
-        p.mbps != null
-      ) {
+      if ((p.phase === "download" || p.phase === "warmup") && p.mbps != null) {
         sampleIdx.current += 1;
         setSamples((prev) => {
           const next = [...prev, { i: sampleIdx.current, mbps: p.mbps! }];
@@ -339,7 +337,7 @@ export function SpeedTestPanel() {
         </Button>
       </div>
 
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         {t("network.speedMedianHint")}
       </p>
 
@@ -384,7 +382,7 @@ export function SpeedTestPanel() {
               <div className="text-xs font-medium text-muted-foreground">
                 {t("network.speedServerRunning")} · :{server.port}
               </div>
-              <div className="text-[11px] text-muted-foreground">
+              <div className="text-xs text-muted-foreground">
                 {t("network.speedServerUrls")}
               </div>
               <div className="flex flex-wrap gap-1.5">
@@ -392,7 +390,7 @@ export function SpeedTestPanel() {
                   <button
                     key={u}
                     type="button"
-                    className="rounded-md bg-muted/60 px-2 py-1 font-mono text-[11px] hover:bg-accent"
+                    className="rounded-md bg-muted/60 px-2 py-1 font-mono text-xs hover:bg-accent"
                     title={t("network.speedUseUrl")}
                     onClick={() => applyIntranetBase(u)}
                   >

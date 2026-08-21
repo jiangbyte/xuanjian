@@ -35,7 +35,10 @@ export function DnsResults({
             key={`${i}-${row}`}
             className="flex items-start gap-2 px-3 py-2.5 text-sm"
           >
-            <Badge variant="secondary" className="mt-0.5 shrink-0 font-mono text-[10px]">
+            <Badge
+              variant="secondary"
+              className="mt-0.5 shrink-0 font-mono text-xs"
+            >
               {recordType}
             </Badge>
             <span className="min-w-0 break-all font-mono text-xs leading-relaxed">

@@ -4,25 +4,29 @@
  * @description 左右传输面板、主机选择与跨栏传输入队的编排入口。
  */
 
-import { useEffect, useRef, useState } from "react";
-import { dialogs } from "@/lib/dialogs";
-import { useTranslation } from "react-i18next";
 import { ArrowLeft, ArrowLeftRight, ArrowRight } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { FloatingWindow } from "@/components/FloatingWindow";
 import { Button } from "@/components/ui/button";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
-import { FloatingWindow } from "@/components/FloatingWindow";
+import { HostPicker } from "@/features/terminal/sftp/HostPicker";
+import { hostTitle, joinPath } from "@/features/terminal/sftp/pathUtils";
+import { TransferPane } from "@/features/terminal/sftp/TransferPane";
+import { enqueueTransferTree } from "@/features/terminal/sftp/transferEnqueue";
+import type {
+  PaneTab,
+  Side,
+  SideSnapshot,
+} from "@/features/terminal/sftp/types";
 import { HostRow, listHosts } from "@/lib/db";
+import { dialogs } from "@/lib/dialogs";
 import type { SftpEntry } from "@/lib/tauri";
 import type { ConflictCtx } from "@/lib/transferConflict";
-import type { PaneTab, Side, SideSnapshot } from "@/features/terminal/sftp/types";
-import { hostTitle, joinPath } from "@/features/terminal/sftp/pathUtils";
-import { enqueueTransferTree } from "@/features/terminal/sftp/transferEnqueue";
-import { HostPicker } from "@/features/terminal/sftp/HostPicker";
-import { TransferPane } from "@/features/terminal/sftp/TransferPane";
 
 /** SFTP 双栏文件传输模态框 */
 export function SftpTransferModal({

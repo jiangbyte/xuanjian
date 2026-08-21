@@ -5,10 +5,16 @@
  */
 
 import type { HostRow } from "@/lib/db";
+import { getHostOs } from "@/lib/platform";
 
 /** 判断是否为 Windows 风格路径 */
 export function isWindowsPath(path: string) {
   return /^[a-zA-Z]:[\\/]/.test(path) || path.includes("\\");
+}
+
+/** 本机路径分隔符（按宿主 OS；远程固定 /） */
+export function localPathSep() {
+  return getHostOs() === "windows" ? "\\" : "/";
 }
 
 /** 按本地或远程规则拼接子路径 */
@@ -16,7 +22,12 @@ export function joinPath(base: string, name: string, remote: boolean) {
   if (remote) {
     return base.endsWith("/") ? `${base}${name}` : `${base}/${name}`;
   }
-  const sep = base.includes("/") && !base.includes("\\") ? "/" : "\\";
+  // 已有路径形态优先；否则按本机 OS
+  const sep = isWindowsPath(base)
+    ? "\\"
+    : base.includes("/")
+      ? "/"
+      : localPathSep();
   if (base.endsWith("\\") || base.endsWith("/")) return `${base}${name}`;
   return `${base}${sep}${name}`;
 }

@@ -5,11 +5,10 @@
  * 必要时新建会话并启动录制后再投递脚本。
  */
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { dialogs } from "@/lib/dialogs";
+import { Loader2, Monitor, Server, Terminal } from "lucide-react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { Loader2, Monitor, Server, Terminal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,13 +19,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
-import { HostRow, listHosts, touchHostConnected } from "@/lib/db";
 import type { ScriptRow } from "@/lib/db";
-import { api, LocalShellInfo } from "@/lib/tauri";
+import { HostRow, listHosts, touchHostConnected } from "@/lib/db";
+import { dialogs } from "@/lib/dialogs";
 import { runScriptOnSession } from "@/lib/runScript";
-import { useUiStore, type TermTab } from "@/stores/ui";
 import { startRecordingForOpenTab } from "@/lib/sessionRecorder";
+import { api, LocalShellInfo } from "@/lib/tauri";
+import { cn } from "@/lib/utils";
+import { type TermTab, useUiStore } from "@/stores/ui";
 
 type Target =
   | { kind: "tab"; tab: TermTab }
@@ -330,9 +330,7 @@ function TargetRow({
       type="button"
       className={cn(
         "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
-        active
-          ? "bg-accent text-accent-foreground"
-          : "hover:bg-muted",
+        active ? "bg-accent text-accent-foreground" : "hover:bg-muted",
       )}
       onClick={onClick}
     >

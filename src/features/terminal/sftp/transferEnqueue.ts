@@ -4,23 +4,23 @@
  * @description 连接主机、列举/创建目录，以及单文件与目录树的冲突处理与入队。
  */
 
+import { joinPath, parentPath } from "@/features/terminal/sftp/pathUtils";
+import type { SideEndpoint } from "@/features/terminal/sftp/types";
 import type { HostRow } from "@/lib/db";
+import type { DialogApi } from "@/lib/dialogs";
 import { api } from "@/lib/tauri";
+import {
+  askOverwrite,
+  type ConflictCtx,
+  type DestEndpoint,
+  findDestEntry,
+  prepareOverwrite,
+} from "@/lib/transferConflict";
 import {
   enqueueDownload,
   enqueueRemoteCopy,
   enqueueUpload,
 } from "@/stores/transfer";
-import type { DialogApi } from "@/lib/dialogs";
-import {
-  askOverwrite,
-  findDestEntry,
-  prepareOverwrite,
-  type ConflictCtx,
-  type DestEndpoint,
-} from "@/lib/transferConflict";
-import type { SideEndpoint } from "@/features/terminal/sftp/types";
-import { joinPath, parentPath } from "@/features/terminal/sftp/pathUtils";
 
 /** 按主机配置建立 SSH 会话 */
 export async function connectHost(host: HostRow) {

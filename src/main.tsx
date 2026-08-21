@@ -28,12 +28,12 @@ document.addEventListener(
       e.stopPropagation();
       return;
     }
-    if (e.ctrlKey && e.shiftKey && (key === "i" || key === "j")) {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (key === "i" || key === "j")) {
       e.preventDefault();
       e.stopPropagation();
       return;
     }
-    if (e.ctrlKey && !e.shiftKey && !e.altKey && key === "u") {
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && key === "u") {
       e.preventDefault();
       e.stopPropagation();
     }

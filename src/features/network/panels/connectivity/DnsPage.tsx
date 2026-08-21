@@ -15,8 +15,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { api } from "@/lib/tauri";
 import { addNetworkHistory } from "@/lib/db";
+import { api } from "@/lib/tauri";
 import { DnsResults } from "./DnsResults";
 import { RawLog } from "./RawLog";
 
@@ -77,7 +77,12 @@ export function DnsPage() {
         <Button className="h-8" onClick={start} disabled={busy}>
           {t("network.lookup")}
         </Button>
-        <Button className="h-8" variant="outline" onClick={clear} disabled={busy}>
+        <Button
+          className="h-8"
+          variant="outline"
+          onClick={clear}
+          disabled={busy}
+        >
           {t("network.clear")}
         </Button>
       </div>

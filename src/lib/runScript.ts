@@ -5,9 +5,9 @@
  * 支持整段粘贴或按行发送，并可选记入命令历史。
  */
 
-import { api } from "@/lib/tauri";
 import type { ScriptRow } from "@/lib/db";
 import { applyScriptVars, extractScriptVars } from "@/lib/scriptVars";
+import { api } from "@/lib/tauri";
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));

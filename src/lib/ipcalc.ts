@@ -239,7 +239,10 @@ function rowToTreeNode(row: SubnetRow, label?: string): SubnetTreeNode {
 }
 
 /** 由 CIDR 生成根节点；非法输入返回 null */
-export function buildRootNode(cidr: string, maskHint?: string): SubnetTreeNode | null {
+export function buildRootNode(
+  cidr: string,
+  maskHint?: string,
+): SubnetTreeNode | null {
   const result = calcCidr(cidr, maskHint);
   if (result.error) return null;
   return {

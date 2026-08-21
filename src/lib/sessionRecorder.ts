@@ -80,8 +80,8 @@ function g(): RecorderGlobal {
   return root[GKEY]!;
 }
 
-const FLUSH_MS = 80;
-const FLUSH_MAX = 16;
+const FLUSH_MS = 250;
+const FLUSH_MAX = 48;
 
 function tMsOf(rec: ActiveRec) {
   return Math.max(0, Date.now() - rec.startedAtMs);
@@ -361,7 +361,10 @@ export async function reconcileOrphanOpenLogs(): Promise<void> {
   try {
     const liveSessions = new Set<string>([...g().bySession.keys()]);
     for (const tab of useUiStore.getState().tabs) {
-      if (tab.sessionId && (tab.status === "open" || tab.status === "connecting")) {
+      if (
+        tab.sessionId &&
+        (tab.status === "open" || tab.status === "connecting")
+      ) {
         liveSessions.add(tab.sessionId);
       }
     }

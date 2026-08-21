@@ -6,13 +6,16 @@
  */
 
 import {
+  ArrowDownUp,
   Home,
-  Plus,
-  Settings,
   PanelLeft,
   PanelRight,
-  ArrowDownUp,
+  Plus,
+  Settings,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { useLocation, useNavigate } from "react-router-dom";
+import { openContextMenu, useContextMenu } from "@/components/ContextMenu";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -20,16 +23,14 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { WindowControls } from "@/components/WindowControls";
-import { useUiStore } from "@/stores/ui";
-import { useTransferStore } from "@/stores/transfer";
-import { useLocation, useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
-import { openContextMenu, useContextMenu } from "@/components/ContextMenu";
-import { canReconnect, reconnectTermTab } from "@/lib/sessionConnect";
-import { dialogs } from "@/lib/dialogs";
 import { TransferPanel } from "@/features/terminal/TransferPanel";
+import { dialogs } from "@/lib/dialogs";
+import { isMacOs } from "@/lib/platform";
+import { canReconnect, reconnectTermTab } from "@/lib/sessionConnect";
 import { cn } from "@/lib/utils";
+import { useTransferStore } from "@/stores/transfer";
 import type { TermTab } from "@/stores/ui";
+import { useUiStore } from "@/stores/ui";
 
 function tabStatusDotClass(status: TermTab["status"]) {
   switch (status) {
@@ -80,7 +81,10 @@ export function TitleBar() {
 
   return (
     <header
-      className="flex shrink-0 items-center gap-1 overflow-hidden border-b border-border bg-titlebar py-1.5 pl-2"
+      className={cn(
+        "flex shrink-0 items-center gap-1.5 overflow-hidden border-b border-border bg-titlebar py-2 pr-2.5",
+        isMacOs() ? "pl-[78px]" : "pl-2.5",
+      )}
       data-tauri-drag-region
     >
       <div
@@ -106,10 +110,10 @@ export function TitleBar() {
                 type="button"
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "group inline-flex h-7 max-w-[200px] shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 text-xs transition-colors",
+                  "group inline-flex h-8 max-w-[220px] shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-sm transition-colors",
                   active
                     ? "bg-accent font-medium text-accent-foreground"
-                    : "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
                 onClick={() => {
                   setActiveTab(tab.id);
@@ -274,7 +278,7 @@ export function TitleBar() {
             >
               <ArrowDownUp size={14} />
               {activeTransfers > 0 && (
-                <span className="pointer-events-none absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground">
+                <span className="pointer-events-none absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
                   {activeTransfers}
                 </span>
               )}

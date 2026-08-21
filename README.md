@@ -60,7 +60,7 @@
 ## 功能特性
 
 - **主机操作台**：分组 / 标签 / 排序；口令 AES 加密入库；一键连接 SSH 或粘贴 `user@host` 目标
-- **终端工作区**：本地 Shell（PowerShell / CMD / bash / WSL 等）+ SSH（xterm）；标签 keep-alive；快速切换（`Ctrl+J`）；左右侧栏（文件、脚本、历史、概览、进程、端口、Docker）
+- **终端工作区**：本地 Shell（Windows：PowerShell / CMD / WSL；macOS / Linux：zsh / bash / fish 等）+ SSH（xterm）；标签 keep-alive；快速切换（`Ctrl/⌘+J`）；左右侧栏（文件、脚本、历史、概览、进程、端口、Docker）
 - **SFTP / 本地文件**：双栏浏览、上传下载、冲突处理、权限与编辑
 - **Docker 编排工作室**：可视化编辑 Compose（服务 / 网络 / 卷）与 Dockerfile，YAML / 源码双向同步，模板、导入导出与复制；会话侧栏可管理容器并 **实时跟随日志**（最多 1000 行）
 - **脚本与笔记**：脚本包管理、变量占位、多目标执行；Markdown 笔记分类与自动保存

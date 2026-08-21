@@ -57,15 +57,10 @@ pub fn list_local_shells() -> Vec<LocalShellInfo> {
     {
         list_windows_shells()
     }
-    #[cfg(target_os = "macos")]
-    {
-        list_unix_shells(&[
-            ("zsh", "/bin/zsh"),
-            ("bash", "/bin/bash"),
-            ("fish", "/opt/homebrew/bin/fish"),
-            ("fish", "/usr/local/bin/fish"),
-        ])
-    }
+#[cfg(target_os = "macos")]
+{
+    list_macos_shells()
+}
     #[cfg(all(unix, not(target_os = "macos")))]
     {
         list_linux_shells()
@@ -126,10 +121,10 @@ fn list_windows_shells() -> Vec<LocalShellInfo> {
 
     // WSL distros
     if which("wsl").is_ok() {
-        if let Ok(output) = std::process::Command::new("wsl")
-            .args(["-l", "-q"])
-            .output()
-        {
+        let mut wsl_list = std::process::Command::new("wsl");
+        wsl_list.args(["-l", "-q"]);
+        crate::win_process::hide_console(&mut wsl_list);
+        if let Ok(output) = wsl_list.output() {
             let text = String::from_utf16_lossy(
                 &output
                     .stdout
@@ -179,22 +174,71 @@ fn mark_default(shells: &mut [LocalShellInfo]) {
 }
 
 #[cfg(target_os = "macos")]
-fn list_unix_shells(candidates: &[(&str, &str)]) -> Vec<LocalShellInfo> {
+fn list_macos_shells() -> Vec<LocalShellInfo> {
     let mut shells = Vec::new();
-    for (name, path) in candidates {
-        if Path::new(path).exists() {
+    // /etc/shells + 常见 Homebrew / 系统路径
+    if let Ok(content) = std::fs::read_to_string("/etc/shells") {
+        for line in content.lines() {
+            let path = line.trim();
+            if path.is_empty() || path.starts_with('#') {
+                continue;
+            }
+            if Path::new(path).exists() {
+                let name = Path::new(path)
+                    .file_name()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_else(|| path.to_string());
+                if shells.iter().any(|s: &LocalShellInfo| s.path == path) {
+                    continue;
+                }
+                shells.push(LocalShellInfo {
+                    id: format!("local:{name}"),
+                    name,
+                    path: path.to_string(),
+                    args: vec![],
+                    is_default: false,
+                });
+            }
+        }
+    }
+    for (name, path) in [
+        ("zsh", "/bin/zsh"),
+        ("bash", "/bin/bash"),
+        ("sh", "/bin/sh"),
+        ("fish", "/opt/homebrew/bin/fish"),
+        ("fish", "/usr/local/bin/fish"),
+        ("bash", "/opt/homebrew/bin/bash"),
+        ("bash", "/usr/local/bin/bash"),
+        ("zsh", "/opt/homebrew/bin/zsh"),
+        ("zsh", "/usr/local/bin/zsh"),
+        ("nu", "/opt/homebrew/bin/nu"),
+        ("nu", "/usr/local/bin/nu"),
+    ] {
+        if !Path::new(path).exists() {
+            continue;
+        }
+        if shells.iter().any(|s| s.path == path) {
+            continue;
+        }
+        shells.push(LocalShellInfo {
+            id: format!("local:{name}"),
+            name: name.into(),
+            path: path.into(),
+            args: vec![],
+            is_default: false,
+        });
+    }
+    // which 补充
+    for name in ["zsh", "bash", "fish", "sh", "nu"] {
+        if let Ok(p) = which(name) {
+            let path = p.to_string_lossy().to_string();
+            if shells.iter().any(|s| s.path == path) {
+                continue;
+            }
             shells.push(LocalShellInfo {
                 id: format!("local:{name}"),
-                name: name.to_string(),
-                path: path.to_string(),
-                args: vec![],
-                is_default: false,
-            });
-        } else if let Ok(p) = which(name) {
-            shells.push(LocalShellInfo {
-                id: format!("local:{name}"),
-                name: name.to_string(),
-                path: p.to_string_lossy().to_string(),
+                name: name.into(),
+                path,
                 args: vec![],
                 is_default: false,
             });
@@ -349,48 +393,66 @@ pub async fn exec_with_shell(
                 .find(|w| w[0] == "-d")
                 .map(|w| w[1].as_str())
                 .unwrap_or(distro);
-            tokio::process::Command::new("wsl.exe")
-                .args(["-d", distro, "--", "sh", "-lc", command])
-                .output()
-                .await
-                .context("wsl exec")?
+            let mut cmd = tokio::process::Command::new("wsl.exe");
+            cmd.args(["-d", distro, "--", "sh", "-lc", command]);
+            crate::win_process::hide_console_tokio(&mut cmd);
+            cmd.output().await.context("wsl exec")?
         } else if shell_id == "local:git-bash"
             || shell_path.to_ascii_lowercase().contains("bash.exe")
         {
-            tokio::process::Command::new(shell_path)
-                .args(["-lc", command])
-                .output()
-                .await
-                .context("git bash exec")?
+            let mut cmd = tokio::process::Command::new(shell_path);
+            cmd.args(["-lc", command]);
+            crate::win_process::hide_console_tokio(&mut cmd);
+            cmd.output().await.context("git bash exec")?
         } else if shell_id.contains("powershell")
             || shell_id.contains("pwsh")
             || shell_path.to_ascii_lowercase().contains("powershell")
             || shell_path.to_ascii_lowercase().contains("pwsh")
         {
-            tokio::process::Command::new(shell_path)
-                .args(["-NoProfile", "-NonInteractive", "-Command", command])
-                .output()
-                .await
-                .context("powershell exec")?
+            let mut cmd = tokio::process::Command::new(shell_path);
+            cmd.args(["-NoProfile", "-NonInteractive", "-Command", command]);
+            crate::win_process::hide_console_tokio(&mut cmd);
+            cmd.output().await.context("powershell exec")?
         } else {
-            tokio::process::Command::new("cmd.exe")
-                .args(["/C", command])
-                .output()
-                .await
-                .context("cmd exec")?
+            let mut cmd = tokio::process::Command::new("cmd.exe");
+            cmd.args(["/C", command]);
+            crate::win_process::hide_console_tokio(&mut cmd);
+            cmd.output().await.context("cmd exec")?
         };
         Ok(output_to_string(output))
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = (shell_id, shell_path, shell_args);
-        let output = tokio::process::Command::new("sh")
-            .args(["-lc", command])
+        let _ = (shell_id, shell_args);
+        let output = unix_exec_command(shell_path, command)
             .output()
             .await
             .context("local exec")?;
         Ok(output_to_string(output))
     }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn unix_exec_command(shell_path: &str, command: &str) -> tokio::process::Command {
+    let path_l = shell_path.to_ascii_lowercase();
+    let mut cmd = if path_l.ends_with("/fish") || path_l.ends_with("\\fish") {
+        let mut c = tokio::process::Command::new(shell_path);
+        c.args(["-lc", command]);
+        c
+    } else if !shell_path.is_empty() && Path::new(shell_path).exists() {
+        // bash / zsh / sh / nu：统一 -lc
+        let mut c = tokio::process::Command::new(shell_path);
+        c.args(["-lc", command]);
+        c
+    } else {
+        let mut c = tokio::process::Command::new("sh");
+        c.args(["-lc", command]);
+        c
+    };
+    if let Ok(home) = std::env::var("HOME") {
+        cmd.current_dir(home);
+    }
+    cmd
 }
 
 /// 流式本地 exec；cancel 后杀掉子进程。stdout/stderr 合并推送。
@@ -436,8 +498,10 @@ pub async fn exec_stream_with_shell(
             c.args(["/C", command]);
             c
         };
+        crate::win_process::hide_console_tokio(&mut cmd);
         cmd.stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
+            .stdin(std::process::Stdio::null())
             .kill_on_drop(true)
             .spawn()
             .context("spawn local stream exec")?
@@ -445,9 +509,8 @@ pub async fn exec_stream_with_shell(
 
     #[cfg(not(target_os = "windows"))]
     let mut child = {
-        let _ = (shell_id, shell_path, shell_args);
-        tokio::process::Command::new("sh")
-            .args(["-lc", command])
+        let _ = (shell_id, shell_args);
+        unix_exec_command(shell_path, command)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .kill_on_drop(true)

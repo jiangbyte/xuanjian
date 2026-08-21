@@ -6,8 +6,6 @@
  * 需传入当前会话 sessionId / kind，供各子面板探测远程或本地环境。
  */
 
-import { useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
 import {
   Activity,
   Clock3,
@@ -17,20 +15,22 @@ import {
   Network,
   Zap,
 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
-import { TerminalSidePanel } from "@/features/terminal/TerminalSidePanel";
-import { ScriptsPane } from "@/features/terminal/panes/ScriptsPane";
+import { DockerPane } from "@/features/terminal/panes/DockerPane";
 import { HistoryPane } from "@/features/terminal/panes/HistoryPane";
 import { OverviewPane } from "@/features/terminal/panes/OverviewPane";
-import { ProcessesPane } from "@/features/terminal/panes/ProcessesPane";
 import { PortsPane } from "@/features/terminal/panes/PortsPane";
-import { DockerPane } from "@/features/terminal/panes/DockerPane";
+import { ProcessesPane } from "@/features/terminal/panes/ProcessesPane";
+import { ScriptsPane } from "@/features/terminal/panes/ScriptsPane";
+import { TerminalSidePanel } from "@/features/terminal/TerminalSidePanel";
+import { cn } from "@/lib/utils";
 
 /** 左侧边栏可选标签 ID */
 export type LeftTabId =

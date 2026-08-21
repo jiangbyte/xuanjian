@@ -1,25 +1,32 @@
 /**
  * @file 会话侧探测命令与环境判定
  * @author Charlie
- * @description 根据本地 / SSH / WSL / PowerShell 等判定探测环境，
- * 并导出主机指标、进程、端口、杀进程等命令字符串（Unix / Windows）。
+ * @description 按 Windows / Linux / macOS（Darwin）导出主机指标、进程、端口命令。
+ * SSH / WSL / Git Bash 默认按 Linux 探测；本机按宿主 OS 选择。
  */
 
-/** 会话侧探测命令运行时环境 */
-export type ProbeEnv = "unix" | "windows";
+import { getHostOs, type HostOs } from "@/lib/platform";
+
+/** 探测命令运行时环境 */
+export type ProbeEnv = "linux" | "darwin" | "windows";
 
 /**
- * 根据会话 kind 与 shellId 推断探测环境。
- * SSH / WSL / Git Bash 视为 unix；cmd / PowerShell 视为 windows。
+ * 根据会话 kind、shellId 与本机 OS 推断探测环境。
+ * SSH / WSL / Git Bash → linux；cmd/PowerShell → windows；本机 Unix → darwin|linux。
  */
 export function resolveProbeEnv(
   kind: "local" | "ssh" | null | undefined,
   shellId?: string | null,
+  hostOs: HostOs = getHostOs(),
 ): ProbeEnv {
-  if (kind === "ssh") return "unix";
-  if (!shellId) return "unix";
-  if (shellId.startsWith("local:wsl:")) return "unix";
-  if (shellId === "local:git-bash") return "unix";
+  if (kind === "ssh") return "linux";
+  if (!shellId) {
+    if (hostOs === "macos") return "darwin";
+    if (hostOs === "windows") return "windows";
+    return "linux";
+  }
+  if (shellId.startsWith("local:wsl:")) return "linux";
+  if (shellId === "local:git-bash") return "linux";
   if (
     shellId === "local:cmd" ||
     shellId === "local:powershell" ||
@@ -29,22 +36,22 @@ export function resolveProbeEnv(
   ) {
     return "windows";
   }
-  return "unix";
+  if (hostOs === "macos") return "darwin";
+  if (hostOs === "windows") return "windows";
+  return "linux";
 }
 
 // —— 指标采集命令 ——
 
 /** Linux / WSL / Git Bash / SSH：输出带标签的指标行 */
-export const UNIX_METRICS_CMD = [
+export const LINUX_METRICS_CMD = [
   "printf 'HOST '; hostname 2>/dev/null || uname -n 2>/dev/null",
   "printf '\\nIP '; (hostname -I 2>/dev/null || true) | awk '{print $1,$2,$3}'",
   "printf '\\nLOAD '; cat /proc/loadavg 2>/dev/null",
   "printf '\\nUP '; cat /proc/uptime 2>/dev/null",
-  // 优先 /proc/meminfo（无 free 时也可用）；数值单位为字节
   "printf '\\nMEM '; awk '/MemTotal:/{t=$2*1024} /MemAvailable:/{a=$2*1024} /MemFree:/{f=$2*1024} END{if(t>0){avail=(a>0?a:f); print t, (t>avail?t-avail:0), avail}else{print 0,0,0}}' /proc/meminfo 2>/dev/null",
   "printf '\\nSWAP '; awk '/SwapTotal:/{t=$2*1024} /SwapFree:/{f=$2*1024} END{print t+0, (t>f?t-f:0)+0}' /proc/meminfo 2>/dev/null",
   "printf '\\nCPU '; nproc 2>/dev/null; grep '^cpu ' /proc/stat 2>/dev/null",
-  // POSIX 1K 块 + 挂载点
   "printf '\\nDF '; (df -Pk / 2>/dev/null || df -kP / 2>/dev/null || df -k / 2>/dev/null) | awk 'NR==2{print $2,$3,$6,$1}'",
   "printf '\\nNET '; awk 'NR>2 && $1 !~ /lo:/{gsub(\":\",\"\",$1); rx+=$2; tx+=$10} END{print rx+0,tx+0}' /proc/net/dev 2>/dev/null",
   "printf '\\nUNAME '; uname -sr 2>/dev/null",
@@ -52,7 +59,27 @@ export const UNIX_METRICS_CMD = [
   "printf '\\n'",
 ].join("; ");
 
-/** PowerShell：带标签的指标行，兼容 OverviewPane 解析 */
+/** macOS：同标签输出，避免依赖 /proc、nproc、GNU ps */
+export const DARWIN_METRICS_CMD = [
+  "printf 'HOST '; hostname 2>/dev/null || scutil --get ComputerName 2>/dev/null || uname -n",
+  "printf '\\nIP '; (ipconfig getifaddr en0 2>/dev/null; ipconfig getifaddr en1 2>/dev/null; ifconfig 2>/dev/null | awk '/inet / && $2 != \"127.0.0.1\" {print $2}' | head -n 3) | tr '\\n' ' '",
+  "printf '\\nLOAD '; sysctl -n vm.loadavg 2>/dev/null | tr -d '{}'",
+  "printf '\\nUP '; boot=$(sysctl -n kern.boottime 2>/dev/null | awk -F'[ ,]' '{print $4}'); now=$(date +%s); echo $((now-boot))",
+  "printf '\\nMEM '; pagesize=$(pagesize 2>/dev/null || echo 4096); total=$(sysctl -n hw.memsize 2>/dev/null || echo 0); free_pages=$(vm_stat 2>/dev/null | awk '/Pages free/ {gsub(/\\./,\"\",$3); print $3+0}'); inactive=$(vm_stat 2>/dev/null | awk '/Pages inactive/ {gsub(/\\./,\"\",$3); print $3+0}'); speculative=$(vm_stat 2>/dev/null | awk '/Pages speculative/ {gsub(/\\./,\"\",$3); print $3+0}'); avail=$(( (free_pages+inactive+speculative)*pagesize )); used=$(( total>avail ? total-avail : 0 )); printf '%s %s %s' \"$total\" \"$used\" \"$avail\"",
+  "printf '\\nSWAP '; sysctl -n vm.swapusage 2>/dev/null | awk '{for(i=1;i<=NF;i++){if($i==\"total\"){t=$(i+1)} if($i==\"used\"){u=$(i+1)}} gsub(/M/,\"\",t); gsub(/M/,\"\",u); printf \"%d %d\", t*1024*1024+0, u*1024*1024+0}'",
+  "printf '\\nCPUPCT '; top -l 1 -n 0 2>/dev/null | awk -F'[ %]+' '/CPU usage/ {idle=$(NF-1)+0; printf \"%.1f\", 100-idle; exit}'",
+  "printf '\\nCPU '; sysctl -n hw.ncpu 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 1; echo 'cpu 0 0 0 0'",
+  "printf '\\nDF '; (df -k / 2>/dev/null | awk 'NR==2{print $2,$3,$9,$1}')",
+  "printf '\\nNET '; netstat -ibn 2>/dev/null | awk 'NR>1 && $1 !~ /lo/ {rx+=$7; tx+=$10} END{print rx+0,tx+0}'",
+  "printf '\\nUNAME '; uname -sr 2>/dev/null",
+  "printf '\\nTOP '; ps -axo pid,user,%cpu,%mem,comm -r 2>/dev/null | awk 'NR>1 && NR<=6{printf \"%s\\t%s\\t%s\\t%s\\t%s\\n\", $1,$2,$3,$4,$5}'",
+  "printf '\\n'",
+].join("; ");
+
+/** @deprecated 使用 LINUX_METRICS_CMD */
+export const UNIX_METRICS_CMD = LINUX_METRICS_CMD;
+
+/** PowerShell：带标签的指标行 */
 export const WIN_METRICS_CMD = [
   "$ErrorActionPreference='SilentlyContinue'",
   "$os=Get-CimInstance Win32_OperatingSystem",
@@ -86,11 +113,17 @@ export const WIN_METRICS_CMD = [
   'foreach($p in $top){ $mem=[math]::Round(($p.WorkingSetSize/[math]::Max($memTotal,1))*100,1); Write-Output ("TOP {0}`t-`t0.0`t{1}`t{2}" -f $p.ProcessId,$mem,$p.Name) }',
 ].join("; ");
 
-/** Unix 进程列表命令 */
-export const UNIX_PS_CMD =
+/** Linux 进程列表 */
+export const LINUX_PS_CMD =
   "ps -eo pid,user,%cpu,%mem,args --sort=-%cpu 2>/dev/null | head -n 120";
 
-/** Windows 进程列表（PowerShell）命令 */
+/** macOS BSD ps（无 --sort） */
+export const DARWIN_PS_CMD =
+  "ps -axo pid,user,%cpu,%mem,command -r 2>/dev/null | head -n 120";
+
+/** @deprecated */
+export const UNIX_PS_CMD = LINUX_PS_CMD;
+
 export const WIN_PS_CMD = [
   "$ErrorActionPreference='SilentlyContinue'",
   "$os=Get-CimInstance Win32_OperatingSystem",
@@ -108,32 +141,36 @@ export const WIN_PS_CMD = [
   "}",
 ].join("; ");
 
-/** Unix 监听端口命令 */
-export const UNIX_SS_CMD =
+export const LINUX_SS_CMD =
   "ss -lntupH 2>/dev/null || ss -lntup 2>/dev/null || netstat -lntup 2>/dev/null";
 
-/** Windows 监听端口命令 */
+/** macOS：lsof 监听端口（ss 通常不可用） */
+export const DARWIN_SS_CMD =
+  "lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null; echo '---'; lsof -nP -iUDP 2>/dev/null | head -n 200";
+
+/** @deprecated */
+export const UNIX_SS_CMD = LINUX_SS_CMD;
+
 export const WIN_SS_CMD = "netstat -ano";
 
-/** 按环境返回主机指标采集命令 */
 export function metricsCmd(env: ProbeEnv, shellId?: string | null) {
-  if (env === "unix") return UNIX_METRICS_CMD;
+  if (env === "linux") return LINUX_METRICS_CMD;
+  if (env === "darwin") return DARWIN_METRICS_CMD;
   return wrapForWindowsShell(shellId, WIN_METRICS_CMD);
 }
 
-/** 按环境返回进程列表命令 */
 export function processesCmd(env: ProbeEnv, shellId?: string | null) {
-  if (env === "unix") return UNIX_PS_CMD;
+  if (env === "linux") return LINUX_PS_CMD;
+  if (env === "darwin") return DARWIN_PS_CMD;
   return wrapForWindowsShell(shellId, WIN_PS_CMD);
 }
 
-/** 按环境返回端口列表命令 */
 export function portsCmd(env: ProbeEnv, _shellId?: string | null) {
-  // netstat 在 cmd 与 PowerShell 中均可使用
-  return env === "windows" ? WIN_SS_CMD : UNIX_SS_CMD;
+  if (env === "windows") return WIN_SS_CMD;
+  if (env === "darwin") return DARWIN_SS_CMD;
+  return LINUX_SS_CMD;
 }
 
-/** 生成杀进程命令（Windows taskkill / Unix kill） */
 export function killCmd(env: ProbeEnv, pid: string, sig: "TERM" | "KILL") {
   const safe = pid.replace(/[^\d]/g, "");
   if (!safe) throw new Error("invalid pid");
@@ -145,7 +182,6 @@ export function killCmd(env: ProbeEnv, pid: string, sig: "TERM" | "KILL") {
   return `kill -${sig} ${safe}`;
 }
 
-/** CMD 会话需要显式拉起 powershell 才能跑富脚本 */
 function wrapForWindowsShell(
   shellId: string | null | undefined,
   script: string,

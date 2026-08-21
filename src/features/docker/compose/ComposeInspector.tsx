@@ -4,9 +4,9 @@
  * @description 编辑选中的 service / network / volume 字段。
  */
 
-import { useTranslation } from "react-i18next";
 import { Plus, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -205,7 +205,9 @@ export function ComposeInspector({
     };
     return (
       <div className="space-y-3 overflow-auto p-3">
-        <div className="text-sm font-semibold">{t("docker.network")}</div>
+        <div className="text-sm font-semibold tracking-tight">
+          {t("docker.network")}
+        </div>
         <Field label={t("docker.name")}>
           <Input
             className="h-8"
@@ -223,7 +225,7 @@ export function ComposeInspector({
             onChange={(e) => setNet({ driver: e.target.value || undefined })}
           />
         </Field>
-        <label className="flex items-center gap-2 text-xs">
+        <label className="flex min-h-7 items-center gap-2 text-xs text-foreground">
           <Checkbox
             checked={Boolean(net.external)}
             onCheckedChange={(c) => setNet({ external: c === true })}
@@ -248,7 +250,9 @@ export function ComposeInspector({
     };
     return (
       <div className="space-y-3 overflow-auto p-3">
-        <div className="text-sm font-semibold">{t("docker.volume")}</div>
+        <div className="text-sm font-semibold tracking-tight">
+          {t("docker.volume")}
+        </div>
         <Field label={t("docker.name")}>
           <Input
             className="h-8"
@@ -266,7 +270,7 @@ export function ComposeInspector({
             onChange={(e) => setVol({ driver: e.target.value || undefined })}
           />
         </Field>
-        <label className="flex items-center gap-2 text-xs">
+        <label className="flex min-h-7 items-center gap-2 text-xs text-foreground">
           <Checkbox
             checked={Boolean(vol.external)}
             onCheckedChange={(c) => setVol({ external: c === true })}
@@ -286,7 +290,9 @@ export function ComposeInspector({
 
   return (
     <div className="h-full space-y-4 overflow-auto p-3">
-      <div className="text-sm font-semibold">{t("docker.service")}</div>
+      <div className="text-sm font-semibold tracking-tight">
+        {t("docker.service")}
+      </div>
 
       <Section title={t("docker.sectionBasic")}>
         <Field label={t("docker.name")}>
@@ -355,7 +361,7 @@ export function ComposeInspector({
       </Section>
 
       <Section title={t("docker.sectionBuild")}>
-        <label className="flex items-center gap-2 text-xs">
+        <label className="flex min-h-7 items-center gap-2 text-xs text-foreground">
           <Checkbox
             checked={Boolean(svc.build)}
             onCheckedChange={(c) =>
@@ -490,7 +496,10 @@ export function ComposeInspector({
               ["tty", "tty"],
             ] as const
           ).map(([key, labelKey]) => (
-            <label key={key} className="flex items-center gap-2 text-xs">
+            <label
+              key={key}
+              className="flex min-h-7 items-center gap-2 text-xs text-foreground"
+            >
               <Checkbox
                 checked={Boolean(svc[key])}
                 onCheckedChange={(c) => set({ [key]: c === true || undefined })}
@@ -555,7 +564,7 @@ export function ComposeInspector({
       </Section>
 
       <Section title={t("docker.healthcheck")}>
-        <label className="flex items-center gap-2 text-xs">
+        <label className="flex min-h-7 items-center gap-2 text-xs text-foreground">
           <Checkbox
             checked={Boolean(svc.healthcheck)}
             onCheckedChange={(c) =>
@@ -563,7 +572,10 @@ export function ComposeInspector({
                 healthcheck:
                   c === true
                     ? {
-                        test: ["CMD-SHELL", "curl -f http://localhost/ || exit 1"],
+                        test: [
+                          "CMD-SHELL",
+                          "curl -f http://localhost/ || exit 1",
+                        ],
                         interval: "30s",
                         timeout: "5s",
                         retries: 3,
@@ -708,31 +720,21 @@ export function ComposeInspector({
   );
 }
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="space-y-1">
-      <Label className="text-[11px] text-muted-foreground">{label}</Label>
+      <Label className="text-xs font-normal text-muted-foreground">
+        {label}
+      </Label>
       {children}
     </div>
   );
 }
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="space-y-2 border-b border-border pb-3 last:border-0">
-      <div className="text-xs font-medium text-foreground">{title}</div>
+      <div className="text-xs font-semibold text-foreground">{title}</div>
       {children}
     </div>
   );
@@ -937,7 +939,10 @@ function NetworkAttachEditor({
   return (
     <div className="space-y-1">
       {networkNames.map((n) => (
-        <label key={n} className="flex items-center gap-2 text-xs">
+        <label
+          key={n}
+          className="flex min-h-7 items-center gap-2 text-xs text-foreground"
+        >
           <Checkbox
             checked={value.includes(n)}
             onCheckedChange={(c) => {
@@ -949,7 +954,7 @@ function NetworkAttachEditor({
         </label>
       ))}
       {!networkNames.length ? (
-        <div className="text-[11px] text-muted-foreground">—</div>
+        <div className="text-xs text-muted-foreground">—</div>
       ) : null}
     </div>
   );
@@ -967,7 +972,10 @@ function DependsEditor({
   return (
     <div className="space-y-1">
       {serviceNames.map((n) => (
-        <label key={n} className="flex items-center gap-2 text-xs">
+        <label
+          key={n}
+          className="flex min-h-7 items-center gap-2 text-xs text-foreground"
+        >
           <Checkbox
             checked={value.includes(n)}
             onCheckedChange={(c) => {
@@ -979,7 +987,7 @@ function DependsEditor({
         </label>
       ))}
       {!serviceNames.length ? (
-        <div className="text-[11px] text-muted-foreground">—</div>
+        <div className="text-xs text-muted-foreground">—</div>
       ) : null}
     </div>
   );

@@ -4,11 +4,27 @@
  * @description 管理脚本包与片段：搜索、编辑（Monaco）、新建/删除，并打开运行目标弹窗。
  */
 
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
-import { dialogs } from "@/lib/dialogs";
+import {
+  Loader2,
+  Play,
+  Plus,
+  Search,
+  Terminal,
+  Upload,
+  Zap,
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { FolderPlus, Loader2, Play, Plus, Search, Terminal, Zap } from "lucide-react";
-import Editor from "@monaco-editor/react";
+import { toast } from "sonner";
+import { openContextMenu, useContextMenu } from "@/components/ContextMenu";
+import Editor from "@/components/MonacoEditor";
+import {
+  SectionAsideHeader,
+  SectionNavItem,
+  sectionAsideClass,
+  sectionAsideIconBtnClass,
+  sectionAsideListClass,
+} from "@/components/SectionSidebar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -20,12 +36,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -35,7 +51,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
+import { RunScriptTargetModal } from "@/features/scripts/RunScriptTargetModal";
+import { BatchActionBar } from "@/features/share/BatchActionBar";
 import {
   createScript,
   createScriptPackage,
@@ -49,10 +66,12 @@ import {
   ScriptRow,
   updateScript,
 } from "@/lib/db";
+import { dialogs } from "@/lib/dialogs";
 import { previewScriptBody } from "@/lib/scriptVars";
-import { openContextMenu, useContextMenu } from "@/components/ContextMenu";
+import { selectionCard, selectionCheckboxClass } from "@/lib/selection";
+import { exportToFile, formatImportToast, importFromFile } from "@/lib/share";
+import { cn } from "@/lib/utils";
 import { resolveMonacoTheme, useSettingsStore } from "@/stores/settings";
-import { RunScriptTargetModal } from "@/features/scripts/RunScriptTargetModal";
 
 const NONE = "none";
 
@@ -67,6 +86,7 @@ export function ScriptsConsole() {
   const [editing, setEditing] = useState<ScriptRow | null>(null);
   const [creating, setCreating] = useState(false);
   const [runTarget, setRunTarget] = useState<ScriptRow | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const reload = async () => {
     setPackages(await listScriptPackages());
@@ -131,6 +151,23 @@ export function ScriptsConsole() {
             />
           </InputGroup>
           <Button
+            variant="outline"
+            onClick={() => {
+              importFromFile()
+                .then(async (r) => {
+                  if (!r) return;
+                  await reload();
+                  toast.success(
+                    `${t("share.importDone")} (${formatImportToast(r)})`,
+                  );
+                })
+                .catch((e) => toast.error(String(e)));
+            }}
+          >
+            <Upload size={14} />
+            {t("share.import")}
+          </Button>
+          <Button
             onClick={() => {
               setCreating(true);
               setEditing(null);
@@ -139,44 +176,93 @@ export function ScriptsConsole() {
             <Plus size={14} />
             {t("scripts.newSnippet")}
           </Button>
-          <Button
-            variant="outline"
-            onClick={async () => {
-              const name = await dialogs.prompt(t("scripts.packageNamePrompt"), {
-                title: t("scripts.newPackage"),
-              });
-              if (!name?.trim()) return;
-              try {
-                const id = await createScriptPackage(name);
-                await reload();
-                setPackageId(id);
-              } catch (e) {
-                await dialogs.alert(String(e));
-              }
-            }}
-          >
-            <FolderPlus size={14} />
-            {t("scripts.newPackage")}
-          </Button>
         </div>
       </div>
 
+      <BatchActionBar
+        selectedCount={selectedIds.size}
+        totalCount={filtered.length}
+        onSelectAll={() => setSelectedIds(new Set(filtered.map((s) => s.id)))}
+        onClear={() => setSelectedIds(new Set())}
+        onExport={() => {
+          const ids = [...selectedIds];
+          if (!ids.length) {
+            toast.error(t("batch.needSelect"));
+            return;
+          }
+          exportToFile(
+            {
+              sections: {
+                hosts: false,
+                scripts: true,
+                notes: false,
+                dockerProjects: false,
+              },
+              scriptIds: ids,
+            },
+            "xuanjian-scripts.json",
+          )
+            .then((ok) => {
+              if (ok) toast.success(t("share.exportDone"));
+            })
+            .catch((e) => toast.error(String(e)));
+        }}
+        onDelete={() => {
+          const ids = [...selectedIds];
+          if (!ids.length) return;
+          void (async () => {
+            if (
+              !(await dialogs.confirm(
+                t("batch.deleteConfirm", { count: ids.length }),
+                { danger: true },
+              ))
+            )
+              return;
+            for (const id of ids) await deleteScript(id);
+            setSelectedIds(new Set());
+            setEditing(null);
+            await reload();
+          })();
+        }}
+      />
+
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-52 shrink-0 flex-col border-r border-border bg-background">
-          <div className="px-3 py-3">
-            <span className="text-xs font-medium uppercase text-muted-foreground">
-              {t("scripts.packages")}
-            </span>
-          </div>
-          <div className="flex flex-1 flex-col gap-1 overflow-y-auto px-2 pb-2">
-            <SidebarNavItem
+        <aside className={sectionAsideClass}>
+          <SectionAsideHeader title={t("scripts.packages")}>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className={sectionAsideIconBtnClass}
+              title={t("scripts.newPackage")}
+              aria-label={t("scripts.newPackage")}
+              onClick={async () => {
+                const name = await dialogs.prompt(
+                  t("scripts.packageNamePrompt"),
+                  { title: t("scripts.newPackage") },
+                );
+                if (!name?.trim()) return;
+                try {
+                  const id = await createScriptPackage(name);
+                  await reload();
+                  setPackageId(id);
+                } catch (e) {
+                  await dialogs.alert(String(e));
+                }
+              }}
+            >
+              <Plus size={14} />
+            </Button>
+          </SectionAsideHeader>
+          <div className={sectionAsideListClass}>
+            <SectionNavItem
               active={packageId == null}
               label={t("scripts.allPackages")}
               count={scripts.length}
               onClick={() => setPackageId(null)}
             />
             {packages.map((p) => (
-              <SidebarNavItem
+              <SectionNavItem
                 key={p.id}
                 active={packageId === p.id}
                 label={p.name}
@@ -223,7 +309,7 @@ export function ScriptsConsole() {
                 }
               />
             ))}
-            <SidebarNavItem
+            <SectionNavItem
               active={packageId === -1}
               label={t("scripts.ungrouped")}
               count={packageCounts.get("none") || 0}
@@ -238,15 +324,20 @@ export function ScriptsConsole() {
             {t("scripts.count", { count: filtered.length })}
           </p>
           {filtered.length === 0 ? (
-            <div className="flex items-center justify-center rounded-lg border border-dashed border-border p-10">
-              <span className="text-muted-foreground">{t("scripts.empty")}</span>
+            <div className="flex items-center justify-center rounded-md border border-dashed border-border p-10">
+              <span className="text-muted-foreground">
+                {t("scripts.empty")}
+              </span>
             </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {filtered.map((script) => (
                 <Card
                   key={script.id}
-                  className="cursor-pointer p-4"
+                  className={cn(
+                    "cursor-pointer p-4 transition-colors",
+                    selectionCard(selectedIds.has(script.id)),
+                  )}
                   onClick={() => {
                     setEditing(script);
                     setCreating(false);
@@ -273,9 +364,12 @@ export function ScriptsConsole() {
                         danger: true,
                         onClick: async () => {
                           if (
-                            !(await dialogs.confirm(t("scripts.deleteConfirm"), {
-                              danger: true,
-                            }))
+                            !(await dialogs.confirm(
+                              t("scripts.deleteConfirm"),
+                              {
+                                danger: true,
+                              },
+                            ))
                           )
                             return;
                           await deleteScript(script.id);
@@ -286,6 +380,22 @@ export function ScriptsConsole() {
                   }
                 >
                   <div className="flex items-start gap-3">
+                    <Checkbox
+                      className={cn(
+                        "mt-1",
+                        selectedIds.has(script.id) && selectionCheckboxClass,
+                      )}
+                      checked={selectedIds.has(script.id)}
+                      onCheckedChange={(v) => {
+                        setSelectedIds((prev) => {
+                          const next = new Set(prev);
+                          if (v === true) next.add(script.id);
+                          else next.delete(script.id);
+                          return next;
+                        });
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
                     <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
                       <Zap size={18} />
                     </div>
@@ -392,39 +502,6 @@ export function ScriptsConsole() {
   );
 }
 
-function SidebarNavItem({
-  active,
-  label,
-  count,
-  onClick,
-  onContextMenu,
-}: {
-  active: boolean;
-  label: string;
-  count: number;
-  onClick: () => void;
-  onContextMenu?: (e: MouseEvent) => void;
-}) {
-  return (
-    <button
-      type="button"
-      className={cn(
-        "flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
-        active
-          ? "bg-accent text-accent-foreground"
-          : "text-foreground hover:bg-muted",
-      )}
-      onClick={onClick}
-      onContextMenu={onContextMenu}
-    >
-      <span className="truncate">{label}</span>
-      <Badge variant="secondary" className="shrink-0">
-        {count}
-      </Badge>
-    </button>
-  );
-}
-
 /** 新建 / 编辑脚本片段的模态编辑器 */
 function ScriptEditorModal({
   initial,
@@ -496,9 +573,7 @@ function ScriptEditorModal({
               <Label className="mb-1.5 block">{t("scripts.package")}</Label>
               <Select
                 value={packageId === "" ? NONE : String(packageId)}
-                onValueChange={(v) =>
-                  setPackageId(v === NONE ? "" : Number(v))
-                }
+                onValueChange={(v) => setPackageId(v === NONE ? "" : Number(v))}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue />

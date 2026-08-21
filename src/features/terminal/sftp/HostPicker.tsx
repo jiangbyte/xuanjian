@@ -4,7 +4,9 @@
  * @description 为左右侧选择本地文件系统或已保存主机作为传输端点。
  */
 
+import { Computer, Server } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -13,11 +15,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { useTranslation } from "react-i18next";
-import { Computer, Server } from "lucide-react";
-import type { HostRow } from "@/lib/db";
-import type { Side } from "@/features/terminal/sftp/types";
 import { hostTitle } from "@/features/terminal/sftp/pathUtils";
+import type { Side } from "@/features/terminal/sftp/types";
+import type { HostRow } from "@/lib/db";
 
 const rowClass =
   "flex w-full items-start gap-2 rounded-md p-2 text-left hover:bg-accent";
@@ -56,7 +56,9 @@ export function HostPicker({
           <DialogTitle className="flex items-center gap-2">
             <span>{t("terminal.pickHost")}</span>
             <Badge variant="secondary">
-              {side === "left" ? t("terminal.leftSide") : t("terminal.rightSide")}
+              {side === "left"
+                ? t("terminal.leftSide")
+                : t("terminal.rightSide")}
             </Badge>
           </DialogTitle>
         </DialogHeader>
@@ -74,7 +76,11 @@ export function HostPicker({
                 {t("terminal.localMachine")}
               </div>
               <div className="space-y-0.5">
-                <button type="button" className={rowClass} onClick={onPickLocal}>
+                <button
+                  type="button"
+                  className={rowClass}
+                  onClick={onPickLocal}
+                >
                   <div className="min-w-0 w-full space-y-0.5">
                     <div className="flex items-center gap-2 text-sm font-semibold">
                       <Computer size={14} />

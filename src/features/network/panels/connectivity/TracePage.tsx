@@ -8,11 +8,11 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { api, onNetworkToolOutput } from "@/lib/tauri";
 import { addNetworkHistory } from "@/lib/db";
+import { api, onNetworkToolOutput } from "@/lib/tauri";
 import { RawLog } from "./RawLog";
 import { TraceViz } from "./TraceViz";
-import { upsertTraceHop, type TraceHop } from "./types";
+import { type TraceHop, upsertTraceHop } from "./types";
 
 /** Traceroute：原文 + hop 路径，状态与其它模式隔离 */
 export function TracePage() {
@@ -109,7 +109,12 @@ export function TracePage() {
             {t("network.stop")}
           </Button>
         )}
-        <Button className="h-8" variant="outline" onClick={clear} disabled={busy}>
+        <Button
+          className="h-8"
+          variant="outline"
+          onClick={clear}
+          disabled={busy}
+        >
           {t("network.clear")}
         </Button>
       </div>

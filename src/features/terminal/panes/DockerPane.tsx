@@ -6,9 +6,6 @@
  * 仅允许安全字符作为 docker 引用参数，防止命令注入。
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { dialogs } from "@/lib/dialogs";
-import { useTranslation } from "react-i18next";
 import {
   Copy,
   Loader2,
@@ -21,9 +18,12 @@ import {
   Terminal,
   Trash2,
 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
+import { FloatingWindow } from "@/components/FloatingWindow";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FloatingWindow } from "@/components/FloatingWindow";
 import {
   InputGroup,
   InputGroupAddon,
@@ -34,9 +34,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { api, onSessionExecOutput } from "@/lib/tauri";
 import { clipboardWriteText } from "@/lib/clipboard";
-import { toast } from "sonner";
+import { dialogs } from "@/lib/dialogs";
+import { api, onSessionExecOutput } from "@/lib/tauri";
 
 const LOG_MAX_LINES = 1000;
 
@@ -595,7 +595,10 @@ export function DockerPane({
             </div>
           ) : (
             filteredContainers.map((c) => (
-              <div key={c.id} className="flex flex-col gap-1 rounded-md px-2 py-1.5 hover:bg-accent">
+              <div
+                key={c.id}
+                className="flex flex-col gap-1 rounded-md px-2 py-1.5 hover:bg-accent"
+              >
                 <div className="flex w-full min-w-0 items-start gap-2">
                   <div
                     className={`mt-1.5 size-2 shrink-0 rounded-full ${
@@ -607,13 +610,19 @@ export function DockerPane({
                     }`}
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium truncate" title={c.name}>
+                    <div
+                      className="text-sm font-medium truncate"
+                      title={c.name}
+                    >
                       {c.name || shortId(c.id)}
                     </div>
-                    <div className="text-xs text-muted-foreground truncate" title={c.image}>
+                    <div
+                      className="text-xs text-muted-foreground truncate"
+                      title={c.image}
+                    >
                       {c.image}
                     </div>
-                    <div className="text-[10px] text-muted-foreground truncate">
+                    <div className="text-xs text-muted-foreground truncate">
                       {shortId(c.id)}
                       {c.ports ? ` · ${c.ports}` : ""}
                     </div>
@@ -668,7 +677,9 @@ export function DockerPane({
                           <Play size={13} />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>{t("termTab.dockerStart")}</TooltipContent>
+                      <TooltipContent>
+                        {t("termTab.dockerStart")}
+                      </TooltipContent>
                     </Tooltip>
                   )}
                   <Tooltip>
@@ -686,7 +697,9 @@ export function DockerPane({
                         <RotateCcw size={13} />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>{t("termTab.dockerRestart")}</TooltipContent>
+                    <TooltipContent>
+                      {t("termTab.dockerRestart")}
+                    </TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -781,7 +794,7 @@ export function DockerPane({
                     <div className="text-xs text-muted-foreground truncate">
                       {img.tag} · {shortId(img.id)}
                     </div>
-                    <div className="text-[10px] text-muted-foreground">
+                    <div className="text-xs text-muted-foreground">
                       {img.size}
                       {img.created ? ` · ${img.created}` : ""}
                     </div>
@@ -834,13 +847,18 @@ export function DockerPane({
             filteredNetworks.map((n) => {
               const builtin = ["bridge", "host", "none"].includes(n.name);
               return (
-                <div key={n.id} className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-accent">
+                <div
+                  key={n.id}
+                  className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
+                >
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium truncate">{n.name}</div>
                     <div className="text-xs text-muted-foreground">
                       {n.driver} · {n.scope}
                     </div>
-                    <div className="text-[10px] text-muted-foreground">{shortId(n.id)}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {shortId(n.id)}
+                    </div>
                     {builtin && (
                       <div className="mt-1.5">
                         <Badge variant="secondary">
@@ -876,14 +894,18 @@ export function DockerPane({
                             runDocker(
                               n.id,
                               `docker network rm ${safeArg(n.id)}`,
-                              t("termTab.dockerRmNetworkConfirm", { name: n.name }),
+                              t("termTab.dockerRmNetworkConfirm", {
+                                name: n.name,
+                              }),
                             )
                           }
                         >
                           <Trash2 size={13} />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>{t("termTab.dockerRemove")}</TooltipContent>
+                      <TooltipContent>
+                        {t("termTab.dockerRemove")}
+                      </TooltipContent>
                     </Tooltip>
                   )}
                 </div>
@@ -896,14 +918,20 @@ export function DockerPane({
           </div>
         ) : (
           filteredVolumes.map((v) => (
-            <div key={v.name} className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-accent">
+            <div
+              key={v.name}
+              className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
+            >
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium truncate">{v.name}</div>
                 <div className="text-xs text-muted-foreground">
                   {v.driver} · {v.scope}
                 </div>
                 {v.mountpoint ? (
-                  <div className="text-[10px] text-muted-foreground truncate" title={v.mountpoint}>
+                  <div
+                    className="text-xs text-muted-foreground truncate"
+                    title={v.mountpoint}
+                  >
                     {v.mountpoint}
                   </div>
                 ) : null}
@@ -959,7 +987,7 @@ export function DockerPane({
           headerActions={
             <div className="flex items-center gap-1">
               {logsLive ? (
-                <Badge variant="secondary" className="text-[10px]">
+                <Badge variant="secondary" className="text-xs">
                   {t("termTab.dockerLogsLive")}
                 </Badge>
               ) : null}
@@ -968,9 +996,7 @@ export function DockerPane({
                 size="xs"
                 variant="outline"
                 disabled={logsLoading}
-                onClick={() =>
-                  void startLogsStream(logsView.id, logsView.name)
-                }
+                onClick={() => void startLogsStream(logsView.id, logsView.name)}
               >
                 {logsLoading ? (
                   <Loader2 size={12} className="animate-spin" />

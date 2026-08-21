@@ -4,8 +4,6 @@
  * @description CIDR 概览 + 归属检测 + 画布主导的子网规划；右侧检查器操作选中节点。
  */
 
-import { useEffect, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
 import {
   Copy,
   Eraser,
@@ -13,6 +11,8 @@ import {
   RotateCcw,
   SplitSquareVertical,
 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,6 +39,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { clipboardWriteText } from "@/lib/clipboard";
 import {
   buildRootNode,
   calcCidr,
@@ -46,10 +47,9 @@ import {
   flattenTree,
   ipInNetwork,
   leafNodes,
-  splitNode,
   type SubnetTreeNode,
+  splitNode,
 } from "@/lib/ipcalc";
-import { clipboardWriteText } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 import { SubnetTreeFlow } from "./SubnetTreeFlow";
 
@@ -65,7 +65,7 @@ function findInTree(root: SubnetTreeNode, id: string): SubnetTreeNode | null {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 rounded-md bg-muted/40 px-3 py-2.5">
-      <div className="text-[11px] text-muted-foreground">{label}</div>
+      <div className="text-xs text-muted-foreground">{label}</div>
       <div className="mt-0.5 truncate font-mono text-sm" title={value}>
         {value}
       </div>
@@ -84,9 +84,7 @@ export function IpCalcPanel() {
   const [tree, setTree] = useState<SubnetTreeNode | null>(() =>
     buildRootNode("192.168.1.0/24"),
   );
-  const [selectedId, setSelectedId] = useState<string | null>(
-    "192.168.1.0/24",
-  );
+  const [selectedId, setSelectedId] = useState<string | null>("192.168.1.0/24");
   const [splitError, setSplitError] = useState<string | null>(null);
 
   const result = useMemo(() => calcCidr(cidr, mask || undefined), [cidr, mask]);
@@ -237,10 +235,20 @@ export function IpCalcPanel() {
               onChange={(e) => setCheckIp(e.target.value)}
             />
             <Badge
-              variant={inNet ? "default" : inNet === false ? "destructive" : "secondary"}
+              variant={
+                inNet
+                  ? "default"
+                  : inNet === false
+                    ? "destructive"
+                    : "secondary"
+              }
               className="h-8 shrink-0 rounded-md px-2.5"
             >
-              {inNet == null ? "—" : inNet ? t("network.ipIn") : t("network.ipOut")}
+              {inNet == null
+                ? "—"
+                : inNet
+                  ? t("network.ipIn")
+                  : t("network.ipOut")}
             </Badge>
           </div>
         </div>
@@ -256,7 +264,10 @@ export function IpCalcPanel() {
           <Stat label={t("network.wildcard")} value={result.wildcard} />
           <Stat label={t("network.firstHost")} value={result.firstHost} />
           <Stat label={t("network.lastHost")} value={result.lastHost} />
-          <Stat label={t("network.hostCount")} value={String(result.hostCount)} />
+          <Stat
+            label={t("network.hostCount")}
+            value={String(result.hostCount)}
+          />
           <Stat label="CIDR" value={result.cidr} />
         </div>
       )}
@@ -268,7 +279,12 @@ export function IpCalcPanel() {
         orientation="horizontal"
         className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border"
       >
-        <ResizablePanel id="ipcalc-canvas" defaultSize={70} minSize={45} className="min-w-0">
+        <ResizablePanel
+          id="ipcalc-canvas"
+          defaultSize={70}
+          minSize={45}
+          className="min-w-0"
+        >
           <div className="flex h-full min-h-0 flex-col">
             <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
               <div className="text-sm font-medium">{t("network.treeView")}</div>
@@ -331,7 +347,7 @@ export function IpCalcPanel() {
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+                  <div className="rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
                     {t("network.selectNodeHint")}
                   </div>
                 )}

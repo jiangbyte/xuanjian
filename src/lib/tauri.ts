@@ -52,6 +52,7 @@ export type SshConnectParams = {
 /** 面向前端的 Tauri 命令集合 */
 export const api = {
   listLocalShells: () => invoke<LocalShellInfo[]>("list_local_shells"),
+  hostPlatform: () => invoke<string>("host_platform"),
   localShellOpen: (shellId: string, cols?: number, rows?: number) =>
     invoke<SessionInfo>("local_shell_open", { shellId, cols, rows }),
   sshConnect: (params: SshConnectParams) =>
@@ -115,6 +116,12 @@ export const api = {
   sftpChmod: (sessionId: string, path: string, mode: number) =>
     invoke("sftp_chmod", { sessionId, path, mode }),
   encryptSecret: (plain: string) => invoke<string>("encrypt_secret", { plain }),
+  decryptSecret: (encoded: string) =>
+    invoke<string>("decrypt_secret", { encoded }),
+  getDataDirInfo: () => invoke<DataDirInfo>("get_data_dir_info"),
+  getDbUrl: () => invoke<string>("get_db_url"),
+  setDataDir: (path: string | null, copyData: boolean) =>
+    invoke<DataDirInfo>("set_data_dir", { path, copyData }),
   getHomeDir: () => invoke<string>("get_home_dir"),
   getTempDir: () => invoke<string>("get_temp_dir"),
   listLocalDir: (path: string) =>
@@ -194,6 +201,15 @@ export type SpeedServerInfo = {
   uploadPath: string;
 };
 
+export type DataDirInfo = {
+  dataDir: string;
+  isCustom: boolean;
+  dbPath: string;
+  keyPath: string;
+  defaultDir: string;
+  dbUrl: string;
+};
+
 export type NetInterface = { name: string; addrs: string[] };
 export type TcpProbeResult = {
   host: string;
@@ -260,7 +276,13 @@ export function onTransferProgress(
 
 /** 监听网络工具（ping / traceroute 等）流式输出 */
 export type NetworkToolEvent = {
-  kind: "ping_sample" | "ping_summary" | "trace_hop" | "meta" | "error" | string;
+  kind:
+    | "ping_sample"
+    | "ping_summary"
+    | "trace_hop"
+    | "meta"
+    | "error"
+    | string;
   seq?: number;
   rttMs?: number | null;
   lost?: boolean;
@@ -303,7 +325,14 @@ export type SpeedTestResult = {
 
 export type SpeedProgress = {
   jobId: string;
-  phase: "latency" | "warmup" | "download" | "upload" | "done" | "error" | string;
+  phase:
+    | "latency"
+    | "warmup"
+    | "download"
+    | "upload"
+    | "done"
+    | "error"
+    | string;
   latencyMs?: number;
   bytesDone?: number;
   bytesTotal?: number;

@@ -3,6 +3,7 @@
  * @author Charlie
  * @description Tauri 桌面端前端构建入口配置：React + Tailwind，开发端口 1420，
  * 并配置 `@` 路径别名指向 `src/`。忽略对 `src-tauri` 的监听以免与 Cargo 冲突。
+ * 生产构建拆分重型 vendor，缩短 WebView 首屏解析时间。
  */
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,5 +37,37 @@ export default defineConfig(async () => ({
     watch: {
       ignored: ["**/src-tauri/**"],
     },
+  },
+  build: {
+    target: "esnext",
+    cssCodeSplit: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (!id.includes("node_modules")) return;
+          if (id.includes("monaco-editor") || id.includes("@monaco-editor")) {
+            return "monaco";
+          }
+          if (
+            id.includes("@uiw/react-md") ||
+            id.includes("@uiw/react-markdown")
+          ) {
+            return "markdown";
+          }
+          if (id.includes("recharts") || id.includes("d3-")) {
+            return "recharts";
+          }
+          if (id.includes("@xyflow") || id.includes("@dagrejs")) {
+            return "flow";
+          }
+          if (id.includes("@xterm")) {
+            return "xterm";
+          }
+        },
+      },
+    },
+  },
+  worker: {
+    format: "es" as const,
   },
 }));
