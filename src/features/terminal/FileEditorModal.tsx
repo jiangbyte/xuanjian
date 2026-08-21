@@ -11,6 +11,7 @@ import { FloatingWindow } from "@/components/FloatingWindow";
 import { useTranslation } from "react-i18next";
 import Editor from "@monaco-editor/react";
 import { useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { resolveMonacoTheme, useSettingsStore } from "@/stores/settings";
 
 /** 根据路径扩展名推断 Monaco language id */
@@ -138,22 +139,22 @@ export function FileEditorModal({
       initialHeight={640}
       bodyClassName="flex flex-col overflow-hidden p-0"
       headerActions={
-        <button
-          className="btn btn-sm btn-primary"
+        <Button
+          size="xs"
           disabled={saving || loading || !!error}
           onClick={save}
         >
           {saving ? t("terminal.saving") : t("terminal.save")}
-        </button>
+        </Button>
       }
     >
       {error && (
-        <div className="border-b border-[var(--border)] px-3 py-2 text-xs text-danger">
+        <div className="border-b border-border px-3 py-2 text-xs text-destructive">
           {error}
         </div>
       )}
       {loading ? (
-        <div className="flex flex-1 items-center justify-center text-sm muted">
+        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
           {t("terminal.loading")}
         </div>
       ) : (

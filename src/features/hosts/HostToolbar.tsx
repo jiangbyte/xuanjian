@@ -6,9 +6,23 @@
 
 import { useTranslation } from "react-i18next";
 import { Plus, Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { HostRow, TagRow } from "@/lib/db";
-import { Select } from "@/components/Select";
 import type { SshTarget } from "@/lib/sshTarget";
+
+const ALL_TAGS = "__all__";
 
 /** 主机控制台顶部搜索 / 筛选 / 排序工具栏 */
 export function HostToolbar({
@@ -49,15 +63,16 @@ export function HostToolbar({
   const { t } = useTranslation();
 
   return (
-    <div className="border-b border-[var(--border)] px-5 py-4">
-      <div className="flex items-center gap-3">
-        <div className="field-icon-wrap flex-1">
-          <Search size={14} className="field-icon" />
-          <input
-            className="field"
+    <div className="border-b border-border px-5 py-4">
+      <div className="flex flex-nowrap items-center gap-3">
+        <InputGroup className="min-w-0 flex-1">
+          <InputGroupAddon>
+            <Search size={14} />
+          </InputGroupAddon>
+          <InputGroupInput
             placeholder={t("hosts.search")}
             value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
+            onChange={(e) => onSearchChange(e.currentTarget.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
@@ -67,58 +82,56 @@ export function HostToolbar({
               }
             }}
           />
-        </div>
+        </InputGroup>
         <Select
-          className="select-inline"
-          aria-label={t("hosts.allTags")}
-          value={tag ?? ""}
-          options={[
-            { value: "", label: t("hosts.allTags") },
-            ...tags.map((tagItem) => ({
-              value: tagItem.name,
-              label: tagItem.name,
-            })),
-          ]}
-          onChange={(v) => onTagChange(v || null)}
-        />
-        <Select
-          className="select-inline"
-          aria-label={t("hosts.sortName")}
-          value={sortBy}
-          options={[
-            { value: "name", label: t("hosts.sortName") },
-            { value: "recent", label: t("hosts.sortRecent") },
-            { value: "status", label: t("hosts.sortStatus") },
-          ]}
-          onChange={(v) => onSortChange(v as "name" | "recent" | "status")}
-        />
-        <button className="btn btn-primary" onClick={onNewHost}>
+          value={tag ?? ALL_TAGS}
+          onValueChange={(v) => onTagChange(v === ALL_TAGS ? null : v)}
+        >
+          <SelectTrigger className="w-[140px]" aria-label={t("hosts.allTags")}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL_TAGS}>{t("hosts.allTags")}</SelectItem>
+            {tags.map((tagItem) => (
+              <SelectItem key={tagItem.name} value={tagItem.name}>
+                {tagItem.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={sortBy} onValueChange={(v) => onSortChange(v as typeof sortBy)}>
+          <SelectTrigger className="w-[140px]" aria-label={t("hosts.sortName")}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="name">{t("hosts.sortName")}</SelectItem>
+            <SelectItem value="recent">{t("hosts.sortRecent")}</SelectItem>
+            <SelectItem value="status">{t("hosts.sortStatus")}</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button onClick={onNewHost}>
           <Plus size={14} />
           {t("hosts.newHost")}
-        </button>
+        </Button>
       </div>
 
       {(sshTarget || search.trim()) && (
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-          <span className="muted">{t("hosts.searchHint")}</span>
+          <span className="text-muted-foreground">{t("hosts.searchHint")}</span>
           {matchedByTarget && (
-            <button
-              className="btn btn-sm btn-primary"
-              onClick={() => onConnectMatched(matchedByTarget)}
-            >
+            <Button size="xs" onClick={() => onConnectMatched(matchedByTarget)}>
               {t("hosts.searchConnect", { target: targetLabel })}
-            </button>
+            </Button>
           )}
           {sshTarget && !matchedByTarget && (
-            <button
-              className="btn btn-sm btn-primary"
-              onClick={() => onCreateFromTarget(sshTarget)}
-            >
+            <Button size="xs" onClick={() => onCreateFromTarget(sshTarget)}>
               {t("hosts.searchSave")} · {targetLabel}
-            </button>
+            </Button>
           )}
           {search.trim() && filteredCount === 0 && !sshTarget && (
-            <span className="muted">{t("hosts.searchNoMatch")}</span>
+            <span className="text-muted-foreground">
+              {t("hosts.searchNoMatch")}
+            </span>
           )}
         </div>
       )}

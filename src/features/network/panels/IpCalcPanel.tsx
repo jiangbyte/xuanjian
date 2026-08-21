@@ -1,18 +1,77 @@
 /**
  * @file IP / 子网计算器面板
  * @author Charlie
- * @description 展示 CIDR 网段详情、IP 归属检测，以及按数量 / 主机数划分的子网表。
+ * @description CIDR 概览 + 归属检测 + 画布主导的子网规划；右侧检查器操作选中节点。
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  allocateByHosts,
+  Copy,
+  Eraser,
+  MoreHorizontal,
+  RotateCcw,
+  SplitSquareVertical,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  buildRootNode,
   calcCidr,
+  clearChildren,
+  flattenTree,
   ipInNetwork,
-  splitSubnets,
+  leafNodes,
+  splitNode,
+  type SubnetTreeNode,
 } from "@/lib/ipcalc";
 import { clipboardWriteText } from "@/lib/clipboard";
+import { cn } from "@/lib/utils";
+import { SubnetTreeFlow } from "./SubnetTreeFlow";
+
+function findInTree(root: SubnetTreeNode, id: string): SubnetTreeNode | null {
+  if (root.id === id) return root;
+  for (const c of root.children) {
+    const found = findInTree(c, id);
+    if (found) return found;
+  }
+  return null;
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-md bg-muted/40 px-3 py-2.5">
+      <div className="text-[11px] text-muted-foreground">{label}</div>
+      <div className="mt-0.5 truncate font-mono text-sm" title={value}>
+        {value}
+      </div>
+    </div>
+  );
+}
 
 /** IPv4 CIDR 与子网划分面板 */
 export function IpCalcPanel() {
@@ -22,7 +81,13 @@ export function IpCalcPanel() {
   const [checkIp, setCheckIp] = useState("192.168.1.10");
   const [subnetCount, setSubnetCount] = useState(4);
   const [hostsPer, setHostsPer] = useState(50);
-  const [rows, setRows] = useState<ReturnType<typeof splitSubnets>>([]);
+  const [tree, setTree] = useState<SubnetTreeNode | null>(() =>
+    buildRootNode("192.168.1.0/24"),
+  );
+  const [selectedId, setSelectedId] = useState<string | null>(
+    "192.168.1.0/24",
+  );
+  const [splitError, setSplitError] = useState<string | null>(null);
 
   const result = useMemo(() => calcCidr(cidr, mask || undefined), [cidr, mask]);
   const inNet = useMemo(
@@ -30,9 +95,107 @@ export function IpCalcPanel() {
     [checkIp, result.cidr],
   );
 
-  const copyTable = async () => {
+  useEffect(() => {
+    if (result.error) {
+      setTree(null);
+      setSelectedId(null);
+      return;
+    }
+    const root = buildRootNode(result.cidr);
+    setTree(root);
+    setSelectedId(root?.id ?? null);
+    setSplitError(null);
+  }, [result.cidr, result.error]);
+
+  const selected = useMemo(
+    () => (tree && selectedId ? findInTree(tree, selectedId) : null),
+    [tree, selectedId],
+  );
+
+  const tableRows = useMemo(() => {
+    if (!tree) return [];
+    return leafNodes(tree).map((n, i) => ({
+      index: i + 1,
+      cidr: n.cidr,
+      network: n.network,
+      broadcast: n.broadcast,
+      firstHost: n.firstHost,
+      lastHost: n.lastHost,
+      hostCount: n.hostCount,
+    }));
+  }, [tree]);
+
+  const splitByCount = () => {
+    if (!tree || !selectedId) return;
+    const { tree: next, error } = splitNode(tree, selectedId, {
+      mode: "count",
+      count: subnetCount,
+    });
+    if (error) {
+      setSplitError(error);
+      return;
+    }
+    setSplitError(null);
+    setTree(next);
+  };
+
+  const splitByHosts = () => {
+    if (!tree || !selectedId) return;
+    const { tree: next, error } = splitNode(tree, selectedId, {
+      mode: "hosts",
+      hostsPer,
+    });
+    if (error) {
+      setSplitError(error);
+      return;
+    }
+    setSplitError(null);
+    setTree(next);
+  };
+
+  const resetTree = () => {
+    if (result.error) return;
+    const root = buildRootNode(result.cidr);
+    setTree(root);
+    setSelectedId(root?.id ?? null);
+    setSplitError(null);
+  };
+
+  const clearSelectedChildren = () => {
+    if (!tree || !selectedId) return;
+    setTree(clearChildren(tree, selectedId));
+    setSplitError(null);
+  };
+
+  const copySelected = async () => {
+    if (!selected) return;
+    await clipboardWriteText(
+      [
+        selected.cidr,
+        selected.network,
+        selected.broadcast,
+        selected.firstHost,
+        selected.lastHost,
+        String(selected.hostCount),
+      ].join(","),
+    );
+  };
+
+  const copyTreeCsv = async () => {
+    if (!tree) return;
+    const header = "cidr,network,broadcast,first,last,hosts,prefix";
+    const body = flattenTree(tree)
+      .map(
+        (n) =>
+          `${n.cidr},${n.network},${n.broadcast},${n.firstHost},${n.lastHost},${n.hostCount},${n.prefix}`,
+      )
+      .join("\n");
+    await clipboardWriteText(`${header}\n${body}`);
+  };
+
+  const copyLeafTable = async () => {
     const header = "index,cidr,network,broadcast,first,last,hosts";
-    const body = rows
+    const body = tableRows
       .map(
         (r) =>
           `${r.index},${r.cidr},${r.network},${r.broadcast},${r.firstHost},${r.lastHost},${r.hostCount}`,
@@ -42,143 +205,310 @@ export function IpCalcPanel() {
   };
 
   return (
-    <div className="h-full overflow-y-auto p-4">
-      <div className="mx-auto flex max-w-3xl flex-col gap-4">
-        <div className="grid gap-2 sm:grid-cols-2">
-          <label className="flex flex-col gap-1 text-xs muted">
-            {t("network.cidr")}
-            <input
-              className="field"
-              value={cidr}
-              onChange={(e) => setCidr(e.target.value)}
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs muted">
-            {t("network.mask")}
-            <input
-              className="field"
-              value={mask}
-              placeholder="255.255.255.0"
-              onChange={(e) => setMask(e.target.value)}
-            />
-          </label>
+    <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden p-5">
+      {/* —— 输入条 —— */}
+      <div className="flex shrink-0 flex-wrap items-end gap-3">
+        <div className="min-w-[200px] flex-[1.2] space-y-1.5">
+          <Label htmlFor="ipcalc-cidr">{t("network.cidr")}</Label>
+          <Input
+            id="ipcalc-cidr"
+            className="h-8 font-mono"
+            value={cidr}
+            onChange={(e) => setCidr(e.target.value)}
+          />
         </div>
-        {result.error ? (
-          <div className="text-sm text-[var(--danger)]">{result.error}</div>
-        ) : (
-          <div className="grid grid-cols-2 gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-3 text-sm sm:grid-cols-3">
-            {[
-              [t("network.networkAddr"), result.network],
-              [t("network.broadcast"), result.broadcast],
-              [t("network.mask"), result.mask],
-              [t("network.wildcard"), result.wildcard],
-              [t("network.firstHost"), result.firstHost],
-              [t("network.lastHost"), result.lastHost],
-              [t("network.hostCount"), String(result.hostCount)],
-              ["CIDR", result.cidr],
-            ].map(([k, v]) => (
-              <div key={String(k)}>
-                <div className="text-[11px] muted">{k}</div>
-                <div className="font-mono text-sm">{v}</div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-end gap-2">
-          <label className="flex min-w-[160px] flex-1 flex-col gap-1 text-xs muted">
-            {t("network.containsIp")}
-            <input
-              className="field"
+        <div className="min-w-[160px] flex-1 space-y-1.5">
+          <Label htmlFor="ipcalc-mask">{t("network.mask")}</Label>
+          <Input
+            id="ipcalc-mask"
+            className="h-8 font-mono"
+            value={mask}
+            placeholder="255.255.255.0"
+            onChange={(e) => setMask(e.target.value)}
+          />
+        </div>
+        <div className="min-w-[160px] flex-1 space-y-1.5">
+          <Label htmlFor="ipcalc-check">{t("network.containsIp")}</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              id="ipcalc-check"
+              className="h-8 font-mono"
               value={checkIp}
               onChange={(e) => setCheckIp(e.target.value)}
             />
-          </label>
-          <div className="chip">
-            {inNet == null ? "—" : inNet ? "✓ in" : "✗ out"}
-          </div>
-        </div>
-
-        <div className="border-t border-[var(--border)] pt-3">
-          <div className="mb-2 text-sm font-medium">
-            {t("network.splitSubnets")}
-          </div>
-          <div className="flex flex-wrap items-end gap-2">
-            <label className="flex w-32 flex-col gap-1 text-xs muted">
-              {t("network.subnetCount")}
-              <input
-                className="field"
-                type="number"
-                min={1}
-                value={subnetCount}
-                onChange={(e) => setSubnetCount(Number(e.target.value) || 1)}
-              />
-            </label>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => setRows(splitSubnets(result.cidr, subnetCount))}
+            <Badge
+              variant={inNet ? "default" : inNet === false ? "destructive" : "secondary"}
+              className="h-8 shrink-0 rounded-md px-2.5"
             >
-              {t("network.allocate")}
-            </button>
-            <label className="flex w-36 flex-col gap-1 text-xs muted">
-              {t("network.hostsPerSubnet")}
-              <input
-                className="field"
-                type="number"
-                min={1}
-                value={hostsPer}
-                onChange={(e) => setHostsPer(Number(e.target.value) || 1)}
-              />
-            </label>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setRows(allocateByHosts(result.cidr, hostsPer))}
-            >
-              {t("network.allocate")}
-            </button>
-            {rows.length > 0 && (
-              <button type="button" className="btn" onClick={copyTable}>
-                {t("network.copy")}
-              </button>
-            )}
+              {inNet == null ? "—" : inNet ? t("network.ipIn") : t("network.ipOut")}
+            </Badge>
           </div>
-          {rows.length > 0 && (
-            <div className="mt-3 overflow-x-auto rounded-lg border border-[var(--border)]">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[var(--bg-elevated)] muted">
-                  <tr>
-                    <th className="px-2 py-1.5">#</th>
-                    <th className="px-2 py-1.5">CIDR</th>
-                    <th className="px-2 py-1.5">{t("network.networkAddr")}</th>
-                    <th className="px-2 py-1.5">{t("network.broadcast")}</th>
-                    <th className="px-2 py-1.5">{t("network.firstHost")}</th>
-                    <th className="px-2 py-1.5">{t("network.lastHost")}</th>
-                    <th className="px-2 py-1.5">{t("network.hostCount")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr
-                      key={r.index}
-                      className="border-t border-[var(--border)]"
-                    >
-                      <td className="px-2 py-1">{r.index}</td>
-                      <td className="px-2 py-1 font-mono">{r.cidr}</td>
-                      <td className="px-2 py-1 font-mono">{r.network}</td>
-                      <td className="px-2 py-1 font-mono">{r.broadcast}</td>
-                      <td className="px-2 py-1 font-mono">{r.firstHost}</td>
-                      <td className="px-2 py-1 font-mono">{r.lastHost}</td>
-                      <td className="px-2 py-1">{r.hostCount}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
       </div>
+
+      {result.error ? (
+        <div className="shrink-0 text-sm text-destructive">{result.error}</div>
+      ) : (
+        <div className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-4">
+          <Stat label={t("network.networkAddr")} value={result.network} />
+          <Stat label={t("network.broadcast")} value={result.broadcast} />
+          <Stat label={t("network.mask")} value={result.mask} />
+          <Stat label={t("network.wildcard")} value={result.wildcard} />
+          <Stat label={t("network.firstHost")} value={result.firstHost} />
+          <Stat label={t("network.lastHost")} value={result.lastHost} />
+          <Stat label={t("network.hostCount")} value={String(result.hostCount)} />
+          <Stat label="CIDR" value={result.cidr} />
+        </div>
+      )}
+
+      <Separator className="shrink-0" />
+
+      {/* —— 画布 + 检查器 —— */}
+      <ResizablePanelGroup
+        orientation="horizontal"
+        className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border"
+      >
+        <ResizablePanel id="ipcalc-canvas" defaultSize={70} minSize={45} className="min-w-0">
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
+              <div className="text-sm font-medium">{t("network.treeView")}</div>
+              <p className="text-xs text-muted-foreground">
+                {t("network.treeHint")}
+              </p>
+            </div>
+            <div className="min-h-0 flex-1 bg-background">
+              {tree ? (
+                <SubnetTreeFlow
+                  tree={tree}
+                  selectedId={selectedId}
+                  onSelect={setSelectedId}
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                  —
+                </div>
+              )}
+            </div>
+          </div>
+        </ResizablePanel>
+
+        <ResizableHandle />
+
+        <ResizablePanel
+          id="ipcalc-inspector"
+          defaultSize={30}
+          minSize={260}
+          maxSize={420}
+          className="min-w-0 bg-card"
+        >
+          <ScrollArea className="h-full">
+            <div className="flex flex-col gap-5 p-4">
+              <div>
+                <div className="mb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  {t("network.selectedNode")}
+                </div>
+                {selected ? (
+                  <div className="space-y-3 rounded-lg border border-border bg-background p-3">
+                    <div className="font-mono text-base font-semibold">
+                      {selected.cidr}
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                      {(
+                        [
+                          [t("network.networkAddr"), selected.network],
+                          [t("network.broadcast"), selected.broadcast],
+                          [t("network.firstHost"), selected.firstHost],
+                          [t("network.lastHost"), selected.lastHost],
+                          [t("network.hostsLabel"), String(selected.hostCount)],
+                          ["Prefix", `/${selected.prefix}`],
+                        ] as const
+                      ).map(([k, v]) => (
+                        <div key={String(k)} className="min-w-0">
+                          <div className="text-muted-foreground">{k}</div>
+                          <div className="truncate font-mono">{v}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+                    {t("network.selectNodeHint")}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div className="mb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  {t("network.splitSubnets")}
+                </div>
+                <Tabs defaultValue="count" className="gap-3">
+                  <TabsList className="grid h-8 w-full grid-cols-2">
+                    <TabsTrigger value="count" className="text-xs">
+                      {t("network.splitByCount")}
+                    </TabsTrigger>
+                    <TabsTrigger value="hosts" className="text-xs">
+                      {t("network.splitByHosts")}
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="count" className="space-y-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="ipcalc-subnet-count">
+                        {t("network.subnetCount")}
+                      </Label>
+                      <Input
+                        id="ipcalc-subnet-count"
+                        className="h-8"
+                        type="number"
+                        min={1}
+                        value={subnetCount}
+                        onChange={(e) =>
+                          setSubnetCount(Number(e.target.value) || 1)
+                        }
+                      />
+                    </div>
+                    <Button
+                      className="h-8 w-full"
+                      disabled={!tree || !selectedId}
+                      onClick={splitByCount}
+                    >
+                      <SplitSquareVertical size={14} />
+                      {t("network.splitSelected")}
+                    </Button>
+                  </TabsContent>
+                  <TabsContent value="hosts" className="space-y-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="ipcalc-hosts-per">
+                        {t("network.hostsPerSubnet")}
+                      </Label>
+                      <Input
+                        id="ipcalc-hosts-per"
+                        className="h-8"
+                        type="number"
+                        min={1}
+                        value={hostsPer}
+                        onChange={(e) =>
+                          setHostsPer(Number(e.target.value) || 1)
+                        }
+                      />
+                    </div>
+                    <Button
+                      className="h-8 w-full"
+                      disabled={!tree || !selectedId}
+                      onClick={splitByHosts}
+                    >
+                      <SplitSquareVertical size={14} />
+                      {t("network.splitSelected")}
+                    </Button>
+                  </TabsContent>
+                </Tabs>
+                {splitError && (
+                  <p className="mt-2 text-xs text-destructive">{splitError}</p>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                  onClick={resetTree}
+                >
+                  <RotateCcw size={14} />
+                  {t("network.resetTree")}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                  disabled={!selected?.children.length}
+                  onClick={clearSelectedChildren}
+                >
+                  <Eraser size={14} />
+                  {t("network.clearChildren")}
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-8">
+                      <Copy size={14} />
+                      {t("network.copy")}
+                      <MoreHorizontal size={14} />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      disabled={!selected}
+                      onSelect={() => {
+                        void copySelected();
+                      }}
+                    >
+                      {t("network.copySelected")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      disabled={!tree}
+                      onSelect={() => {
+                        void copyTreeCsv();
+                      }}
+                    >
+                      {t("network.copyTree")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      disabled={tableRows.length === 0}
+                      onSelect={() => {
+                        void copyLeafTable();
+                      }}
+                    >
+                      {t("network.copyLeaves")}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              {tableRows.length > 1 && (
+                <div>
+                  <div className="mb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                    {t("network.leafList")}
+                  </div>
+                  <div className="overflow-hidden rounded-lg border border-border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-10">#</TableHead>
+                          <TableHead>CIDR</TableHead>
+                          <TableHead className="w-16 text-right">
+                            {t("network.hostCount")}
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {tableRows.map((r) => (
+                          <TableRow
+                            key={r.cidr}
+                            className={cn(
+                              "cursor-pointer",
+                              selectedId === r.cidr && "bg-accent",
+                            )}
+                            onClick={() => setSelectedId(r.cidr)}
+                          >
+                            <TableCell className="text-muted-foreground">
+                              {r.index}
+                            </TableCell>
+                            <TableCell className="font-mono text-xs">
+                              {r.cidr}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {r.hostCount}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }

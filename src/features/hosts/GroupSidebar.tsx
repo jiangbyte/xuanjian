@@ -4,8 +4,12 @@
  * @description 分组列表、右键菜单与新建分组入口。
  */
 
+import type { MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   createGroup,
   deleteGroup,
@@ -14,7 +18,7 @@ import {
   GroupRow,
 } from "@/lib/db";
 import { openContextMenu, useContextMenu } from "@/components/ContextMenu";
-import { useDialog } from "@/components/Dialog";
+import { dialogs } from "@/lib/dialogs";
 
 /** 主机分组侧边栏 */
 export function GroupSidebar({
@@ -34,31 +38,27 @@ export function GroupSidebar({
 }) {
   const { t } = useTranslation();
   const { open: openMenu } = useContextMenu();
-  const dialog = useDialog();
 
   return (
-    <aside className="flex w-52 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg)]">
+    <aside className="flex w-52 shrink-0 flex-col border-r border-border bg-background">
       <div className="px-3 py-3">
-        <span className="text-xs font-medium uppercase tracking-wide muted">
+        <span className="text-xs font-medium uppercase text-muted-foreground">
           {t("hosts.groupsTitle")}
         </span>
       </div>
-      <div className="side-nav flex-1 overflow-y-auto px-2 pb-3">
-        <button
-          type="button"
-          className={`list-row ${groupId == null ? "is-active" : ""}`}
+      <div className="flex flex-1 flex-col gap-1 overflow-y-auto px-2 pb-2">
+        <SidebarNavItem
+          active={groupId == null}
+          label={t("hosts.allGroups")}
+          count={hostTotal}
           onClick={() => onSelectGroup(null)}
-        >
-          <span className="min-w-0 flex-1 truncate text-left text-sm">
-            {t("hosts.allGroups")}
-          </span>
-          <span className="count-badge">{hostTotal}</span>
-        </button>
+        />
         {groups.map((g, idx) => (
-          <button
+          <SidebarNavItem
             key={g.id}
-            type="button"
-            className={`list-row ${groupId === g.id ? "is-active" : ""}`}
+            active={groupId === g.id}
+            label={g.name}
+            count={groupCounts.get(g.id) || 0}
             onClick={() => onSelectGroup(g.id)}
             onContextMenu={(e) =>
               openContextMenu(e, openMenu, [
@@ -66,7 +66,7 @@ export function GroupSidebar({
                   id: "rename",
                   label: t("hosts.renameGroup"),
                   onClick: async () => {
-                    const name = await dialog.prompt(
+                    const name = await dialogs.prompt(
                       t("hosts.groupNamePrompt"),
                       {
                         title: t("hosts.renameGroup"),
@@ -78,7 +78,7 @@ export function GroupSidebar({
                       await renameGroup(g.id, name);
                       await onReload();
                     } catch (err) {
-                      await dialog.alert(String(err));
+                      await dialogs.alert(String(err));
                     }
                   },
                 },
@@ -107,7 +107,7 @@ export function GroupSidebar({
                   danger: true,
                   onClick: async () => {
                     if (
-                      !(await dialog.confirm(t("hosts.deleteGroupConfirm"), {
+                      !(await dialogs.confirm(t("hosts.deleteGroupConfirm"), {
                         danger: true,
                       }))
                     )
@@ -119,30 +119,22 @@ export function GroupSidebar({
                 },
               ])
             }
-          >
-            <span className="min-w-0 flex-1 truncate text-left text-sm">
-              {g.name}
-            </span>
-            <span className="count-badge">{groupCounts.get(g.id) || 0}</span>
-          </button>
+          />
         ))}
-        <button
-          type="button"
-          className={`list-row ${groupId === -1 ? "is-active" : ""}`}
+        <SidebarNavItem
+          active={groupId === -1}
+          label={t("hosts.ungrouped")}
+          count={groupCounts.get("none") || 0}
           onClick={() => onSelectGroup(-1)}
-        >
-          <span className="min-w-0 flex-1 truncate text-left text-sm">
-            {t("hosts.ungrouped")}
-          </span>
-          <span className="count-badge">{groupCounts.get("none") || 0}</span>
-        </button>
+        />
       </div>
-      <div className="border-t border-[var(--border)] p-2">
-        <button
-          type="button"
-          className="btn btn-sm w-full"
+      <div className="border-t border-border p-2">
+        <Button
+          size="xs"
+          variant="outline"
+          className="w-full"
           onClick={async () => {
-            const name = await dialog.prompt(t("hosts.groupNamePrompt"), {
+            const name = await dialogs.prompt(t("hosts.groupNamePrompt"), {
               title: t("hosts.newGroup"),
             });
             if (!name?.trim()) return;
@@ -151,14 +143,47 @@ export function GroupSidebar({
               await onReload();
               onSelectGroup(id);
             } catch (err) {
-              await dialog.alert(String(err));
+              await dialogs.alert(String(err));
             }
           }}
         >
           <Plus size={13} />
           {t("hosts.newGroup")}
-        </button>
+        </Button>
       </div>
     </aside>
+  );
+}
+
+function SidebarNavItem({
+  active,
+  label,
+  count,
+  onClick,
+  onContextMenu,
+}: {
+  active: boolean;
+  label: string;
+  count: number;
+  onClick: () => void;
+  onContextMenu?: (e: MouseEvent) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        "flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+        active
+          ? "bg-accent text-accent-foreground"
+          : "text-foreground hover:bg-muted",
+      )}
+      onClick={onClick}
+      onContextMenu={onContextMenu}
+    >
+      <span className="truncate">{label}</span>
+      <Badge variant="secondary" className="shrink-0">
+        {count}
+      </Badge>
+    </button>
   );
 }

@@ -5,11 +5,22 @@
  */
 
 import { useMemo, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { useTranslation } from "react-i18next";
-import { Computer, Server, X } from "lucide-react";
+import { Computer, Server } from "lucide-react";
 import type { HostRow } from "@/lib/db";
 import type { Side } from "@/features/terminal/sftp/types";
 import { hostTitle } from "@/features/terminal/sftp/pathUtils";
+
+const rowClass =
+  "flex w-full items-start gap-2 rounded-md p-2 text-left hover:bg-accent";
 
 /** 主机/本机选择浮层 */
 export function HostPicker({
@@ -39,78 +50,76 @@ export function HostPicker({
   }, [hosts, q]);
 
   return (
-    <div
-      className="overlay z-[90] flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <div
-        className="modal-card flex w-full max-w-md flex-col overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 border-b border-[var(--border)] px-3 py-2.5">
-          <input
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <span>{t("terminal.pickHost")}</span>
+            <Badge variant="secondary">
+              {side === "left" ? t("terminal.leftSide") : t("terminal.rightSide")}
+            </Badge>
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <Input
             autoFocus
-            className="field field-sm flex-1"
             placeholder={t("terminal.searchHosts")}
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
-          <span className="chip chip-accent">
-            {side === "left" ? t("terminal.leftSide") : t("terminal.rightSide")}
-          </span>
-          <button className="icon-btn icon-btn-sm" onClick={onClose}>
-            <X size={14} />
-          </button>
-        </div>
-        <div className="max-h-[50vh] overflow-auto px-2 py-2">
-          <section className="menu-section">
-            <div className="menu-section-title">
-              {t("terminal.localMachine")}
-            </div>
-            <div className="menu-list">
-              <button
-                type="button"
-                className="list-row list-row-stack"
-                onClick={onPickLocal}
-              >
-                <span className="list-row-title flex items-center gap-2">
-                  <Computer size={14} />
-                  {t("terminal.localFs")}
-                </span>
-                <span className="list-row-sub">
-                  {t("terminal.browseLocal")}
-                </span>
-              </button>
-            </div>
-          </section>
-          <section className="menu-section">
-            <div className="menu-section-title">{t("terminal.hosts")}</div>
-            <div className="menu-list">
-              {filtered.map((h) => (
-                <button
-                  key={h.id}
-                  type="button"
-                  className="list-row list-row-stack"
-                  onClick={() => onPickHost(h)}
-                >
-                  <span className="list-row-title flex items-center gap-2">
-                    <Server size={14} />
-                    {hostTitle(h)}
-                  </span>
-                  <span className="list-row-sub truncate">
-                    {h.username}@{h.host}
-                  </span>
+          <div className="max-h-[50vh] overflow-auto">
+            <div className="mb-3 space-y-1">
+              <div className="px-2 pt-1 text-xs font-semibold uppercase text-muted-foreground">
+                {t("terminal.localMachine")}
+              </div>
+              <div className="space-y-0.5">
+                <button type="button" className={rowClass} onClick={onPickLocal}>
+                  <div className="min-w-0 w-full space-y-0.5">
+                    <div className="flex items-center gap-2 text-sm font-semibold">
+                      <Computer size={14} />
+                      {t("terminal.localFs")}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {t("terminal.browseLocal")}
+                    </div>
+                  </div>
                 </button>
-              ))}
-              {filtered.length === 0 && (
-                <div className="px-3 py-4 text-center text-xs muted">
-                  {t("hosts.empty")}
-                </div>
-              )}
+              </div>
             </div>
-          </section>
+            <div className="space-y-1">
+              <div className="px-2 pt-1 text-xs font-semibold uppercase text-muted-foreground">
+                {t("terminal.hosts")}
+              </div>
+              <div className="space-y-0.5">
+                {filtered.map((h) => (
+                  <button
+                    key={h.id}
+                    type="button"
+                    className={rowClass}
+                    onClick={() => onPickHost(h)}
+                  >
+                    <div className="min-w-0 w-full space-y-0.5">
+                      <div className="flex items-center gap-2 text-sm font-semibold">
+                        <Server size={14} />
+                        {hostTitle(h)}
+                      </div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {h.username}@{h.host}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+                {filtered.length === 0 && (
+                  <p className="px-3 py-4 text-center text-xs text-muted-foreground">
+                    {t("hosts.empty")}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -5,9 +5,17 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { dialogs } from "@/lib/dialogs";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Monitor, Pin, ScrollText, Search, Server, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import {
   deleteSessionLog,
   listSessionLogs,
@@ -15,7 +23,6 @@ import {
   setSessionLogPinned,
 } from "@/lib/db";
 import { openContextMenu, useContextMenu } from "@/components/ContextMenu";
-import { useDialog } from "@/components/Dialog";
 import { formatBytes, formatLogTimeRange } from "@/features/logs/logExport";
 
 type KindFilter = "all" | "ssh" | "local";
@@ -24,13 +31,14 @@ type KindFilter = "all" | "ssh" | "local";
 export function LogsConsole() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const dialog = useDialog();
   const { open: openMenu } = useContextMenu();
   const [rows, setRows] = useState<SessionLogRow[]>([]);
   const [search, setSearch] = useState("");
   const [kind, setKind] = useState<KindFilter>("all");
 
   const reload = useCallback(async () => {
+    const { reconcileOrphanOpenLogs } = await import("@/lib/sessionRecorder");
+    await reconcileOrphanOpenLogs();
     const list = await listSessionLogs({
       kind: kind === "all" ? null : kind,
       search,
@@ -45,7 +53,7 @@ export function LogsConsole() {
   const filtered = useMemo(() => rows, [rows]);
 
   const onDelete = async (row: SessionLogRow) => {
-    if (!(await dialog.confirm(t("logs.deleteConfirm"), { danger: true }))) {
+    if (!(await dialogs.confirm(t("logs.deleteConfirm"), { danger: true }))) {
       return;
     }
     await deleteSessionLog(row.id);
@@ -54,56 +62,60 @@ export function LogsConsole() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* —— 工具栏：搜索与类型筛选 —— */}
-      <div className="flex flex-wrap items-center gap-3 border-b border-[var(--border)] px-5 py-4">
-        <div className="flex items-center gap-2">
-          <ScrollText size={18} className="text-[var(--accent)]" />
-          <h1 className="text-lg font-semibold">{t("logs.title")}</h1>
-        </div>
-        <div className="field-icon-wrap min-w-[200px] flex-1">
-          <Search size={14} className="field-icon" />
-          <input
-            className="field"
-            placeholder={t("logs.search")}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        <div className="flex gap-1">
-          {(
-            [
-              ["all", t("logs.filterAll")],
-              ["ssh", t("logs.filterSsh")],
-              ["local", t("logs.filterLocal")],
-            ] as const
-          ).map(([k, label]) => (
-            <button
-              key={k}
-              type="button"
-              className={`btn btn-sm ${kind === k ? "btn-primary" : ""}`}
-              onClick={() => setKind(k)}
-            >
-              {label}
-            </button>
-          ))}
+      <div className="border-b border-border px-5 py-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-nowrap items-center gap-2">
+            <ScrollText size={18} className="text-primary" />
+            <h1 className="text-lg font-semibold">{t("logs.title")}</h1>
+          </div>
+          <InputGroup className="min-w-[200px] flex-1">
+            <InputGroupAddon>
+              <Search size={14} />
+            </InputGroupAddon>
+            <InputGroupInput
+              placeholder={t("logs.search")}
+              value={search}
+              onChange={(e) => setSearch(e.currentTarget.value)}
+            />
+          </InputGroup>
+          <div className="flex flex-nowrap gap-1">
+            {(
+              [
+                ["all", t("logs.filterAll")],
+                ["ssh", t("logs.filterSsh")],
+                ["local", t("logs.filterLocal")],
+              ] as const
+            ).map(([k, label]) => (
+              <Button
+                key={k}
+                size="xs"
+                variant={kind === k ? "default" : "outline"}
+                onClick={() => setKind(k)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* —— 日志列表 —— */}
       <div className="min-h-0 flex-1 overflow-auto p-5">
         {filtered.length === 0 ? (
-          <div className="empty-state">{t("logs.empty")}</div>
+          <div className="flex items-center justify-center rounded-lg border border-dashed border-border p-10">
+            <span className="text-muted-foreground">{t("logs.empty")}</span>
+          </div>
         ) : (
-          <div className="space-y-1">
+          <div className="flex flex-col gap-1">
             {filtered.map((row) => {
               const sub =
                 row.kind === "ssh"
                   ? `${row.remote_user || "?"}@${row.remote_host || "?"}`
                   : t("logs.kindLocal");
               return (
-                <div
+                <button
                   key={row.id}
-                  className="list-row cursor-pointer"
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-md p-2 text-left transition-colors hover:bg-muted"
                   onClick={() => navigate(`/logs/${row.id}`)}
                   onContextMenu={(e) =>
                     openContextMenu(e, openMenu, [
@@ -133,7 +145,7 @@ export function LogsConsole() {
                   }
                 >
                   <div className="flex min-w-0 flex-1 items-center gap-3">
-                    <div className="host-avatar shrink-0">
+                    <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
                       {row.kind === "ssh" ? (
                         <Server size={16} />
                       ) : (
@@ -142,37 +154,32 @@ export function LogsConsole() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="truncate font-medium">
-                          {row.title}
-                        </span>
+                        <span className="truncate font-medium">{row.title}</span>
                         {row.pinned ? (
-                          <Pin
-                            size={12}
-                            className="shrink-0 text-[var(--accent)]"
-                          />
+                          <Pin size={12} className="shrink-0 text-primary" />
                         ) : null}
                         {row.status === "open" ? (
-                          <span className="chip chip-accent shrink-0">
+                          <Badge variant="outline" className="shrink-0">
                             {t("logs.live")}
-                          </span>
+                          </Badge>
                         ) : null}
                       </div>
-                      <div className="truncate text-xs muted">
+                      <p className="truncate text-xs text-muted-foreground">
                         {formatLogTimeRange(
                           row.started_at,
                           row.ended_at,
                           t("logs.live"),
                         )}{" "}
                         · {sub}
-                      </div>
+                      </p>
                     </div>
-                    <div className="shrink-0 text-right text-xs muted">
+                    <div className="shrink-0 text-right text-xs text-muted-foreground">
                       <div>{formatBytes(row.bytes_out)}</div>
                       <div className="uppercase">{row.kind}</div>
                     </div>
-                    <button
-                      type="button"
-                      className="icon-btn"
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
                       title={t("logs.delete")}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -180,9 +187,9 @@ export function LogsConsole() {
                       }}
                     >
                       <Trash2 size={14} />
-                    </button>
+                    </Button>
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>

@@ -47,7 +47,7 @@ export function AppShell() {
       <TitleBar />
       <div className="flex min-h-0 flex-1">
         {!onTerminal && <Sidebar />}
-        <main className="relative min-w-0 flex-1 overflow-hidden bg-[var(--bg)]">
+        <main className="relative min-w-0 flex-1 overflow-hidden bg-background">
           {/* —— 业务页面 Outlet（终端页时隐藏） —— */}
           <div
             className="h-full"

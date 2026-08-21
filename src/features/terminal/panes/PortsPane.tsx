@@ -7,11 +7,23 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { dialogs } from "@/lib/dialogs";
 import { useTranslation } from "react-i18next";
 import { Copy, RefreshCw, Search, Skull, XCircle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { api } from "@/lib/tauri";
 import { clipboardWriteText } from "@/lib/clipboard";
-import { useDialog } from "@/components/Dialog";
 import { killCmd, portsCmd, resolveProbeEnv } from "@/lib/probeEnv";
 
 type PortRow = {
@@ -157,11 +169,11 @@ function buildTags(row: PortRow, t: (k: string) => string): PortTag[] {
   return tags.slice(0, 3);
 }
 
-function tipClass(tone: PortTag["tone"]) {
-  if (tone === "accent") return "chip chip-accent";
-  if (tone === "warn") return "chip chip-warn";
-  if (tone === "danger") return "chip chip-danger";
-  return "chip";
+function badgeVariant(tone: PortTag["tone"]) {
+  if (tone === "danger") return "destructive" as const;
+  if (tone === "warn") return "outline" as const;
+  if (tone === "accent") return "default" as const;
+  return "secondary" as const;
 }
 
 /**
@@ -177,7 +189,6 @@ export function PortsPane({
   shellId?: string | null;
 }) {
   const { t } = useTranslation();
-  const dialog = useDialog();
   const [ports, setPorts] = useState<PortRow[]>([]);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"all" | "tcp" | "udp" | "public">("all");
@@ -229,16 +240,16 @@ export function PortsPane({
     try {
       await clipboardWriteText(text);
     } catch {
-      await dialog.alert(t("termTab.copyFail"));
+      await dialogs.alert(t("termTab.copyFail"));
     }
   };
 
   const signal = async (row: PortRow, sig: "TERM" | "KILL") => {
     if (!sessionId || !row.pid) {
-      await dialog.alert(t("termTab.noPid"));
+      await dialogs.alert(t("termTab.noPid"));
       return;
     }
-    const ok = await dialog.confirm(
+    const ok = await dialogs.confirm(
       t("termTab.killPortConfirm", {
         port: row.port,
         pid: row.pid,
@@ -252,39 +263,49 @@ export function PortsPane({
       await api.sessionExec(sessionId, killCmd(env, row.pid, sig));
       await refresh();
     } catch (e) {
-      await dialog.alert(String(e));
+      await dialogs.alert(String(e));
     }
   };
 
   return (
-    <div className="panel flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground">
       {/* —— 标题与刷新 —— */}
-      <div className="panel-header flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
         <span className="text-xs font-medium">{t("termTab.ports")}</span>
-        <span className="text-xs muted">
+        <span className="text-xs text-muted-foreground">
           {t("termTab.portCount", { count: filtered.length })}
         </span>
-        <button
-          className="icon-btn icon-btn-sm tip ml-auto"
-          data-tip={t("terminal.refresh")}
-          onClick={() => refresh()}
-        >
-          <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              className="ml-auto"
+              aria-label={t("terminal.refresh")}
+              onClick={() => refresh()}
+            >
+              <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{t("terminal.refresh")}</TooltipContent>
+        </Tooltip>
       </div>
 
       {/* —— 搜索与过滤 —— */}
-      <div className="border-b border-[var(--border)] px-2 py-2">
-        <div className="field-icon-wrap">
-          <Search size={13} className="field-icon" />
-          <input
-            className="field field-sm"
+      <div className="border-b border-border px-2 py-2">
+        <InputGroup className="h-7">
+          <InputGroupAddon>
+            <Search size={13} />
+          </InputGroupAddon>
+          <InputGroupInput
+            className="text-xs"
             placeholder={t("termTab.portSearch")}
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
-        </div>
-        <div className="mt-2 flex flex-wrap gap-1 text-[11px]">
+        </InputGroup>
+        <div className="mt-2 flex flex-wrap gap-1">
           {(
             [
               ["all", t("termTab.filterAll")],
@@ -293,28 +314,33 @@ export function PortsPane({
               ["public", t("termTab.filterPublic")],
             ] as const
           ).map(([key, label]) => (
-            <button
-              key={key}
-              className={`btn btn-sm tip ${filter === key ? "btn-primary" : ""}`}
-              data-tip={label}
-              onClick={() => setFilter(key)}
-            >
-              {label}
-            </button>
+            <Tooltip key={key}>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  size="xs"
+                  variant={filter === key ? "default" : "outline"}
+                  onClick={() => setFilter(key)}
+                >
+                  {label}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{label}</TooltipContent>
+            </Tooltip>
           ))}
         </div>
       </div>
 
       {/* —— 端口列表 —— */}
-      <div className="panel-body panel-list min-h-0 flex-1 overflow-y-auto p-1.5">
+      <div className="min-h-0 flex-1 space-y-0.5 overflow-auto p-1.5">
         {!sessionId || kind == null ? (
-          <div className="px-2 py-6 text-center text-xs muted">
+          <div className="px-2 py-6 text-center text-xs text-muted-foreground">
             {t("scripts.needSessionShort")}
           </div>
         ) : error ? (
-          <div className="px-2 py-4 text-xs text-danger">{error}</div>
+          <div className="px-2 py-4 text-xs text-destructive">{error}</div>
         ) : filtered.length === 0 ? (
-          <div className="px-2 py-6 text-center text-xs muted">
+          <div className="px-2 py-6 text-center text-xs text-muted-foreground">
             {t("termTab.portEmpty")}
           </div>
         ) : (
@@ -327,56 +353,77 @@ export function PortsPane({
                 ? `PID ${row.pid}`
                 : t("termTab.unknownProc");
             return (
-              <div key={row.id} className="list-row items-start gap-2">
+              <div key={row.id} className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-accent">
                 <div
-                  className={`list-row-dot mt-1.5 ${
-                    isPublic(row.addr) ? "is-danger" : "is-ok"
+                  className={`mt-1.5 size-2 shrink-0 rounded-full ${
+                    isPublic(row.addr) ? "bg-destructive" : "bg-success"
                   }`}
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 items-baseline gap-2">
-                    <span className="list-row-title list-row-title-mono shrink-0">
+                    <span className="shrink-0 font-mono text-sm font-medium">
                       :{row.port}
                     </span>
-                    <span className="list-row-title truncate" title={procLabel}>
+                    <span className="text-sm font-medium truncate" title={procLabel}>
                       {procLabel}
                     </span>
                   </div>
-                  <div className="list-row-sub truncate" title={endpoint}>
+                  <div className="text-xs text-muted-foreground truncate" title={endpoint}>
                     {endpoint} · {row.state}
                     {row.process && row.pid ? ` · PID ${row.pid}` : ""}
                   </div>
                   <div className="mt-1.5 flex flex-wrap gap-1">
                     {tags.map((tag) => (
-                      <span key={tag.id} className={tipClass(tag.tone)}>
+                      <Badge key={tag.id} variant={badgeVariant(tag.tone)}>
                         {tag.label}
-                      </span>
+                      </Badge>
                     ))}
                   </div>
                 </div>
-                <button
-                  className="icon-btn icon-btn-sm tip"
-                  data-tip={t("termTab.tipCopyPort")}
-                  onClick={() => copyText(String(row.port))}
-                >
-                  <Copy size={13} />
-                </button>
-                <button
-                  className="icon-btn icon-btn-sm tip"
-                  data-tip={t("termTab.tipTerm")}
-                  disabled={!row.pid}
-                  onClick={() => signal(row, "TERM")}
-                >
-                  <XCircle size={13} />
-                </button>
-                <button
-                  className="icon-btn icon-btn-sm tip"
-                  data-tip={t("termTab.tipKill")}
-                  disabled={!row.pid}
-                  onClick={() => signal(row, "KILL")}
-                >
-                  <Skull size={13} />
-                </button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      aria-label={t("termTab.tipCopyPort")}
+                      onClick={() => copyText(String(row.port))}
+                    >
+                      <Copy size={13} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{t("termTab.tipCopyPort")}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      disabled={!row.pid}
+                      aria-label={t("termTab.tipTerm")}
+                      onClick={() => signal(row, "TERM")}
+                    >
+                      <XCircle size={13} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{t("termTab.tipTerm")}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      disabled={!row.pid}
+                      aria-label={t("termTab.tipKill")}
+                      onClick={() => signal(row, "KILL")}
+                    >
+                      <Skull size={13} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{t("termTab.tipKill")}</TooltipContent>
+                </Tooltip>
               </div>
             );
           })

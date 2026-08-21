@@ -121,11 +121,26 @@ export const useUiStore = create<UiState>((set, get) => ({
   closeTab: (id) => {
     const { tabs, activeTabId } = get();
     const closing = tabs.find((t) => t.id === id);
-    void import("@/lib/sessionRecorder").then(({ endRecordingForTab }) =>
-      endRecordingForTab(id),
-    );
-    if (closing?.sessionId) {
-      api.sessionClose(closing.sessionId).catch(() => undefined);
+    const sessionId = closing?.sessionId ?? null;
+    const logId = closing?.logId;
+    // 先收尾录制（带上 sessionId/logId，避免删 tab 后找不到）
+    void import("@/lib/sessionRecorder").then(async (rec) => {
+      if (sessionId) {
+        await rec.endSessionRecording(sessionId, "closed");
+      } else {
+        await rec.endRecordingForTab(id);
+      }
+      if (logId != null) {
+        try {
+          const { finalizeSessionLog } = await import("@/lib/db");
+          await finalizeSessionLog(logId, "closed");
+        } catch {
+          /* 可能已 finalize */
+        }
+      }
+    });
+    if (sessionId) {
+      api.sessionClose(sessionId).catch(() => undefined);
     }
     const next = tabs.filter((t) => t.id !== id);
     const active =

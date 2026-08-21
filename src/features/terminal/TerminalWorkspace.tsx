@@ -1,9 +1,8 @@
 /**
  * @file 终端三栏工作区
  * @author Charlie
- * @description 布局：左侧工具栏 | 中央 xterm 标签层 | 右侧 AI/笔记。
- * 左右栏宽可拖拽，折叠状态与宽度来自 UI store。
- * 监听会话关闭事件，统一走 handleSessionClosed。
+ * @description 布局：左侧工具栏 | 中央 xterm | 右侧 AI；用 shadcn Resizable 调宽。
+ * 拖拽中只写 ref / body class，松手再 persist，避免 Zustand 重渲染打断拖动手势。
  */
 
 import { useEffect, useRef } from "react";
@@ -14,75 +13,11 @@ import { TerminalLeftPanel } from "@/features/terminal/TerminalLeftPanel";
 import { TerminalRightPanel } from "@/features/terminal/TerminalRightPanel";
 import { onSessionClosed } from "@/lib/tauri";
 import { handleSessionClosed } from "@/lib/sessionConnect";
-
-type ResizeAxis = "left" | "right";
-
-/**
- * 左右分栏拖拽手柄：拖动时临时改宽，松手后持久化。
- */
-function ResizeHandle({ axis }: { axis: ResizeAxis }) {
-  const drag = useRef<{
-    startPos: number;
-    startSize: number;
-  } | null>(null);
-
-  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const target = e.currentTarget;
-    target.setPointerCapture(e.pointerId);
-
-    const { leftWidth, rightWidth } = useUiStore.getState();
-    drag.current = {
-      startPos: e.clientX,
-      startSize: axis === "left" ? leftWidth : rightWidth,
-    };
-    document.body.classList.add("is-pane-resizing");
-
-    const onMove = (ev: PointerEvent) => {
-      const state = drag.current;
-      if (!state) return;
-      if (axis === "left") {
-        const dx = ev.clientX - state.startPos;
-        useUiStore.getState().setLeftWidth(state.startSize + dx, {
-          persist: false,
-        });
-      } else {
-        const dx = ev.clientX - state.startPos;
-        useUiStore.getState().setRightWidth(state.startSize - dx, {
-          persist: false,
-        });
-      }
-    };
-
-    const onUp = (ev: PointerEvent) => {
-      drag.current = null;
-      document.body.classList.remove("is-pane-resizing");
-      target.releasePointerCapture(ev.pointerId);
-      target.removeEventListener("pointermove", onMove);
-      target.removeEventListener("pointerup", onUp);
-      target.removeEventListener("pointercancel", onUp);
-      const { leftWidth, rightWidth, setLeftWidth, setRightWidth } =
-        useUiStore.getState();
-      setLeftWidth(leftWidth, { persist: true });
-      setRightWidth(rightWidth, { persist: true });
-    };
-
-    target.addEventListener("pointermove", onMove);
-    target.addEventListener("pointerup", onUp);
-    target.addEventListener("pointercancel", onUp);
-  };
-
-  return (
-    <div
-      className={`pane-resize-handle pane-resize-handle-${axis}`}
-      onPointerDown={onPointerDown}
-      role="separator"
-      aria-orientation="vertical"
-      aria-label={axis === "left" ? "Resize left pane" : "Resize right pane"}
-    />
-  );
-}
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
 
 /**
  * 终端主工作区：左栏 + 多标签 xterm + 右栏。
@@ -95,41 +30,99 @@ export function TerminalWorkspace() {
   const rightCollapsed = useUiStore((s) => s.rightCollapsed);
   const leftWidth = useUiStore((s) => s.leftWidth);
   const rightWidth = useUiStore((s) => s.rightWidth);
+  const setLeftWidth = useUiStore((s) => s.setLeftWidth);
+  const setRightWidth = useUiStore((s) => s.setRightWidth);
   const active = tabs.find((tab) => tab.id === activeTabId) ?? null;
+  const leftPx = useRef(leftWidth);
+  const rightPx = useRef(rightWidth);
+  const dragging = useRef(false);
 
   useEffect(() => {
+    leftPx.current = leftWidth;
+  }, [leftWidth]);
+  useEffect(() => {
+    rightPx.current = rightWidth;
+  }, [rightWidth]);
+
+  useEffect(() => {
+    let disposed = false;
     let unlisten: (() => void) | undefined;
     onSessionClosed((p) => {
       handleSessionClosed(p.sessionId);
-    }).then((u) => {
-      unlisten = u;
+    }).then((fn) => {
+      if (disposed) {
+        fn();
+        return;
+      }
+      unlisten = fn;
     });
-    return () => unlisten?.();
+    return () => {
+      disposed = true;
+      unlisten?.();
+      document.body.classList.remove("is-pane-resizing");
+    };
   }, []);
 
+  const beginDrag = () => {
+    if (dragging.current) return;
+    dragging.current = true;
+    document.body.classList.add("is-pane-resizing");
+  };
+
+  const endDrag = () => {
+    if (!dragging.current) return;
+    dragging.current = false;
+    document.body.classList.remove("is-pane-resizing");
+  };
+
   return (
-    <div className="terminal-split flex h-full min-w-0">
-      {/* —— 左侧工具栏 —— */}
+    <ResizablePanelGroup
+      key={`term-${leftCollapsed ? 0 : 1}-${rightCollapsed ? 0 : 1}`}
+      orientation="horizontal"
+      className="h-full min-w-0"
+      onLayoutChange={beginDrag}
+      onLayoutChanged={(_layout, meta) => {
+        endDrag();
+        if (!meta.isUserInteraction) return;
+        if (!leftCollapsed) {
+          setLeftWidth(Math.round(leftPx.current), { persist: true });
+        }
+        if (!rightCollapsed) {
+          setRightWidth(Math.round(rightPx.current), { persist: true });
+        }
+      }}
+    >
       {!leftCollapsed && (
-        <div
-          className="terminal-split-pane terminal-split-left flex h-full shrink-0 overflow-hidden"
-          style={{ width: leftWidth }}
-        >
-          <TerminalLeftPanel
-            sessionId={active?.sessionId ?? null}
-            kind={active?.kind ?? null}
-            hostId={active?.hostId ?? null}
-            shellId={active?.shellId ?? null}
-          />
-          <ResizeHandle axis="left" />
-        </div>
+        <>
+          <ResizablePanel
+            id="left"
+            defaultSize={leftWidth}
+            minSize={260}
+            maxSize={640}
+            className="overflow-hidden bg-sidebar"
+            onResize={(size) => {
+              leftPx.current = size.inPixels;
+            }}
+          >
+            <TerminalLeftPanel
+              sessionId={active?.sessionId ?? null}
+              kind={active?.kind ?? null}
+              hostId={active?.hostId ?? null}
+              shellId={active?.shellId ?? null}
+            />
+          </ResizablePanel>
+          <ResizableHandle />
+        </>
       )}
 
-      {/* —— 中央：所有标签叠放，仅激活可见 —— */}
-      <div className="terminal-split-center flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--bg)]">
-        <div className="relative min-h-0 flex-1 overflow-hidden">
+      <ResizablePanel
+        id="center"
+        minSize={200}
+        className="min-w-0 overflow-hidden bg-background"
+      >
+        <div className="relative h-full min-h-0 overflow-hidden">
           {tabs.length === 0 ? (
-            <div className="flex h-full items-center justify-center text-sm muted">
+            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
               {t("terminal.noSession")}
             </div>
           ) : (
@@ -148,18 +141,25 @@ export function TerminalWorkspace() {
             ))
           )}
         </div>
-      </div>
+      </ResizablePanel>
 
-      {/* —— 右侧 AI / 笔记 —— */}
       {!rightCollapsed && (
-        <div
-          className="terminal-split-pane terminal-split-right flex h-full shrink-0 overflow-hidden"
-          style={{ width: rightWidth }}
-        >
-          <ResizeHandle axis="right" />
-          <TerminalRightPanel />
-        </div>
+        <>
+          <ResizableHandle />
+          <ResizablePanel
+            id="right"
+            defaultSize={rightWidth}
+            minSize={240}
+            maxSize={520}
+            className="overflow-hidden bg-sidebar"
+            onResize={(size) => {
+              rightPx.current = size.inPixels;
+            }}
+          >
+            <TerminalRightPanel />
+          </ResizablePanel>
+        </>
       )}
-    </div>
+    </ResizablePanelGroup>
   );
 }

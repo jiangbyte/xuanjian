@@ -5,6 +5,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { dialogs } from "@/lib/dialogs";
 import { useTranslation } from "react-i18next";
 import {
   ArrowLeftRight,
@@ -25,6 +26,9 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import type { HostRow } from "@/lib/db";
 import { api, type SftpEntry } from "@/lib/tauri";
 import { enqueueDownload, enqueueUpload } from "@/stores/transfer";
@@ -35,7 +39,6 @@ import {
   useContextMenu,
   type ContextMenuItem,
 } from "@/components/ContextMenu";
-import { useDialog } from "@/components/Dialog";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { PermissionsModal } from "@/features/terminal/PermissionsModal";
 import { PathBookmarkButton } from "@/components/PathBookmarkButton";
@@ -65,8 +68,7 @@ export function PaneBrowser({
 }) {
   const { t } = useTranslation();
   const { open: openMenu } = useContextMenu();
-  const dialog = useDialog();
-  const termTabs = useUiStore((s) => s.tabs);
+    const termTabs = useUiStore((s) => s.tabs);
   const remote = tab.kind === "host";
   const [cwd, setCwd] = useState(remote ? "/" : "");
   const [entries, setEntries] = useState<SftpEntry[]>([]);
@@ -219,7 +221,7 @@ export function PaneBrowser({
   };
 
   const onNewFolder = async () => {
-    const name = await dialog.prompt(t("context.newFolder"), {
+    const name = await dialogs.prompt(t("context.newFolder"), {
       title: t("context.newFolder"),
     });
     if (!name?.trim()) return;
@@ -235,7 +237,7 @@ export function PaneBrowser({
   };
 
   const onNewFile = async () => {
-    const name = await dialog.prompt(t("terminal.fileNamePrompt"), {
+    const name = await dialogs.prompt(t("terminal.fileNamePrompt"), {
       title: t("context.newFile"),
     });
     if (!name?.trim()) return;
@@ -265,7 +267,7 @@ export function PaneBrowser({
       const existing = await findDestEntry(destEp, cwd, name);
       if (existing) {
         const decision = await askOverwrite(
-          dialog,
+          dialogs,
           t,
           conflict,
           destPath,
@@ -362,7 +364,7 @@ export function PaneBrowser({
           if (existing) {
             const conflict: ConflictCtx = { mode: "ask" };
             const decision = await askOverwrite(
-              dialog,
+              dialogs,
               t,
               conflict,
               destPath,
@@ -408,7 +410,7 @@ export function PaneBrowser({
         label: t("context.rename"),
         icon: <Pencil size={14} />,
         onClick: async () => {
-          const name = await dialog.prompt(t("context.renamePrompt"), {
+          const name = await dialogs.prompt(t("context.renamePrompt"), {
             title: t("context.rename"),
             defaultValue: entry.name,
           });
@@ -437,7 +439,7 @@ export function PaneBrowser({
         danger: true,
         onClick: async () => {
           if (
-            !(await dialog.confirm(t("context.confirmDelete"), {
+            !(await dialogs.confirm(t("context.confirmDelete"), {
               danger: true,
             }))
           )
@@ -463,9 +465,9 @@ export function PaneBrowser({
       className="flex min-h-0 flex-1 flex-col"
       onContextMenu={(e) => openContextMenu(e, openMenu, blankItems())}
     >
-      <div className="border-b border-[var(--border)] px-2 py-1.5">
-        <input
-          className="field field-sm"
+      <div className="shrink-0 border-b border-border px-2 py-1.5">
+        <Input
+          className="h-7 text-xs"
           value={cwd}
           onChange={(e) => setCwd(e.target.value)}
           onKeyDown={(e) => {
@@ -474,7 +476,7 @@ export function PaneBrowser({
         />
       </div>
 
-      <div className="flex items-center gap-0.5 border-b border-[var(--border)] px-1.5 py-1">
+      <div className="flex shrink-0 items-center gap-0.5 border-b border-border px-1.5 py-1">
         <PathBookmarkButton
           scope={bookmarkScope({
             kind: remote ? "host" : "local",
@@ -486,9 +488,12 @@ export function PaneBrowser({
             reload(p).catch(console.error);
           }}
         />
-        <button
-          className="icon-btn icon-btn-sm"
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
           title={t("context.copyToOther")}
+          aria-label={t("context.copyToOther")}
           disabled={checkedList.length === 0 && !selected}
           onClick={() =>
             onTransferEntry(
@@ -497,70 +502,91 @@ export function PaneBrowser({
           }
         >
           <ArrowLeftRight size={14} />
-        </button>
+        </Button>
         {remote && (
-          <button
-            className="icon-btn icon-btn-sm"
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
             title={t("terminal.upload")}
+            aria-label={t("terminal.upload")}
             onClick={() => {
               onUpload().catch(console.error);
             }}
           >
             <Upload size={14} />
-          </button>
+          </Button>
         )}
-        <button
-          className="icon-btn icon-btn-sm is-active"
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="secondary"
           title={t("terminal.listView")}
+          aria-label={t("terminal.listView")}
         >
           <List size={14} />
-        </button>
-        <button
-          className={`icon-btn icon-btn-sm ${showSearch ? "is-active" : ""}`}
+        </Button>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant={showSearch ? "secondary" : "ghost"}
           title={t("terminal.search")}
+          aria-label={t("terminal.search")}
           onClick={() => setShowSearch((v) => !v)}
         >
           <Search size={14} />
-        </button>
-        <button
-          className="icon-btn icon-btn-sm"
+        </Button>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
           title={t("terminal.newFolder")}
+          aria-label={t("terminal.newFolder")}
           onClick={() => {
             onNewFolder().catch(console.error);
           }}
         >
           <FolderPlus size={14} />
-        </button>
-        <button
-          className="icon-btn icon-btn-sm"
+        </Button>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
           title={t("terminal.newFile")}
+          aria-label={t("terminal.newFile")}
           onClick={() => {
             onNewFile().catch(console.error);
           }}
         >
           <FilePlus size={14} />
-        </button>
-        <button
-          className={`icon-btn icon-btn-sm ${showHidden ? "is-active" : ""}`}
+        </Button>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant={showHidden ? "secondary" : "ghost"}
           title={t("terminal.showHidden")}
+          aria-label={t("terminal.showHidden")}
           onClick={() => setShowHidden((v) => !v)}
         >
           <Eye size={14} />
-        </button>
-        <button
-          className="icon-btn icon-btn-sm"
+        </Button>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
           title={t("terminal.refresh")}
+          aria-label={t("terminal.refresh")}
           onClick={() => reload(cwd)}
         >
           <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-        </button>
+        </Button>
       </div>
 
       {showSearch && (
-        <div className="border-b border-[var(--border)] px-2 py-1.5">
-          <input
+        <div className="shrink-0 border-b border-border px-2 py-1.5">
+          <Input
             autoFocus
-            className="field field-sm"
+            className="h-7 text-xs"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t("terminal.search")}
@@ -568,12 +594,11 @@ export function PaneBrowser({
         </div>
       )}
 
-      <div className="file-table-head with-check">
-        <span className="file-check">
-          <input
-            type="checkbox"
+      <div className="grid shrink-0 grid-cols-[24px_20px_minmax(100px,1.5fr)_108px_86px_60px_48px] items-center gap-2 border-b border-border bg-muted/40 px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
+        <span className="flex items-center justify-center">
+          <Checkbox
             checked={allVisibleChecked}
-            onChange={toggleAllVisible}
+            onCheckedChange={() => toggleAllVisible()}
             aria-label="select all"
           />
         </span>
@@ -584,16 +609,17 @@ export function PaneBrowser({
         <span>{t("terminal.size")}</span>
         <span>{t("terminal.type")}</span>
       </div>
-      <div className="panel-body p-1">
+      <div className="min-h-0 flex-1 overflow-auto p-1">
         {error && (
-          <div className="px-2 py-1 text-[11px] text-danger">{error}</div>
+          <div className="px-2 py-1 text-[11px] text-destructive">{error}</div>
         )}
         <button
-          className="file-row with-check"
+          type="button"
+          className="grid w-full grid-cols-[24px_20px_minmax(100px,1.5fr)_108px_86px_60px_48px] items-center gap-2 rounded-md px-2 py-1 text-left text-xs hover:bg-accent"
           onClick={() => setCwd(parentPath(cwd, remote))}
         >
           <span />
-          <span className="entry-icon folder-icon">
+          <span className="flex size-5 items-center justify-center text-primary">
             <Folder size={14} />
           </span>
           <span className="truncate font-medium">..</span>
@@ -604,8 +630,11 @@ export function PaneBrowser({
         </button>
         {visible.map((e) => (
           <button
+            type="button"
             key={e.path}
-            className={`file-row with-check ${selected?.path === e.path ? "is-selected" : ""}`}
+            className={`grid w-full grid-cols-[24px_20px_minmax(100px,1.5fr)_108px_86px_60px_48px] items-center gap-2 rounded-md px-2 py-1 text-left text-xs hover:bg-accent ${
+              selected?.path === e.path ? "bg-accent" : ""
+            }`}
             onClick={() => {
               if (e.isDir) {
                 setCwd(e.path);
@@ -617,42 +646,45 @@ export function PaneBrowser({
             onContextMenu={(ev) => openContextMenu(ev, openMenu, entryItems(e))}
           >
             <span
-              className="file-check"
+              className="flex items-center justify-center"
               onClick={(ev) => {
                 ev.stopPropagation();
               }}
             >
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={!!checked[e.path]}
-                onChange={() => toggleCheck(e)}
+                onCheckedChange={() => toggleCheck(e)}
               />
             </span>
             <span
-              className={`entry-icon ${e.isDir ? "folder-icon" : "file-icon"}`}
+              className={`flex size-5 items-center justify-center ${
+                e.isDir ? "text-primary" : "text-muted-foreground"
+              }`}
             >
               {e.isDir ? <Folder size={14} /> : <File size={14} />}
             </span>
             <span className="truncate">{e.name}</span>
-            <span className="truncate muted">{e.modifiedAt || "--"}</span>
-            <span className="truncate muted font-mono text-[11px]">
+            <span className="truncate text-muted-foreground">
+              {e.modifiedAt || "--"}
+            </span>
+            <span className="truncate font-mono text-[11px] text-muted-foreground">
               {e.permissions || "--"}
             </span>
-            <span className="truncate muted">
+            <span className="truncate text-muted-foreground">
               {e.isDir ? "--" : String(e.size)}
             </span>
-            <span className="truncate muted">
+            <span className="truncate text-muted-foreground">
               {e.isDir ? t("terminal.folder") : t("terminal.file")}
             </span>
           </button>
         ))}
         {loading && (
-          <div className="px-2 py-2 text-[11px] muted">
+          <div className="px-2 py-2 text-[11px] text-muted-foreground">
             {t("terminal.loading")}
           </div>
         )}
       </div>
-      <div className="flex items-center justify-between border-t border-[var(--border)] px-2 py-1 text-[11px] muted">
+      <div className="flex items-center justify-between border-t border-border px-2 py-1 text-[11px] text-muted-foreground">
         <span>
           {visible.length} {t("terminal.items")}
           {checkedList.length > 0

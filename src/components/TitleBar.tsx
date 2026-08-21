@@ -5,8 +5,6 @@
  * 支持拖拽区域（Tauri）；标签右键可重连 / 关闭。
  */
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   Home,
   Plus,
@@ -15,6 +13,12 @@ import {
   PanelRight,
   ArrowDownUp,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { WindowControls } from "@/components/WindowControls";
 import { useUiStore } from "@/stores/ui";
 import { useTransferStore } from "@/stores/transfer";
@@ -22,87 +26,33 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { openContextMenu, useContextMenu } from "@/components/ContextMenu";
 import { canReconnect, reconnectTermTab } from "@/lib/sessionConnect";
-import { useDialog } from "@/components/Dialog";
+import { dialogs } from "@/lib/dialogs";
 import { TransferPanel } from "@/features/terminal/TransferPanel";
+import { cn } from "@/lib/utils";
+import type { TermTab } from "@/stores/ui";
 
-/**
- * 锚定在传输按钮下方的传输任务气泡。
- * @param anchor 定位参照元素
- * @param onClose 外点 / Escape 关闭
- */
-function TransferPopover({
-  anchor,
-  onClose,
-}: {
-  anchor: HTMLElement | null;
-  onClose: () => void;
-}) {
-  const panelRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-
-  useLayoutEffect(() => {
-    if (!anchor) return;
-    const place = () => {
-      const r = anchor.getBoundingClientRect();
-      const width = 440;
-      const margin = 8;
-      const left = Math.max(
-        margin,
-        Math.min(r.right - width, window.innerWidth - width - margin),
-      );
-      setPos({ top: r.bottom + 6, left });
-    };
-    place();
-    window.addEventListener("resize", place);
-    return () => window.removeEventListener("resize", place);
-  }, [anchor]);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    const onDown = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (panelRef.current?.contains(t)) return;
-      if (anchor?.contains(t)) return;
-      onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    // 延迟绑定，避免打开时的同一次点击立刻关闭
-    const id = window.setTimeout(() => {
-      window.addEventListener("mousedown", onDown);
-    }, 0);
-    return () => {
-      window.clearTimeout(id);
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("mousedown", onDown);
-    };
-  }, [anchor, onClose]);
-
-  if (!pos) return null;
-
-  return createPortal(
-    <div
-      ref={panelRef}
-      className="transfer-popover"
-      style={{ top: pos.top, left: pos.left }}
-      role="dialog"
-      aria-label="File transfer"
-    >
-      <TransferPanel />
-    </div>,
-    document.body,
-  );
+function tabStatusDotClass(status: TermTab["status"]) {
+  switch (status) {
+    case "open":
+      return "bg-success";
+    case "connecting":
+      return "animate-pulse bg-primary";
+    case "closed":
+      return "bg-secondary";
+    case "error":
+      return "bg-destructive";
+    default:
+      return "bg-muted-foreground";
+  }
 }
 
 /**
  * 应用顶栏：标签条 + 终端布局开关 + 传输 / 设置 / 窗口控制。
- * @副作用 切换标签、关闭会话、打开设置与传输面板
+ * @副作用 切换路由、关闭会话、打开设置与传输面板
  */
 export function TitleBar() {
   const { t } = useTranslation();
   const { open: openMenu } = useContextMenu();
-  const dialog = useDialog();
   const tabs = useUiStore((s) => s.tabs);
   const activeTabId = useUiStore((s) => s.activeTabId);
   const setActiveTab = useUiStore((s) => s.setActiveTab);
@@ -114,9 +64,7 @@ export function TitleBar() {
   const transferOpen = useUiStore((s) => s.transferOpen);
   const toggleLeft = useUiStore((s) => s.toggleLeft);
   const toggleRight = useUiStore((s) => s.toggleRight);
-  const toggleTransfer = useUiStore((s) => s.toggleTransfer);
   const setTransferOpen = useUiStore((s) => s.setTransferOpen);
-  const transferBtnRef = useRef<HTMLButtonElement>(null);
   const activeTransfers = useTransferStore(
     (s) =>
       s.jobs.filter(
@@ -132,165 +80,228 @@ export function TitleBar() {
 
   return (
     <header
-      className="flex h-10 shrink-0 items-center border-b border-[var(--border)] bg-[var(--titlebar)]"
+      className="flex shrink-0 items-center gap-1 overflow-hidden border-b border-border bg-titlebar py-1.5 pl-2"
       data-tauri-drag-region
     >
-      {/* —— 首页 + 会话标签 —— */}
       <div
-        className="flex min-w-0 flex-1 items-center gap-1 px-2"
+        className="flex min-w-0 flex-1 items-center gap-1"
         data-tauri-drag-region
       >
-        <button
-          className="icon-btn"
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
           onClick={() => navigate("/")}
           title={t("brand")}
+          aria-label={t("brand")}
         >
           <Home size={14} />
-        </button>
-        <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => {
-                setActiveTab(tab.id);
-                navigate("/terminal");
-              }}
-              onContextMenu={(e) =>
-                openContextMenu(e, openMenu, [
-                  ...(canReconnect(tab)
-                    ? [
-                        {
-                          id: "reconnect",
-                          label: t("terminal.reconnect"),
-                          onClick: async () => {
-                            const ok = await dialog.confirm(
-                              t("terminal.reconnectConfirm"),
-                              {
-                                title: t("terminal.disconnected"),
-                                confirmLabel: t("terminal.reconnect"),
-                                cancelLabel: t("dialog.cancel"),
-                              },
-                            );
-                            if (!ok) return;
-                            try {
-                              await reconnectTermTab(tab.id);
-                            } catch (err) {
-                              await dialog.alert(String(err));
-                            }
+        </Button>
+        <div className="flex min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden">
+          {tabs.map((tab) => {
+            const active = activeTabId === tab.id && onTerminal;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "group inline-flex h-7 max-w-[200px] shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 text-xs transition-colors",
+                  active
+                    ? "bg-accent font-medium text-accent-foreground"
+                    : "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
+                )}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  navigate("/terminal");
+                }}
+                onContextMenu={(e) =>
+                  openContextMenu(e, openMenu, [
+                    ...(canReconnect(tab)
+                      ? [
+                          {
+                            id: "reconnect",
+                            label: t("terminal.reconnect"),
+                            onClick: async () => {
+                              const ok = await dialogs.confirm(
+                                t("terminal.reconnectConfirm"),
+                                {
+                                  title: t("terminal.disconnected"),
+                                  confirmLabel: t("terminal.reconnect"),
+                                  cancelLabel: t("dialog.cancel"),
+                                },
+                              );
+                              if (!ok) return;
+                              try {
+                                await reconnectTermTab(tab.id);
+                              } catch (err) {
+                                await dialogs.alert(String(err));
+                              }
+                            },
                           },
-                        },
-                        "sep" as const,
-                      ]
-                    : []),
-                  {
-                    id: "close",
-                    label: t("context.closeTab"),
-                    onClick: () => {
+                          "sep" as const,
+                        ]
+                      : []),
+                    {
+                      id: "close",
+                      label: t("context.closeTab"),
+                      onClick: () => {
+                        closeTab(tab.id);
+                        if (tabs.length <= 1) navigate("/");
+                      },
+                    },
+                    {
+                      id: "closeOthers",
+                      label: t("context.closeOtherTabs"),
+                      disabled: tabs.length <= 1,
+                      onClick: () => {
+                        tabs
+                          .filter((x) => x.id !== tab.id)
+                          .forEach((x) => closeTab(x.id));
+                        setActiveTab(tab.id);
+                        navigate("/terminal");
+                      },
+                    },
+                  ])
+                }
+              >
+                <span
+                  className={cn(
+                    "size-1.5 shrink-0 rounded-full",
+                    tabStatusDotClass(tab.status),
+                  )}
+                />
+                <span className="max-w-[140px] truncate">{tab.title}</span>
+                <span
+                  role="button"
+                  tabIndex={0}
+                  className={cn(
+                    "flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground",
+                    active ? "opacity-70" : "opacity-0 group-hover:opacity-100",
+                  )}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeTab(tab.id);
+                    if (tabs.length <= 1) navigate("/");
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      e.stopPropagation();
                       closeTab(tab.id);
                       if (tabs.length <= 1) navigate("/");
-                    },
-                  },
-                  {
-                    id: "closeOthers",
-                    label: t("context.closeOtherTabs"),
-                    disabled: tabs.length <= 1,
-                    onClick: () => {
-                      tabs
-                        .filter((x) => x.id !== tab.id)
-                        .forEach((x) => closeTab(x.id));
-                      setActiveTab(tab.id);
-                      navigate("/terminal");
-                    },
-                  },
-                ])
-              }
-              className={`tab-chip group ${activeTabId === tab.id && onTerminal ? "active" : ""}`}
-            >
-              <span
-                className={`status-dot ${
-                  tab.status === "open"
-                    ? "is-open"
-                    : tab.status === "connecting"
-                      ? "is-connecting"
-                      : tab.status === "closed"
-                        ? "is-closed"
-                        : tab.status === "error"
-                          ? "is-error"
-                          : ""
-                }`}
-              />
-              <span className="truncate">{tab.title}</span>
-              <span
-                className="icon-btn icon-btn-sm opacity-0 group-hover:opacity-100"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  closeTab(tab.id);
-                  if (tabs.length <= 1) navigate("/");
-                }}
-              >
-                ×
-              </span>
-            </button>
-          ))}
-          <button
-            className="icon-btn"
+                    }
+                  }}
+                  aria-label={t("context.closeTab")}
+                >
+                  ×
+                </span>
+              </button>
+            );
+          })}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
             onClick={() => setSwitcherOpen(true)}
             title="New session (Ctrl+J)"
+            aria-label="New session"
           >
             <Plus size={14} />
-          </button>
+          </Button>
         </div>
       </div>
-      {/* —— 右侧工具 —— */}
-      <div className="flex h-full items-center gap-0.5 pr-0">
+      <div className="flex shrink-0 items-center gap-0.5">
         {onTerminal && (
           <>
-            <button
-              className={`icon-btn ${leftCollapsed ? "" : "is-active"}`}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-pressed={!leftCollapsed}
+              className={cn(
+                !leftCollapsed
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground",
+              )}
               onClick={toggleLeft}
               title={
                 leftCollapsed ? t("terminal.expand") : t("terminal.collapse")
               }
+              aria-label={
+                leftCollapsed ? t("terminal.expand") : t("terminal.collapse")
+              }
             >
               <PanelLeft size={14} />
-            </button>
-            <button
-              className={`icon-btn ${rightCollapsed ? "" : "is-active"}`}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-pressed={!rightCollapsed}
+              className={cn(
+                !rightCollapsed
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground",
+              )}
               onClick={toggleRight}
               title={
                 rightCollapsed ? t("terminal.expand") : t("terminal.collapse")
               }
+              aria-label={
+                rightCollapsed ? t("terminal.expand") : t("terminal.collapse")
+              }
             >
               <PanelRight size={14} />
-            </button>
+            </Button>
           </>
         )}
-        <button
-          ref={transferBtnRef}
-          className={`icon-btn relative ${transferOpen ? "is-active" : ""}`}
-          onClick={() => toggleTransfer()}
-          title={t("transfer.title")}
-        >
-          <ArrowDownUp size={14} />
-          {activeTransfers > 0 ? (
-            <span className="transfer-title-badge">{activeTransfers}</span>
-          ) : null}
-        </button>
-        <button
-          className="icon-btn"
+        <Popover open={transferOpen} onOpenChange={setTransferOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-pressed={transferOpen}
+              className={cn(
+                "relative",
+                transferOpen
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground",
+              )}
+              title={t("transfer.title")}
+              aria-label={t("transfer.title")}
+            >
+              <ArrowDownUp size={14} />
+              {activeTransfers > 0 && (
+                <span className="pointer-events-none absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground">
+                  {activeTransfers}
+                </span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent
+            align="end"
+            sideOffset={6}
+            className="w-[440px] max-h-[min(360px,calc(100vh-56px))] overflow-hidden p-0"
+          >
+            <div className="transfer-popover-inner h-[360px] max-h-[calc(100vh-56px)] overflow-hidden">
+              <TransferPanel />
+            </div>
+          </PopoverContent>
+        </Popover>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
           onClick={() => setSettingsOpen(true)}
           title={t("nav.settings")}
+          aria-label={t("nav.settings")}
         >
           <Settings size={14} />
-        </button>
+        </Button>
         <WindowControls />
       </div>
-      {transferOpen ? (
-        <TransferPopover
-          anchor={transferBtnRef.current}
-          onClose={() => setTransferOpen(false)}
-        />
-      ) : null}
     </header>
   );
 }

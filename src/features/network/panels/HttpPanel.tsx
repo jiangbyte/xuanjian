@@ -1,20 +1,25 @@
 /**
  * @file HTTP / TLS / Whois 面板
  * @author Charlie
- * @description 发送自定义 HTTP 请求、拉取 TLS 证书信息、查询 Whois，
- * 并展示近期网络工具历史。
+ * @description 发送自定义 HTTP 请求、拉取 TLS 证书信息、查询 Whois。
  */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, type HttpResponse, type TlsCertInfo } from "@/lib/tauri";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
-  addNetworkHistory,
-  clearNetworkHistory,
-  listNetworkHistory,
-  type NetworkHistoryRow,
-} from "@/lib/db";
-import { Select } from "@/components/Select";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { api, type HttpResponse, type TlsCertInfo } from "@/lib/tauri";
+import { addNetworkHistory } from "@/lib/db";
 
 /** 将多行 `Key: Value` 文本解析为请求头数组 */
 function parseHeaders(raw: string): [string, string][] {
@@ -45,14 +50,6 @@ export function HttpPanel() {
   const [whoisOut, setWhoisOut] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [history, setHistory] = useState<NetworkHistoryRow[]>([]);
-
-  const reloadHistory = () =>
-    listNetworkHistory(30).then(setHistory).catch(console.error);
-
-  useEffect(() => {
-    reloadHistory();
-  }, []);
 
   const send = async () => {
     setBusy(true);
@@ -68,7 +65,6 @@ export function HttpPanel() {
       });
       setResp(r);
       await addNetworkHistory("http", `${method} ${url}`, String(r.status));
-      reloadHistory();
     } catch (e) {
       setError(String(e));
     } finally {
@@ -84,7 +80,6 @@ export function HttpPanel() {
       const c = await api.networkTlsCert(tlsHost.trim());
       setCert(c);
       await addNetworkHistory("tls", tlsHost);
-      reloadHistory();
     } catch (e) {
       setError(String(e));
     } finally {
@@ -100,7 +95,6 @@ export function HttpPanel() {
       const out = await api.networkWhois(whoisQ.trim());
       setWhoisOut(out);
       await addNetworkHistory("whois", whoisQ);
-      reloadHistory();
     } catch (e) {
       setError(String(e));
     } finally {
@@ -109,199 +103,148 @@ export function HttpPanel() {
   };
 
   return (
-    <div className="flex h-full min-h-0 gap-3 p-4">
-      <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-auto">
-        <div className="flex gap-1">
-          {(["http", "tls", "whois"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              className={`btn btn-sm ${sub === m ? "btn-primary" : ""}`}
-              onClick={() => setSub(m)}
-            >
-              {m === "http"
-                ? "HTTP"
-                : m === "tls"
-                  ? t("network.fetchCert")
-                  : t("network.whois")}
-            </button>
-          ))}
-        </div>
+    <div className="flex h-full min-h-0 flex-col gap-4 overflow-auto p-4">
+      <div className="flex w-fit" data-slot="button-group">
+        {(["http", "tls", "whois"] as const).map((m) => (
+          <Button
+            key={m}
+            size="xs"
+            variant={sub === m ? "default" : "outline"}
+            onClick={() => setSub(m)}
+          >
+            {m === "http"
+              ? "HTTP"
+              : m === "tls"
+                ? t("network.fetchCert")
+                : t("network.whois")}
+          </Button>
+        ))}
+      </div>
 
-        {sub === "http" && (
-          <>
-            <div className="flex flex-wrap gap-2">
-              <label className="flex w-28 flex-col gap-1 text-xs muted">
-                {t("network.method")}
-                <Select
-                  value={method}
-                  onChange={setMethod}
-                  options={[
-                    "GET",
-                    "POST",
-                    "PUT",
-                    "PATCH",
-                    "DELETE",
-                    "HEAD",
-                  ].map((m) => ({ value: m, label: m }))}
-                />
-              </label>
-              <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-xs muted">
-                {t("network.url")}
-                <input
-                  className="field"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                />
-              </label>
-              <label className="flex items-center gap-2 self-end text-xs">
-                <input
-                  type="checkbox"
-                  checked={follow}
-                  onChange={(e) => setFollow(e.target.checked)}
-                />
-                {t("network.followRedirect")}
-              </label>
-              <button
-                type="button"
-                className="btn btn-primary self-end"
-                disabled={busy}
-                onClick={send}
-              >
-                {t("network.send")}
-              </button>
+      {sub === "http" && (
+        <>
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="w-28 space-y-1.5">
+              <Label>{t("network.method")}</Label>
+              <Select value={method} onValueChange={setMethod}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"].map(
+                    (m) => (
+                      <SelectItem key={m} value={m}>
+                        {m}
+                      </SelectItem>
+                    ),
+                  )}
+                </SelectContent>
+              </Select>
             </div>
-            <label className="flex flex-col gap-1 text-xs muted">
-              {t("network.headers")}
-              <textarea
-                className="field min-h-[72px] font-mono"
-                value={headers}
-                onChange={(e) => setHeaders(e.target.value)}
+            <div className="min-w-[200px] flex-1 space-y-1.5">
+              <Label htmlFor="http-url">{t("network.url")}</Label>
+              <Input
+                id="http-url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
               />
-            </label>
-            <label className="flex flex-col gap-1 text-xs muted">
-              {t("network.body")}
-              <textarea
-                className="field min-h-[80px] font-mono"
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
+            </div>
+            <div className="flex items-center gap-2 pb-1">
+              <Checkbox
+                id="http-follow"
+                checked={follow}
+                onCheckedChange={(checked) => setFollow(checked === true)}
               />
-            </label>
-            {resp && (
-              <div className="space-y-2 rounded-lg border border-[var(--border)] p-3 text-xs">
-                <div>
-                  {t("network.status")}: {resp.status} ({resp.elapsedMs} ms)
-                </div>
-                <pre className="max-h-32 overflow-auto whitespace-pre-wrap muted">
-                  {resp.headers.map(([k, v]) => `${k}: ${v}`).join("\n")}
-                </pre>
-                <pre className="max-h-64 overflow-auto whitespace-pre-wrap">
-                  {resp.body}
-                </pre>
+              <Label htmlFor="http-follow">{t("network.followRedirect")}</Label>
+            </div>
+            <Button disabled={busy} onClick={send}>
+              {t("network.send")}
+            </Button>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="http-headers">{t("network.headers")}</Label>
+            <Textarea
+              id="http-headers"
+              className="font-mono"
+              value={headers}
+              onChange={(e) => setHeaders(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="http-body">{t("network.body")}</Label>
+            <Textarea
+              id="http-body"
+              className="font-mono"
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+            />
+          </div>
+          {resp && (
+            <div className="space-y-2 rounded-md border border-border p-3 text-xs">
+              <div>
+                {t("network.status")}: {resp.status} ({resp.elapsedMs} ms)
               </div>
-            )}
-          </>
-        )}
+              <pre className="max-h-32 overflow-auto whitespace-pre-wrap text-muted-foreground">
+                {resp.headers.map(([k, v]) => `${k}: ${v}`).join("\n")}
+              </pre>
+              <pre className="max-h-64 overflow-auto whitespace-pre-wrap font-mono">
+                {resp.body}
+              </pre>
+            </div>
+          )}
+        </>
+      )}
 
-        {sub === "tls" && (
-          <>
-            <div className="flex gap-2">
-              <input
-                className="field flex-1"
+      {sub === "tls" && (
+        <>
+          <div className="flex items-end gap-2">
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <Label htmlFor="tls-host">{t("network.tlsHost")}</Label>
+              <Input
+                id="tls-host"
                 value={tlsHost}
                 onChange={(e) => setTlsHost(e.target.value)}
                 placeholder={t("network.tlsHost")}
               />
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={busy}
-                onClick={fetchCert}
-              >
-                {t("network.fetchCert")}
-              </button>
             </div>
-            {cert && (
-              <div className="space-y-1 rounded-lg border border-[var(--border)] p-3 text-xs">
-                <div>Subject: {cert.subject}</div>
-                <div>Issuer: {cert.issuer}</div>
-                <pre className="max-h-80 overflow-auto whitespace-pre-wrap muted">
-                  {cert.raw}
-                </pre>
-              </div>
-            )}
-          </>
-        )}
+            <Button disabled={busy} onClick={fetchCert}>
+              {t("network.fetchCert")}
+            </Button>
+          </div>
+          {cert && (
+            <div className="space-y-1 rounded-md border border-border p-3 text-xs">
+              <div>Subject: {cert.subject}</div>
+              <div>Issuer: {cert.issuer}</div>
+              <pre className="max-h-80 overflow-auto whitespace-pre-wrap font-mono text-muted-foreground">
+                {cert.raw}
+              </pre>
+            </div>
+          )}
+        </>
+      )}
 
-        {sub === "whois" && (
-          <>
-            <div className="flex gap-2">
-              <input
-                className="field flex-1"
+      {sub === "whois" && (
+        <>
+          <div className="flex items-end gap-2">
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <Label htmlFor="whois-query">{t("network.whois")}</Label>
+              <Input
+                id="whois-query"
                 value={whoisQ}
                 onChange={(e) => setWhoisQ(e.target.value)}
               />
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={busy}
-                onClick={runWhois}
-              >
-                {t("network.whoisQuery")}
-              </button>
             </div>
-            <pre className="min-h-0 flex-1 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-3 text-xs">
-              {whoisOut}
-            </pre>
-          </>
-        )}
+            <Button disabled={busy} onClick={runWhois}>
+              {t("network.whoisQuery")}
+            </Button>
+          </div>
+          <pre className="min-h-0 flex-1 overflow-auto rounded-md border border-border bg-card p-3 font-mono text-xs">
+            {whoisOut}
+          </pre>
+        </>
+      )}
 
-        {error && <div className="text-sm text-[var(--danger)]">{error}</div>}
-      </div>
-
-      <aside className="flex w-56 shrink-0 flex-col border-l border-[var(--border)] pl-3">
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-xs font-medium">{t("network.history")}</span>
-          <button
-            type="button"
-            className="btn btn-sm"
-            onClick={() => clearNetworkHistory().then(reloadHistory)}
-          >
-            {t("network.clear")}
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 space-y-1 overflow-auto text-xs">
-          {history.length === 0 && (
-            <div className="muted">{t("network.noHistory")}</div>
-          )}
-          {history.map((h) => (
-            <button
-              key={h.id}
-              type="button"
-              className="list-row w-full text-left"
-              onClick={() => {
-                if (h.kind === "http") {
-                  setSub("http");
-                  const parts = h.target.split(" ");
-                  if (parts.length >= 2) {
-                    setMethod(parts[0]);
-                    setUrl(parts.slice(1).join(" "));
-                  }
-                } else if (h.kind === "tls") {
-                  setSub("tls");
-                  setTlsHost(h.target);
-                } else if (h.kind === "whois") {
-                  setSub("whois");
-                  setWhoisQ(h.target);
-                }
-              }}
-            >
-              <div className="truncate font-medium">{h.kind}</div>
-              <div className="truncate muted">{h.target}</div>
-            </button>
-          ))}
-        </div>
-      </aside>
+      {error && <div className="text-sm text-destructive">{error}</div>}
     </div>
   );
 }

@@ -154,6 +154,32 @@ export async function finalizeSessionLog(
 }
 
 /**
+ * 将仍为 open、且不在 keepSessionIds 中的日志标记为已结束。
+ * 用于应用启动 / 标签已关但录制未 finalize 的孤儿记录。
+ * @returns 收尾条数
+ */
+export async function finalizeOrphanOpenLogs(
+  keepSessionIds: string[] = [],
+): Promise<number> {
+  const db = await getDb();
+  const keep = new Set(keepSessionIds.filter(Boolean));
+  const openRows = await db.select<{ id: number; session_id: string | null }[]>(
+    `SELECT id, session_id FROM session_logs WHERE status = 'open'`,
+  );
+  const endedAt = new Date().toISOString();
+  let n = 0;
+  for (const row of openRows) {
+    if (row.session_id && keep.has(row.session_id)) continue;
+    await db.execute(
+      `UPDATE session_logs SET status = 'closed', ended_at = $1 WHERE id = $2 AND status = 'open'`,
+      [endedAt, row.id],
+    );
+    n += 1;
+  }
+  return n;
+}
+
+/**
  * 列出会话日志（置顶优先，再按 started_at 降序）。
  * @param opts.kind 按 ssh/local 过滤
  * @param opts.search 标题 / 远端主机 / 用户模糊匹配

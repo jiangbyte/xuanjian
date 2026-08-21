@@ -5,12 +5,18 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { dialogs } from "@/lib/dialogs";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, ArrowLeftRight, ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
 import { FloatingWindow } from "@/components/FloatingWindow";
 import { HostRow, listHosts } from "@/lib/db";
 import type { SftpEntry } from "@/lib/tauri";
-import { useDialog } from "@/components/Dialog";
 import type { ConflictCtx } from "@/lib/transferConflict";
 import type { PaneTab, Side, SideSnapshot } from "@/features/terminal/sftp/types";
 import { hostTitle, joinPath } from "@/features/terminal/sftp/pathUtils";
@@ -27,7 +33,6 @@ export function SftpTransferModal({
   defaultHostId?: number | null;
 }) {
   const { t } = useTranslation();
-  const dialog = useDialog();
   const [hosts, setHosts] = useState<HostRow[]>([]);
   const [leftTabs, setLeftTabs] = useState<PaneTab[]>([]);
   const [rightTabs, setRightTabs] = useState<PaneTab[]>([]);
@@ -130,7 +135,7 @@ export function SftpTransferModal({
           destPath,
           item.isDir,
           item.size,
-          dialog,
+          dialogs,
           t,
           conflict,
         );
@@ -162,25 +167,32 @@ export function SftpTransferModal({
       initialHeight={680}
       bodyClassName="flex min-h-0 flex-col gap-2 overflow-hidden p-3"
       headerActions={
-        <div className="flex items-center gap-1">
-          <button
-            className="icon-btn"
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
             disabled={busy}
             title={t("terminal.transferLeft")}
+            aria-label={t("terminal.transferLeft")}
             onClick={() => transfer("right")}
           >
             <ArrowLeft size={14} />
-          </button>
-          <button
-            className="icon-btn"
+          </Button>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
             disabled={busy}
             title={t("terminal.transferRight")}
+            aria-label={t("terminal.transferRight")}
             onClick={() => transfer("left")}
           >
             <ArrowRight size={14} />
-          </button>
-          <button
-            className="btn btn-sm btn-primary"
+          </Button>
+          <Button
+            type="button"
+            size="xs"
             disabled={busy}
             onClick={() => {
               const leftN =
@@ -195,53 +207,70 @@ export function SftpTransferModal({
           >
             <ArrowLeftRight size={12} />
             {busy ? t("terminal.transferring") : t("terminal.transfer")}
-          </button>
+          </Button>
         </div>
       }
     >
-      <div className="grid min-h-0 flex-1 grid-cols-2 gap-2">
-        <TransferPane
-          side="left"
-          tabs={leftTabs}
-          activeTabId={leftActive}
-          hosts={hosts}
-          onActivate={setLeftActive}
-          onCloseTab={(id) => closeTab("left", id)}
-          onAdd={() => setPickerSide("left")}
-          snapshotRef={leftRef}
-          onTransferEntry={(entries) => {
-            if (!entries.length) return;
-            leftRef.current = {
-              ...(leftRef.current as SideSnapshot),
-              checked: entries,
-              selected: entries[0],
-            };
-            transfer("left", entries).catch(console.error);
-          }}
-        />
-        <TransferPane
-          side="right"
-          tabs={rightTabs}
-          activeTabId={rightActive}
-          hosts={hosts}
-          onActivate={setRightActive}
-          onCloseTab={(id) => closeTab("right", id)}
-          onAdd={() => setPickerSide("right")}
-          snapshotRef={rightRef}
-          onTransferEntry={(entries) => {
-            if (!entries.length) return;
-            rightRef.current = {
-              ...(rightRef.current as SideSnapshot),
-              checked: entries,
-              selected: entries[0],
-            };
-            transfer("right", entries).catch(console.error);
-          }}
-        />
-      </div>
+      <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
+        <ResizablePanel
+          id="sftp-left"
+          defaultSize={50}
+          minSize={30}
+          className="flex min-h-0 min-w-0 flex-col overflow-hidden"
+        >
+          <TransferPane
+            side="left"
+            tabs={leftTabs}
+            activeTabId={leftActive}
+            hosts={hosts}
+            onActivate={setLeftActive}
+            onCloseTab={(id) => closeTab("left", id)}
+            onAdd={() => setPickerSide("left")}
+            snapshotRef={leftRef}
+            onTransferEntry={(entries) => {
+              if (!entries.length) return;
+              leftRef.current = {
+                ...(leftRef.current as SideSnapshot),
+                checked: entries,
+                selected: entries[0],
+              };
+              transfer("left", entries).catch(console.error);
+            }}
+          />
+        </ResizablePanel>
+        <ResizableHandle />
+        <ResizablePanel
+          id="sftp-right"
+          defaultSize={50}
+          minSize={30}
+          className="flex min-h-0 min-w-0 flex-col overflow-hidden"
+        >
+          <TransferPane
+            side="right"
+            tabs={rightTabs}
+            activeTabId={rightActive}
+            hosts={hosts}
+            onActivate={setRightActive}
+            onCloseTab={(id) => closeTab("right", id)}
+            onAdd={() => setPickerSide("right")}
+            snapshotRef={rightRef}
+            onTransferEntry={(entries) => {
+              if (!entries.length) return;
+              rightRef.current = {
+                ...(rightRef.current as SideSnapshot),
+                checked: entries,
+                selected: entries[0],
+              };
+              transfer("right", entries).catch(console.error);
+            }}
+          />
+        </ResizablePanel>
+      </ResizablePanelGroup>
 
       {message && (
-        <div className={`text-xs ${ok ? "muted" : "text-danger"}`}>
+        <div
+          className={`text-xs ${ok ? "text-muted-foreground" : "text-destructive"}`}
+        >
           {message}
         </div>
       )}

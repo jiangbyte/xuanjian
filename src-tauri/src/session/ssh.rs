@@ -222,3 +222,47 @@ pub async fn exec(handle: Arc<Mutex<Handle<ClientHandler>>>, command: &str) -> R
     }
     Ok(String::from_utf8_lossy(&out).to_string())
 }
+
+/// 流式执行命令；cancel 为 true 时关闭通道。通过 on_chunk 推送 UTF-8 文本块。
+pub async fn exec_stream(
+    handle: Arc<Mutex<Handle<ClientHandler>>>,
+    command: &str,
+    cancel: Arc<std::sync::atomic::AtomicBool>,
+    mut on_chunk: impl FnMut(String),
+) -> Result<()> {
+    use std::sync::atomic::Ordering;
+    let mut channel = {
+        let h = handle.lock().await;
+        h.channel_open_session().await?
+    };
+    channel.exec(true, command).await?;
+    let mut pending = String::new();
+    loop {
+        if cancel.load(Ordering::SeqCst) {
+            let _ = channel.close().await;
+            break;
+        }
+        match tokio::time::timeout(std::time::Duration::from_millis(200), channel.wait()).await {
+            Ok(Some(ChannelMsg::Data { ref data }))
+            | Ok(Some(ChannelMsg::ExtendedData { ref data, .. })) => {
+                pending.push_str(&String::from_utf8_lossy(data));
+                // 尽量按行推送，尾巴留在 pending
+                while let Some(pos) = pending.find('\n') {
+                    let mut line = pending[..pos + 1].to_string();
+                    pending = pending[pos + 1..].to_string();
+                    on_chunk(std::mem::take(&mut line));
+                }
+                if pending.len() > 16 * 1024 {
+                    on_chunk(std::mem::take(&mut pending));
+                }
+            }
+            Ok(Some(ChannelMsg::Eof)) | Ok(None) => break,
+            Ok(Some(_)) => {}
+            Err(_) => continue, // timeout — 继续检查 cancel
+        }
+    }
+    if !pending.is_empty() {
+        on_chunk(pending);
+    }
+    Ok(())
+}

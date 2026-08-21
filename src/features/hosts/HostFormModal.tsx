@@ -6,10 +6,31 @@
 
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import { HostInput, HostRow, GroupRow } from "@/lib/db";
 import { api } from "@/lib/tauri";
-import { Select } from "@/components/Select";
 import { HOST_COLORS } from "@/features/hosts/hostColors";
+
+const NONE = "none";
 
 /** 主机新建 / 编辑表单弹窗 */
 export function HostFormModal({
@@ -70,131 +91,147 @@ export function HostFormModal({
     if (typeof file === "string") setPrivateKeyPath(file);
   };
 
-  return (
-    <div
-      className="overlay flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <div
-        className="modal-card flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="border-b border-[var(--border)] px-5 py-4">
-          <h3 className="text-base font-semibold">
-            {initial ? t("hosts.editHost") : t("hosts.newHost")}
-          </h3>
-        </div>
+  const toNumber = (v: string | number, fallback: number) => {
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  };
 
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>
+            {initial ? t("hosts.editHost") : t("hosts.newHost")}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="max-h-[70vh] overflow-y-auto pr-1">
           <Section title={t("hosts.sectionBasic")}>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label={t("hosts.name")} value={name} onChange={setName} />
-              <label className="field-label">
-                {t("hosts.color")}
+              <Field label={t("hosts.name")}>
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.currentTarget.value)}
+                />
+              </Field>
+              <div>
+                <Label className="mb-1.5 block">{t("hosts.color")}</Label>
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {HOST_COLORS.map((c) => (
                     <button
                       key={c.value || "none"}
                       type="button"
                       title={"label" in c ? c.label : t("hosts.colorNone")}
-                      className={`h-7 w-7 rounded-[var(--radius-sm)] border ${
+                      className={cn(
+                        "h-7 w-7 rounded-md border",
                         color === c.value
-                          ? "border-[var(--accent)] ring-2 ring-[var(--accent)]/30"
-                          : "border-[var(--border)]"
-                      }`}
-                      style={{
-                        background: c.value || "var(--bg-elevated)",
-                      }}
+                          ? "border-primary ring-2 ring-primary/30"
+                          : "border-border",
+                        !c.value && "bg-muted",
+                      )}
+                      style={c.value ? { background: c.value } : undefined}
                       onClick={() => setColor(c.value)}
                     />
                   ))}
                 </div>
-              </label>
-              <Field
-                label={t("hosts.address")}
-                value={host}
-                onChange={setHost}
-              />
-              <Field
-                label={t("hosts.port")}
-                value={String(port)}
-                onChange={(v) => setPort(Number(v) || 22)}
-              />
-              <Field
-                label={t("hosts.username")}
-                value={username}
-                onChange={setUsername}
-              />
-              <label className="field-label">
-                {t("hosts.group")}
-                <Select
-                  className="w-full"
-                  value={groupId === "" ? "" : String(groupId)}
-                  options={[
-                    { value: "", label: t("hosts.ungrouped") },
-                    ...groups.map((g) => ({
-                      value: String(g.id),
-                      label: g.name,
-                    })),
-                  ]}
-                  onChange={(v) => setGroupId(v ? Number(v) : "")}
+              </div>
+              <Field label={t("hosts.address")}>
+                <Input
+                  value={host}
+                  onChange={(e) => setHost(e.currentTarget.value)}
                 />
-              </label>
+              </Field>
+              <Field label={t("hosts.port")}>
+                <Input
+                  type="number"
+                  min={1}
+                  max={65535}
+                  value={port}
+                  onChange={(e) => setPort(toNumber(e.currentTarget.value, 22))}
+                />
+              </Field>
+              <Field label={t("hosts.username")}>
+                <Input
+                  value={username}
+                  onChange={(e) => setUsername(e.currentTarget.value)}
+                />
+              </Field>
+              <Field label={t("hosts.group")}>
+                <Select
+                  value={groupId === "" ? NONE : String(groupId)}
+                  onValueChange={(v) =>
+                    setGroupId(v === NONE ? "" : Number(v))
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>{t("hosts.ungrouped")}</SelectItem>
+                    {groups.map((g) => (
+                      <SelectItem key={g.id} value={String(g.id)}>
+                        {g.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
             </div>
           </Section>
 
           <Section title={t("hosts.sectionAuth")}>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="field-label sm:col-span-2">
-                {t("hosts.authType")}
-                <Select
-                  className="w-full"
-                  value={authType}
-                  options={[
-                    { value: "password", label: t("hosts.password") },
-                    { value: "privateKey", label: t("hosts.privateKey") },
-                  ]}
-                  onChange={setAuthType}
-                />
-              </label>
+              <Field label={t("hosts.authType")} className="sm:col-span-2">
+                <Select value={authType} onValueChange={setAuthType}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="password">
+                      {t("hosts.password")}
+                    </SelectItem>
+                    <SelectItem value="privateKey">
+                      {t("hosts.privateKey")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
               {authType === "password" ? (
-                <div className="sm:col-span-2">
-                  <Field
-                    label={t("hosts.password")}
-                    value={password}
-                    onChange={setPassword}
+                <Field label={t("hosts.password")} className="sm:col-span-2">
+                  <Input
                     type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.currentTarget.value)}
                     placeholder={initial?.password_enc ? "••••••••" : ""}
                   />
-                </div>
+                </Field>
               ) : (
                 <>
-                  <label className="field-label sm:col-span-2">
-                    {t("hosts.privateKey")}
-                    <div className="flex gap-2">
-                      <input
-                        className="field flex-1 font-mono text-xs"
-                        value={privateKeyPath}
-                        onChange={(e) => setPrivateKeyPath(e.target.value)}
-                      />
-                      <button
-                        type="button"
-                        className="btn shrink-0"
-                        onClick={pickKey}
-                      >
-                        {t("hosts.browse")}
-                      </button>
-                    </div>
-                  </label>
                   <div className="sm:col-span-2">
-                    <Field
-                      label={t("hosts.passphrase")}
-                      value={passphrase}
-                      onChange={setPassphrase}
+                    <Label className="mb-1.5 block">
+                      {t("hosts.privateKey")}
+                    </Label>
+                    <div className="flex flex-nowrap items-end gap-2">
+                      <Input
+                        className="flex-1 font-mono text-xs"
+                        value={privateKeyPath}
+                        onChange={(e) =>
+                          setPrivateKeyPath(e.currentTarget.value)
+                        }
+                      />
+                      <Button variant="outline" onClick={() => void pickKey()}>
+                        {t("hosts.browse")}
+                      </Button>
+                    </div>
+                  </div>
+                  <Field label={t("hosts.passphrase")} className="sm:col-span-2">
+                    <Input
                       type="password"
+                      value={passphrase}
+                      onChange={(e) => setPassphrase(e.currentTarget.value)}
                       placeholder={initial?.passphrase_enc ? "••••••••" : ""}
                     />
-                  </div>
+                  </Field>
                 </>
               )}
             </div>
@@ -202,87 +239,100 @@ export function HostFormModal({
 
           <Section title={t("hosts.sectionConn")}>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field
-                label={t("hosts.connectTimeout")}
-                value={String(connectTimeout)}
-                onChange={(v) => setConnectTimeout(Number(v) || 30)}
-              />
-              <Field
-                label={t("hosts.keepalive")}
-                value={String(keepalive)}
-                onChange={(v) => setKeepalive(Number(v) || 0)}
-              />
-              <label className="field-label">
-                {t("hosts.terminalType")}
-                <Select
-                  className="w-full"
-                  value={terminalType}
-                  options={[
-                    { value: "xterm-256color", label: "xterm-256color" },
-                    { value: "xterm", label: "xterm" },
-                    { value: "vt100", label: "vt100" },
-                  ]}
-                  onChange={setTerminalType}
+              <Field label={t("hosts.connectTimeout")}>
+                <Input
+                  type="number"
+                  min={1}
+                  value={connectTimeout}
+                  onChange={(e) =>
+                    setConnectTimeout(toNumber(e.currentTarget.value, 30))
+                  }
                 />
-              </label>
-              <Field
-                label={t("hosts.remotePath")}
-                value={remotePath}
-                onChange={setRemotePath}
-                placeholder="/home"
-              />
-              <div className="sm:col-span-2">
-                <Field
-                  label={t("hosts.startupCmd")}
+              </Field>
+              <Field label={t("hosts.keepalive")}>
+                <Input
+                  type="number"
+                  min={0}
+                  value={keepalive}
+                  onChange={(e) =>
+                    setKeepalive(toNumber(e.currentTarget.value, 0))
+                  }
+                />
+              </Field>
+              <Field label={t("hosts.terminalType")}>
+                <Select value={terminalType} onValueChange={setTerminalType}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="xterm-256color">xterm-256color</SelectItem>
+                    <SelectItem value="xterm">xterm</SelectItem>
+                    <SelectItem value="vt100">vt100</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label={t("hosts.remotePath")}>
+                <Input
+                  value={remotePath}
+                  onChange={(e) => setRemotePath(e.currentTarget.value)}
+                  placeholder="/home"
+                />
+              </Field>
+              <Field label={t("hosts.startupCmd")} className="sm:col-span-2">
+                <Input
                   value={startupCmd}
-                  onChange={setStartupCmd}
+                  onChange={(e) => setStartupCmd(e.currentTarget.value)}
                   placeholder="cd /var/log && ls"
                 />
-              </div>
-              <label className="field-label sm:col-span-2">
-                {t("hosts.jumpHost")}
+              </Field>
+              <Field label={t("hosts.jumpHost")} className="sm:col-span-2">
                 <Select
-                  className="w-full"
-                  value={jumpHostId === "" ? "" : String(jumpHostId)}
-                  options={[
-                    { value: "", label: t("hosts.jumpNone") },
-                    ...jumpOptions.map((h) => ({
-                      value: String(h.id),
-                      label: `${h.name || h.host} (${h.username}@${h.host})`,
-                    })),
-                  ]}
-                  onChange={(v) => setJumpHostId(v ? Number(v) : "")}
-                />
-              </label>
+                  value={jumpHostId === "" ? NONE : String(jumpHostId)}
+                  onValueChange={(v) =>
+                    setJumpHostId(v === NONE ? "" : Number(v))
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>{t("hosts.jumpNone")}</SelectItem>
+                    {jumpOptions.map((h) => (
+                      <SelectItem key={h.id} value={String(h.id)}>
+                        {`${h.name || h.host} (${h.username}@${h.host})`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
             </div>
           </Section>
 
           <Section title={t("hosts.sectionMeta")} last>
             <div className="grid grid-cols-1 gap-3">
-              <Field
-                label={t("hosts.tags")}
-                value={tags}
-                onChange={setTags}
-                placeholder={t("hosts.tagsHint")}
-              />
-              <label className="field-label">
-                {t("hosts.remark")}
-                <textarea
-                  className="field min-h-[72px] py-2"
-                  value={remark}
-                  onChange={(e) => setRemark(e.target.value)}
+              <Field label={t("hosts.tags")}>
+                <Input
+                  value={tags}
+                  onChange={(e) => setTags(e.currentTarget.value)}
+                  placeholder={t("hosts.tagsHint")}
                 />
-              </label>
+              </Field>
+              <Field label={t("hosts.remark")}>
+                <Textarea
+                  value={remark}
+                  onChange={(e) => setRemark(e.currentTarget.value)}
+                  rows={3}
+                />
+              </Field>
             </div>
           </Section>
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-[var(--border)] px-5 py-3">
-          <button className="btn" onClick={onClose} disabled={saving}>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
             {t("hosts.cancel")}
-          </button>
-          <button
-            className="btn btn-primary"
+          </Button>
+          <Button
             disabled={saving || !host}
             onClick={async () => {
               setSaving(true);
@@ -326,10 +376,28 @@ export function HostFormModal({
               }
             }}
           >
+            {saving ? <Loader2 className="animate-spin" /> : null}
             {t("hosts.save")}
-          </button>
-        </div>
-      </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function Field({
+  label,
+  children,
+  className,
+}: {
+  label: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <Label className="mb-1.5 block">{label}</Label>
+      {children}
     </div>
   );
 }
@@ -346,38 +414,10 @@ function Section({
 }) {
   return (
     <section className={last ? "" : "mb-5"}>
-      <div className="mb-2 text-xs font-medium uppercase tracking-wide muted">
+      <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {title}
       </div>
       {children}
     </section>
-  );
-}
-
-/** 带标签的文本输入字段 */
-function Field({
-  label,
-  value,
-  onChange,
-  type = "text",
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  type?: string;
-  placeholder?: string;
-}) {
-  return (
-    <label className="field-label">
-      {label}
-      <input
-        type={type}
-        value={value}
-        placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
-        className="field"
-      />
-    </label>
   );
 }

@@ -14,6 +14,8 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 type ResizeDir = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 
@@ -164,7 +166,10 @@ export function FloatingWindow({
   };
 
   return (
-    <div className="overlay z-[70]" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[70] bg-black/40"
+      onClick={onClose}
+    >
       <div
         className="floating-window absolute flex flex-col overflow-hidden"
         style={{
@@ -177,19 +182,29 @@ export function FloatingWindow({
       >
         {/* —— 标题栏（拖动） —— */}
         <div
-          className="floating-window-title flex shrink-0 cursor-grab items-center justify-between px-4 py-2.5 active:cursor-grabbing"
+          className="floating-window-title flex shrink-0 cursor-grab items-center justify-between gap-2 overflow-hidden px-4 py-2 active:cursor-grabbing"
           onPointerDown={startMove}
         >
           <h2 className="select-none text-sm font-semibold">{title}</h2>
           <div className="flex items-center gap-1">
             {headerActions}
-            <button className="icon-btn" onClick={onClose} title="Close">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={onClose}
+              title="Close"
+              aria-label="Close"
+            >
               <X size={16} />
-            </button>
+            </Button>
           </div>
         </div>
         <div
-          className={`floating-window-body min-h-0 flex-1 overflow-auto overscroll-contain ${bodyClassName}`}
+          className={cn(
+            "floating-window-body min-h-0 flex-1 overflow-auto overscroll-contain",
+            bodyClassName,
+          )}
         >
           {children}
         </div>

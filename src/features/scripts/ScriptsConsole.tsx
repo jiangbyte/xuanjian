@@ -4,10 +4,38 @@
  * @description 管理脚本包与片段：搜索、编辑（Monaco）、新建/删除，并打开运行目标弹窗。
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { dialogs } from "@/lib/dialogs";
 import { useTranslation } from "react-i18next";
-import { FolderPlus, Play, Plus, Search, Terminal, X, Zap } from "lucide-react";
+import { FolderPlus, Loader2, Play, Plus, Search, Terminal, Zap } from "lucide-react";
 import Editor from "@monaco-editor/react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import {
   createScript,
   createScriptPackage,
@@ -24,15 +52,14 @@ import {
 import { previewScriptBody } from "@/lib/scriptVars";
 import { openContextMenu, useContextMenu } from "@/components/ContextMenu";
 import { resolveMonacoTheme, useSettingsStore } from "@/stores/settings";
-import { Select } from "@/components/Select";
-import { useDialog } from "@/components/Dialog";
 import { RunScriptTargetModal } from "@/features/scripts/RunScriptTargetModal";
+
+const NONE = "none";
 
 /** 脚本包与片段管理主界面 */
 export function ScriptsConsole() {
   const { t } = useTranslation();
   const { open: openMenu } = useContextMenu();
-  const dialog = useDialog();
   const [packages, setPackages] = useState<ScriptPackageRow[]>([]);
   const [scripts, setScripts] = useState<ScriptRow[]>([]);
   const [packageId, setPackageId] = useState<number | null>(null);
@@ -91,72 +118,69 @@ export function ScriptsConsole() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* —— 工具栏 —— */}
-      <div className="flex items-center gap-3 border-b border-[var(--border)] px-5 py-4">
-        <div className="field-icon-wrap flex-1">
-          <Search size={14} className="field-icon" />
-          <input
-            className="field"
-            placeholder={t("scripts.search")}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      <div className="border-b border-border px-5 py-4">
+        <div className="flex flex-nowrap items-center gap-3">
+          <InputGroup className="min-w-0 flex-1">
+            <InputGroupAddon>
+              <Search size={14} />
+            </InputGroupAddon>
+            <InputGroupInput
+              placeholder={t("scripts.search")}
+              value={search}
+              onChange={(e) => setSearch(e.currentTarget.value)}
+            />
+          </InputGroup>
+          <Button
+            onClick={() => {
+              setCreating(true);
+              setEditing(null);
+            }}
+          >
+            <Plus size={14} />
+            {t("scripts.newSnippet")}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={async () => {
+              const name = await dialogs.prompt(t("scripts.packageNamePrompt"), {
+                title: t("scripts.newPackage"),
+              });
+              if (!name?.trim()) return;
+              try {
+                const id = await createScriptPackage(name);
+                await reload();
+                setPackageId(id);
+              } catch (e) {
+                await dialogs.alert(String(e));
+              }
+            }}
+          >
+            <FolderPlus size={14} />
+            {t("scripts.newPackage")}
+          </Button>
         </div>
-        <button
-          className="btn btn-primary"
-          onClick={() => {
-            setCreating(true);
-            setEditing(null);
-          }}
-        >
-          <Plus size={14} />
-          {t("scripts.newSnippet")}
-        </button>
-        <button
-          className="btn"
-          onClick={async () => {
-            const name = await dialog.prompt(t("scripts.packageNamePrompt"), {
-              title: t("scripts.newPackage"),
-            });
-            if (!name?.trim()) return;
-            try {
-              const id = await createScriptPackage(name);
-              await reload();
-              setPackageId(id);
-            } catch (e) {
-              await dialog.alert(String(e));
-            }
-          }}
-        >
-          <FolderPlus size={14} />
-          {t("scripts.newPackage")}
-        </button>
       </div>
 
-      {/* —— 包侧栏 + 脚本列表 / 编辑器 —— */}
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-52 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg)]">
+        <aside className="flex w-52 shrink-0 flex-col border-r border-border bg-background">
           <div className="px-3 py-3">
-            <span className="text-xs font-medium uppercase tracking-wide muted">
+            <span className="text-xs font-medium uppercase text-muted-foreground">
               {t("scripts.packages")}
             </span>
           </div>
-          <div className="side-nav flex-1 overflow-y-auto px-2 pb-3">
-            <button
-              type="button"
-              className={`list-row ${packageId == null ? "is-active" : ""}`}
+          <div className="flex flex-1 flex-col gap-1 overflow-y-auto px-2 pb-2">
+            <SidebarNavItem
+              active={packageId == null}
+              label={t("scripts.allPackages")}
+              count={scripts.length}
               onClick={() => setPackageId(null)}
-            >
-              <span className="min-w-0 flex-1 truncate text-left text-sm">
-                {t("scripts.allPackages")}
-              </span>
-              <span className="count-badge">{scripts.length}</span>
-            </button>
+            />
             {packages.map((p) => (
-              <button
+              <SidebarNavItem
                 key={p.id}
-                type="button"
-                className={`list-row ${packageId === p.id ? "is-active" : ""}`}
+                active={packageId === p.id}
+                label={p.name}
+                count={packageCounts.get(p.id) || 0}
                 onClick={() => setPackageId(p.id)}
                 onContextMenu={(e) =>
                   openContextMenu(e, openMenu, [
@@ -164,7 +188,7 @@ export function ScriptsConsole() {
                       id: "rename",
                       label: t("scripts.renamePackage"),
                       onClick: async () => {
-                        const name = await dialog.prompt(
+                        const name = await dialogs.prompt(
                           t("scripts.packageNamePrompt"),
                           {
                             title: t("scripts.renamePackage"),
@@ -182,7 +206,7 @@ export function ScriptsConsole() {
                       danger: true,
                       onClick: async () => {
                         if (
-                          !(await dialog.confirm(
+                          !(await dialogs.confirm(
                             t("scripts.deletePackageConfirm"),
                             {
                               danger: true,
@@ -197,43 +221,32 @@ export function ScriptsConsole() {
                     },
                   ])
                 }
-              >
-                <span className="min-w-0 flex-1 truncate text-left text-sm">
-                  {p.name}
-                </span>
-                <span className="count-badge">
-                  {packageCounts.get(p.id) || 0}
-                </span>
-              </button>
+              />
             ))}
-            <button
-              type="button"
-              className={`list-row ${packageId === -1 ? "is-active" : ""}`}
+            <SidebarNavItem
+              active={packageId === -1}
+              label={t("scripts.ungrouped")}
+              count={packageCounts.get("none") || 0}
               onClick={() => setPackageId(-1)}
-            >
-              <span className="min-w-0 flex-1 truncate text-left text-sm">
-                {t("scripts.ungrouped")}
-              </span>
-              <span className="count-badge">
-                {packageCounts.get("none") || 0}
-              </span>
-            </button>
+            />
           </div>
         </aside>
 
         <div className="flex-1 overflow-auto p-5">
           <h2 className="mb-1 text-lg font-semibold">{title}</h2>
-          <p className="mb-4 text-xs muted">
+          <p className="mb-4 text-xs text-muted-foreground">
             {t("scripts.count", { count: filtered.length })}
           </p>
           {filtered.length === 0 ? (
-            <div className="empty-state">{t("scripts.empty")}</div>
+            <div className="flex items-center justify-center rounded-lg border border-dashed border-border p-10">
+              <span className="text-muted-foreground">{t("scripts.empty")}</span>
+            </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {filtered.map((script) => (
-                <div
+                <Card
                   key={script.id}
-                  className="host-card cursor-pointer"
+                  className="cursor-pointer p-4"
                   onClick={() => {
                     setEditing(script);
                     setCreating(false);
@@ -260,7 +273,7 @@ export function ScriptsConsole() {
                         danger: true,
                         onClick: async () => {
                           if (
-                            !(await dialog.confirm(t("scripts.deleteConfirm"), {
+                            !(await dialogs.confirm(t("scripts.deleteConfirm"), {
                               danger: true,
                             }))
                           )
@@ -273,36 +286,36 @@ export function ScriptsConsole() {
                   }
                 >
                   <div className="flex items-start gap-3">
-                    <div className="host-avatar">
+                    <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
                       <Zap size={18} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate font-semibold">
-                        {script.name}
-                      </div>
+                      <p className="truncate font-semibold">{script.name}</p>
                       {script.description && (
-                        <div className="mt-0.5 truncate text-xs muted">
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
                           {script.description}
-                        </div>
+                        </p>
                       )}
-                      <div className="mt-2 truncate font-mono text-xs muted">
+                      <p className="mt-2 truncate font-mono text-xs text-muted-foreground">
                         {previewScriptBody(script.body)}
-                      </div>
+                      </p>
                       <div className="mt-2 flex flex-wrap gap-1">
                         {script.package_name && (
-                          <span className="chip">{script.package_name}</span>
+                          <Badge variant="secondary">
+                            {script.package_name}
+                          </Badge>
                         )}
                         {script.paste_only ? (
-                          <span className="chip">
+                          <Badge variant="secondary">
                             {t("scripts.pasteOnlyShort")}
-                          </span>
+                          </Badge>
                         ) : null}
                       </div>
                     </div>
                   </div>
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      className="btn btn-sm btn-primary"
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      size="xs"
                       onClick={(e) => {
                         e.stopPropagation();
                         setRunTarget(script);
@@ -310,9 +323,10 @@ export function ScriptsConsole() {
                     >
                       <Play size={13} />
                       {t("scripts.run")}
-                    </button>
-                    <button
-                      className="btn btn-sm"
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="outline"
                       onClick={(e) => {
                         e.stopPropagation();
                         setEditing(script);
@@ -320,9 +334,9 @@ export function ScriptsConsole() {
                       }}
                     >
                       {t("scripts.edit")}
-                    </button>
+                    </Button>
                   </div>
-                </div>
+                </Card>
               ))}
             </div>
           )}
@@ -353,7 +367,7 @@ export function ScriptsConsole() {
             editing
               ? async () => {
                   if (
-                    !(await dialog.confirm(t("scripts.deleteConfirm"), {
+                    !(await dialogs.confirm(t("scripts.deleteConfirm"), {
                       danger: true,
                     }))
                   )
@@ -375,6 +389,39 @@ export function ScriptsConsole() {
         />
       )}
     </div>
+  );
+}
+
+function SidebarNavItem({
+  active,
+  label,
+  count,
+  onClick,
+  onContextMenu,
+}: {
+  active: boolean;
+  label: string;
+  count: number;
+  onClick: () => void;
+  onContextMenu?: (e: MouseEvent) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        "flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+        active
+          ? "bg-accent text-accent-foreground"
+          : "text-foreground hover:bg-muted",
+      )}
+      onClick={onClick}
+      onContextMenu={onContextMenu}
+    >
+      <span className="truncate">{label}</span>
+      <Badge variant="secondary" className="shrink-0">
+        {count}
+      </Badge>
+    </button>
   );
 }
 
@@ -416,72 +463,69 @@ function ScriptEditorModal({
   void appTheme;
 
   return (
-    <div
-      className="overlay flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <div
-        className="modal-card flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-5 py-4">
-          <h3 className="text-base font-semibold">
-            {initial ? t("scripts.editSnippet") : t("scripts.newSnippet")}
-          </h3>
-          <div className="flex items-center gap-1">
-            {onRun && (
-              <button
-                className="icon-btn"
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <span>
+              {initial ? t("scripts.editSnippet") : t("scripts.newSnippet")}
+            </span>
+            {onRun ? (
+              <Button
+                variant="ghost"
+                size="icon-sm"
                 title={t("scripts.run")}
                 onClick={onRun}
               >
                 <Play size={16} />
-              </button>
-            )}
-            <button className="icon-btn" onClick={onClose}>
-              <X size={16} />
-            </button>
-          </div>
-        </div>
+              </Button>
+            ) : null}
+          </DialogTitle>
+        </DialogHeader>
 
-        <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
+        <div className="flex max-h-[70vh] flex-col gap-3 overflow-y-auto pr-1">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="field-label">
-              {t("scripts.name")}
-              <input
-                className="field"
+            <div>
+              <Label className="mb-1.5 block">{t("scripts.name")}</Label>
+              <Input
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => setName(e.currentTarget.value)}
               />
-            </label>
-            <label className="field-label">
-              {t("scripts.package")}
+            </div>
+            <div>
+              <Label className="mb-1.5 block">{t("scripts.package")}</Label>
               <Select
-                className="w-full"
-                value={packageId === "" ? "" : String(packageId)}
-                options={[
-                  { value: "", label: t("scripts.ungrouped") },
-                  ...packages.map((p) => ({
-                    value: String(p.id),
-                    label: p.name,
-                  })),
-                ]}
-                onChange={(v) => setPackageId(v ? Number(v) : "")}
-              />
-            </label>
+                value={packageId === "" ? NONE : String(packageId)}
+                onValueChange={(v) =>
+                  setPackageId(v === NONE ? "" : Number(v))
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE}>{t("scripts.ungrouped")}</SelectItem>
+                  {packages.map((p) => (
+                    <SelectItem key={p.id} value={String(p.id)}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <label className="field-label">
-            {t("scripts.description")}
-            <textarea
-              className="field min-h-[56px]"
+          <div>
+            <Label className="mb-1.5 block">{t("scripts.description")}</Label>
+            <Textarea
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => setDescription(e.currentTarget.value)}
               placeholder={t("scripts.descriptionHint")}
+              rows={2}
             />
-          </label>
-          <div className="field-label">
-            {t("scripts.body")}
-            <div className="overflow-hidden rounded-[var(--radius)] border border-[var(--border)]">
+          </div>
+          <div>
+            <Label className="mb-1.5 block">{t("scripts.body")}</Label>
+            <div className="overflow-hidden rounded-md border border-border">
               <Editor
                 height="260px"
                 language="shell"
@@ -505,34 +549,40 @@ function ScriptEditorModal({
                 }}
               />
             </div>
-            <span className="text-[11px] muted">{t("scripts.varsHint")}</span>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t("scripts.varsHint")}
+            </p>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="flex items-center gap-2 self-end pb-2 text-sm">
-              <input
-                type="checkbox"
-                className="accent-[var(--accent)]"
+            <div className="flex items-center gap-2 self-end pb-2">
+              <Checkbox
+                id="pasteOnly"
                 checked={pasteOnly}
-                onChange={(e) => setPasteOnly(e.target.checked)}
+                onCheckedChange={(v) => setPasteOnly(v === true)}
               />
-              {t("scripts.pasteOnly")}
-            </label>
-            <label className="field-label">
-              {t("scripts.sendMode")}
+              <Label htmlFor="pasteOnly">{t("scripts.pasteOnly")}</Label>
+            </div>
+            <div>
+              <Label className="mb-1.5 block">{t("scripts.sendMode")}</Label>
               <Select
-                className="w-full"
                 value={sendMode}
-                options={[
-                  { value: "once", label: t("scripts.sendOnce") },
-                  { value: "line", label: t("scripts.sendLine") },
-                ]}
-                onChange={(v) => setSendMode(v as "once" | "line")}
-              />
-            </label>
+                onValueChange={(v) => setSendMode(v as "once" | "line")}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="once">{t("scripts.sendOnce")}</SelectItem>
+                  <SelectItem value="line">{t("scripts.sendLine")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <p className="text-[11px] muted">{t("scripts.sendModeHint")}</p>
-          <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs muted">
-            <div className="mb-1 flex items-center gap-1.5 text-[var(--text)]">
+          <p className="text-xs text-muted-foreground">
+            {t("scripts.sendModeHint")}
+          </p>
+          <div className="rounded-md border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+            <div className="mb-1 flex items-center gap-1.5 text-foreground">
               <Terminal size={13} />
               {t("scripts.runTarget")}
             </div>
@@ -540,43 +590,48 @@ function ScriptEditorModal({
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-[var(--border)] px-5 py-3">
-          {onDelete && (
-            <button
-              className="btn btn-danger mr-auto"
+        <DialogFooter className="sm:justify-between">
+          {onDelete ? (
+            <Button
+              variant="destructive"
+              className="mr-auto"
               onClick={() => onDelete()}
               disabled={saving}
             >
               {t("scripts.delete")}
-            </button>
+            </Button>
+          ) : (
+            <span />
           )}
-          <button className="btn" onClick={onClose} disabled={saving}>
-            {t("hosts.cancel")}
-          </button>
-          <button
-            className="btn btn-primary"
-            disabled={saving || !name.trim() || !body.trim()}
-            onClick={async () => {
-              setSaving(true);
-              try {
-                await onSave({
-                  name: name.trim(),
-                  description: description.trim() || null,
-                  kind: "snippet",
-                  body,
-                  package_id: packageId === "" ? null : packageId,
-                  paste_only: pasteOnly,
-                  send_mode: sendMode,
-                });
-              } finally {
-                setSaving(false);
-              }
-            }}
-          >
-            {t("hosts.save")}
-          </button>
-        </div>
-      </div>
-    </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose} disabled={saving}>
+              {t("hosts.cancel")}
+            </Button>
+            <Button
+              disabled={saving || !name.trim() || !body.trim()}
+              onClick={async () => {
+                setSaving(true);
+                try {
+                  await onSave({
+                    name: name.trim(),
+                    description: description.trim() || null,
+                    kind: "snippet",
+                    body,
+                    package_id: packageId === "" ? null : packageId,
+                    paste_only: pasteOnly,
+                    send_mode: sendMode,
+                  });
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              {saving ? <Loader2 className="animate-spin" /> : null}
+              {t("hosts.save")}
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -63,6 +63,10 @@ export const api = {
   sessionClose: (sessionId: string) => invoke("session_close", { sessionId }),
   sessionExec: (sessionId: string, command: string) =>
     invoke<string>("session_exec", { sessionId, command }),
+  sessionExecStream: (sessionId: string, command: string) =>
+    invoke<string>("session_exec_stream", { sessionId, command }),
+  sessionExecCancel: (jobId: string) =>
+    invoke("session_exec_cancel", { jobId }),
   sftpList: (sessionId: string, path: string) =>
     invoke<SftpEntry[]>("sftp_list", { sessionId, path }),
   sftpUpload: (
@@ -141,22 +145,6 @@ export const api = {
       timeoutMs: timeoutMs ?? null,
     }),
   networkCancel: (jobId: string) => invoke("network_cancel", { jobId }),
-  networkDetectCaptureTools: () =>
-    invoke<CaptureTools>("network_detect_capture_tools"),
-  networkCaptureStart: (
-    iface: string,
-    filter: string | null,
-    outputPath: string,
-  ) =>
-    invoke<string>("network_capture_start", {
-      iface,
-      filter,
-      outputPath,
-    }),
-  networkCaptureStop: (jobId: string) =>
-    invoke("network_capture_stop", { jobId }),
-  networkPcapSummary: (path: string) =>
-    invoke<PcapSummary>("network_pcap_summary", { path }),
   networkHttpRequest: (input: {
     method: string;
     url: string;
@@ -174,6 +162,36 @@ export const api = {
   networkTlsCert: (hostPort: string) =>
     invoke<TlsCertInfo>("network_tls_cert", { hostPort }),
   networkWhois: (query: string) => invoke<string>("network_whois", { query }),
+  networkSpeedTest: (input: {
+    downloadUrl: string;
+    uploadUrl: string;
+    downloadBytes?: number;
+    uploadBytes?: number;
+    concurrency?: number;
+    rounds?: number;
+  }) =>
+    invoke<string>("network_speed_test", {
+      downloadUrl: input.downloadUrl,
+      uploadUrl: input.uploadUrl,
+      downloadBytes: input.downloadBytes ?? null,
+      uploadBytes: input.uploadBytes ?? null,
+      concurrency: input.concurrency ?? null,
+      rounds: input.rounds ?? null,
+    }),
+  networkSpeedServerStart: (port?: number) =>
+    invoke<SpeedServerInfo>("network_speed_server_start", {
+      port: port ?? null,
+    }),
+  networkSpeedServerStop: () => invoke("network_speed_server_stop"),
+  networkSpeedServerStatus: () =>
+    invoke<SpeedServerInfo | null>("network_speed_server_status"),
+};
+
+export type SpeedServerInfo = {
+  port: number;
+  baseUrls: string[];
+  downloadPath: string;
+  uploadPath: string;
 };
 
 export type NetInterface = { name: string; addrs: string[] };
@@ -183,21 +201,6 @@ export type TcpProbeResult = {
   open: boolean;
   latencyMs?: number | null;
   error?: string | null;
-};
-export type CaptureTools = {
-  tshark?: string | null;
-  dumpcap?: string | null;
-  wireshark?: string | null;
-};
-export type PcapSummary = {
-  packetCount: number;
-  protocols: { name: string; count: number }[];
-  sessions: {
-    src: string;
-    dst: string;
-    protocol: string;
-    packets: number;
-  }[];
 };
 export type HttpResponse = {
   status: number;
@@ -220,6 +223,16 @@ export function onSessionOutput(
 ): Promise<UnlistenFn> {
   return listen<{ sessionId: string; data: string }>("session-output", (e) =>
     cb(e.payload),
+  );
+}
+
+/** 监听会话流式 exec 输出（docker logs -f 等） */
+export function onSessionExecOutput(
+  cb: (payload: { jobId: string; data: string; done: boolean }) => void,
+): Promise<UnlistenFn> {
+  return listen<{ jobId: string; data: string; done: boolean }>(
+    "session-exec-output",
+    (e) => cb(e.payload),
   );
 }
 
@@ -246,11 +259,65 @@ export function onTransferProgress(
 }
 
 /** 监听网络工具（ping / traceroute 等）流式输出 */
+export type NetworkToolEvent = {
+  kind: "ping_sample" | "ping_summary" | "trace_hop" | "meta" | "error" | string;
+  seq?: number;
+  rttMs?: number | null;
+  lost?: boolean;
+  ttl?: number;
+  hop?: number;
+  host?: string;
+  ip?: string;
+  rtts?: (number | null)[];
+  lossPct?: number;
+  sent?: number;
+  recv?: number;
+  minMs?: number;
+  avgMs?: number;
+  maxMs?: number;
+};
+
+export type NetworkToolOutput = {
+  jobId: string;
+  line: string;
+  done: boolean;
+  event?: NetworkToolEvent | null;
+};
+
 export function onNetworkToolOutput(
-  cb: (payload: { jobId: string; line: string; done: boolean }) => void,
+  cb: (payload: NetworkToolOutput) => void,
 ): Promise<UnlistenFn> {
-  return listen<{ jobId: string; line: string; done: boolean }>(
-    "network-tool-output",
-    (e) => cb(e.payload),
-  );
+  return listen<NetworkToolOutput>("network-tool-output", (e) => cb(e.payload));
+}
+
+export type SpeedTestResult = {
+  latencyMs: number;
+  downloadMbps: number;
+  uploadMbps: number;
+  downloadedBytes: number;
+  uploadedBytes: number;
+  concurrency: number;
+  rounds: number;
+  elapsedMs: number;
+};
+
+export type SpeedProgress = {
+  jobId: string;
+  phase: "latency" | "warmup" | "download" | "upload" | "done" | "error" | string;
+  latencyMs?: number;
+  bytesDone?: number;
+  bytesTotal?: number;
+  mbps?: number;
+  concurrency?: number;
+  round?: number;
+  rounds?: number;
+  result?: SpeedTestResult;
+  message?: string;
+};
+
+/** 监听网络测速进度 */
+export function onNetworkSpeedProgress(
+  cb: (payload: SpeedProgress) => void,
+): Promise<UnlistenFn> {
+  return listen<SpeedProgress>("network-speed-progress", (e) => cb(e.payload));
 }

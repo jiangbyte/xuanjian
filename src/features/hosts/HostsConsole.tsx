@@ -21,7 +21,7 @@ import { api } from "@/lib/tauri";
 import { useUiStore } from "@/stores/ui";
 import { useNavigate } from "react-router-dom";
 import { startRecordingForOpenTab } from "@/lib/sessionRecorder";
-import { useDialog } from "@/components/Dialog";
+import { dialogs } from "@/lib/dialogs";
 import {
   findHostByTarget,
   hostMatchesQuery,
@@ -36,7 +36,6 @@ import { HostFormModal } from "@/features/hosts/HostFormModal";
 /** 主机管理控制台主组件 */
 export function HostsConsole() {
   const { t } = useTranslation();
-  const dialog = useDialog();
   const [hosts, setHosts] = useState<HostRow[]>([]);
   const [groups, setGroups] = useState<GroupRow[]>([]);
   const [tags, setTags] = useState<TagRow[]>([]);
@@ -151,7 +150,7 @@ export function HostsConsole() {
     } catch (e) {
       updateTab(tabId, { status: "error" });
       console.error(e);
-      await dialog.alert(String(e));
+      await dialogs.alert(String(e));
     }
   };
 
@@ -243,11 +242,13 @@ export function HostsConsole() {
 
         <div className="flex-1 overflow-auto p-5">
           <h2 className="mb-1 text-lg font-semibold">{activeGroupLabel}</h2>
-          <p className="mb-4 text-xs muted">
+          <p className="mb-4 text-xs text-muted-foreground">
             {t("hosts.hostsCount", { count: filtered.length })}
           </p>
           {filtered.length === 0 ? (
-            <div className="empty-state">{t("hosts.empty")}</div>
+            <div className="flex items-center justify-center rounded-lg border border-dashed border-border p-10">
+              <span className="text-muted-foreground">{t("hosts.empty")}</span>
+            </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {filtered.map((host) => (

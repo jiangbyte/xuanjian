@@ -45,6 +45,8 @@ pub struct AppState {
     pub sessions: Mutex<HashMap<String, SessionHandle>>,
     /// 进行中的传输取消控制（transfer_id → 标志）。
     pub transfer_cancels: Mutex<HashMap<String, Arc<TransferAbort>>>,
+    /// 流式 exec（如 docker logs -f）取消标志（job_id → 标志）。
+    pub exec_cancels: Mutex<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>,
 }
 
 /// 单次 SFTP 传输的取消/暂停信号。
@@ -95,6 +97,7 @@ impl AppState {
         Self {
             sessions: Mutex::new(HashMap::new()),
             transfer_cancels: Mutex::new(HashMap::new()),
+            exec_cancels: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -116,6 +119,15 @@ pub struct SessionOutputPayload {
 #[serde(rename_all = "camelCase")]
 pub struct SessionClosedPayload {
     pub session_id: String,
+}
+
+/// 流式 exec 输出（docker logs -f 等）。
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionExecStreamPayload {
+    pub job_id: String,
+    pub data: String,
+    pub done: bool,
 }
 
 #[derive(Clone, Serialize)]

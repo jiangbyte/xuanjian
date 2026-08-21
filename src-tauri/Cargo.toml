@@ -37,7 +37,12 @@ rand = "0.8"
 dirs = "6"
 chrono = { version = "0.4", features = ["serde"] }
 if-addrs = "0.13"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "blocking"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "blocking", "stream"] }
+bytes = "1"
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "query"] }
+tower = "0.5"
+http-body-util = "0.1"
 which = "7"
+regex = "1"
 tauri-plugin-clipboard-manager = "2.3.2"
 tauri-plugin-prevent-default = { version = "5.0.2", features = ["platform-windows"] }

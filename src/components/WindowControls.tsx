@@ -2,16 +2,15 @@
  * @file 窗口控制按钮
  * @author Charlie
  * @description Tauri 窗口的最小化 / 最大化 / 关闭按钮组。
- * 仅在桌面壳内使用；点击会调用原生窗口 API。
  */
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Minus, Square, X, Copy } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 
 /**
  * 标题栏右侧窗口控制：最小化、切换最大化、关闭。
- * @副作用 调用 Tauri `getCurrentWindow()` 的 minimize / toggleMaximize / close。
  */
 export function WindowControls() {
   const [maximized, setMaximized] = useState(false);
@@ -25,31 +24,43 @@ export function WindowControls() {
   }, [win]);
 
   return (
-    <div className="flex h-full items-stretch">
-      <button
-        className="win-btn"
+    <div className="flex shrink-0 items-center">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        className="rounded-none text-muted-foreground hover:bg-muted hover:text-foreground"
         onClick={() => win.minimize()}
         title="Minimize"
+        aria-label="Minimize"
       >
         <Minus size={14} />
-      </button>
-      <button
-        className="win-btn"
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        className="rounded-none text-muted-foreground hover:bg-muted hover:text-foreground"
         onClick={async () => {
           await win.toggleMaximize();
           setMaximized(await win.isMaximized());
         }}
         title="Maximize"
+        aria-label="Maximize"
       >
         {maximized ? <Copy size={12} /> : <Square size={12} />}
-      </button>
-      <button
-        className="win-btn win-btn-close"
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        className="rounded-none text-muted-foreground hover:bg-destructive hover:text-destructive-foreground"
         onClick={() => win.close()}
         title="Close"
+        aria-label="Close"
       >
         <X size={14} />
-      </button>
+      </Button>
     </div>
   );
 }

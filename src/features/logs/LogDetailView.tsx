@@ -6,11 +6,13 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { dialogs } from "@/lib/dialogs";
 import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { ArrowLeft, Download, Gauge, Pin } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { save } from "@tauri-apps/plugin-dialog";
 import {
   getSessionLog,
@@ -21,7 +23,6 @@ import {
 } from "@/lib/db";
 import { api } from "@/lib/tauri";
 import { clipboardWriteText } from "@/lib/clipboard";
-import { useDialog } from "@/components/Dialog";
 import {
   openContextMenu,
   useContextMenu,
@@ -42,7 +43,6 @@ export function LogDetailView() {
   const logId = Number(id);
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const dialog = useDialog();
   const { open: openMenu } = useContextMenu();
   const termFontSize = useSettingsStore((s) => s.termFontSize);
   const termFontFamily = useSettingsStore((s) => s.termFontFamily);
@@ -121,7 +121,6 @@ export function LogDetailView() {
   const writeUpToIndex = useCallback((endExclusive: number) => {
     const term = termRef.current;
     if (!term) return;
-    // 取消进行中的 dump
     dumpGenRef.current += 1;
     const gen = dumpGenRef.current;
     term.reset();
@@ -276,7 +275,6 @@ export function LogDetailView() {
     }
   }, [termFontSize, termFontFamily, termReady]);
 
-  // 仅一条 dump 路径 — 与异步 term.write 重叠会导致缓冲翻倍
   useEffect(() => {
     if (!termReady || !termRef.current) return;
     if (playbackMode) {
@@ -348,13 +346,13 @@ export function LogDetailView() {
     try {
       await api.writeLocalFile(path, body);
     } catch (e) {
-      await dialog.alert(String(e));
+      await dialogs.alert(String(e));
     }
   };
 
   if (!Number.isFinite(logId)) {
     return (
-      <div className="flex h-full items-center justify-center text-sm muted">
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
         {t("logs.notFound")}
       </div>
     );
@@ -362,7 +360,7 @@ export function LogDetailView() {
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center text-sm muted">
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
         {t("logs.loading")}
       </div>
     );
@@ -370,7 +368,7 @@ export function LogDetailView() {
 
   if (!log) {
     return (
-      <div className="flex h-full items-center justify-center text-sm muted">
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
         {t("logs.notFound")}
       </div>
     );
@@ -383,64 +381,65 @@ export function LogDetailView() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* —— 顶栏：返回 / 元信息 / 回放与导出 —— */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] px-4 py-2">
-        <button
-          type="button"
-          className="icon-btn"
-          onClick={() => navigate("/logs")}
-          title={t("logs.back")}
-        >
-          <ArrowLeft size={16} />
-        </button>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold">{log.title}</div>
-          <div className="truncate text-[11px] muted">
-            {formatLogTimeRange(log.started_at, log.ended_at, t("logs.live"))} ·{" "}
-            {meta} · {formatBytes(log.bytes_out)} · {t("logs.readonly")}
+      <div className="border-b border-border px-4 py-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            title={t("logs.back")}
+            onClick={() => navigate("/logs")}
+          >
+            <ArrowLeft size={16} />
+          </Button>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-semibold">{log.title}</div>
+            <div className="truncate text-[11px] text-muted-foreground">
+              {formatLogTimeRange(log.started_at, log.ended_at, t("logs.live"))}{" "}
+              · {meta} · {formatBytes(log.bytes_out)} · {t("logs.readonly")}
+            </div>
           </div>
+          <Button
+            size="xs"
+            variant={playbackMode ? "default" : "outline"}
+            title={t("logs.playbackToggle")}
+            onClick={() => setPlaybackMode((v) => !v)}
+          >
+            <Gauge size={14} />
+            {playbackMode ? t("logs.playbackOn") : t("logs.playback")}
+          </Button>
+          <Button
+            variant={log.pinned ? "default" : "ghost"}
+            size="icon-sm"
+            title={t("logs.pin")}
+            onClick={async () => {
+              const next = !log.pinned;
+              await setSessionLogPinned(log.id, next);
+              setLog({ ...log, pinned: next ? 1 : 0 });
+            }}
+          >
+            <Pin size={16} />
+          </Button>
+          <Button
+            size="xs"
+            variant="outline"
+            onClick={() => exportFile("log").catch(console.error)}
+          >
+            <Download size={14} />
+            {t("logs.exportLog")}
+          </Button>
+          <Button
+            size="xs"
+            variant="outline"
+            onClick={() => exportFile("cast").catch(console.error)}
+          >
+            <Download size={14} />
+            {t("logs.exportCast")}
+          </Button>
         </div>
-        <button
-          type="button"
-          className={`btn btn-sm ${playbackMode ? "btn-primary" : ""}`}
-          title={t("logs.playbackToggle")}
-          onClick={() => setPlaybackMode((v) => !v)}
-        >
-          <Gauge size={14} />
-          {playbackMode ? t("logs.playbackOn") : t("logs.playback")}
-        </button>
-        <button
-          type="button"
-          className={`icon-btn ${log.pinned ? "text-[var(--accent)]" : ""}`}
-          title={t("logs.pin")}
-          onClick={async () => {
-            const next = !log.pinned;
-            await setSessionLogPinned(log.id, next);
-            setLog({ ...log, pinned: next ? 1 : 0 });
-          }}
-        >
-          <Pin size={16} />
-        </button>
-        <button
-          type="button"
-          className="btn btn-sm"
-          onClick={() => exportFile("log").catch(console.error)}
-        >
-          <Download size={14} />
-          {t("logs.exportLog")}
-        </button>
-        <button
-          type="button"
-          className="btn btn-sm"
-          onClick={() => exportFile("cast").catch(console.error)}
-        >
-          <Download size={14} />
-          {t("logs.exportCast")}
-        </button>
       </div>
       <div
         ref={containerRef}
-        className="min-h-0 flex-1 bg-[#0f1115] p-2"
+        className="min-h-0 flex-1 bg-background p-2"
         onContextMenu={(e) => {
           const term = termRef.current;
           const hasSelection = !!(term && term.hasSelection());

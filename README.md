@@ -1,14 +1,20 @@
 # 玄鉴 / Xuanjian
 
-![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)
-![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white)
-![Rust](https://img.shields.io/badge/Rust-2021-DEA584?logo=rust&logoColor=black)
-![Vite](https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=white)
-![SQLite](https://img.shields.io/badge/SQLite-Local-003B57?logo=sqlite&logoColor=white)
-![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
-![License](https://img.shields.io/badge/License-MIT-yellow)
-![Version](https://img.shields.io/badge/version-0.1.0-orange)
+<p align="center">
+  <img src="docs/images/app-icon.png" alt="玄鉴" width="128" height="128" />
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white" alt="Tauri" />
+  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black" alt="React" />
+  <img src="https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Rust-2021-DEA584?logo=rust&logoColor=black" alt="Rust" />
+  <img src="https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=white" alt="Vite" />
+  <img src="https://img.shields.io/badge/SQLite-Local-003B57?logo=sqlite&logoColor=white" alt="SQLite" />
+  <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platform" />
+  <img src="https://img.shields.io/badge/License-MIT-yellow" alt="License" />
+  <img src="https://img.shields.io/badge/version-0.1.0-orange" alt="Version" />
+</p>
 
 **玄鉴（Xuanjian）** 是一款面向运维与现场排查的 **Agent 运维桌面端**：主机清单、本地 / SSH 终端、SFTP 文件传输、脚本与笔记、会话录制回放，以及本机网络探测工具集于一体。基于 **Tauri 2 + React + TypeScript + Rust**，数据本地 SQLite 持久化，跨 Windows / macOS / Linux。
 
@@ -56,7 +62,8 @@ xuanjian
 │   ├── stores/                   # Zustand 状态
 │   ├── i18n/                     # 文案（locales/zh-CN · en）
 │   └── styles/                   # 全局样式分片
-├── src-tauri/                    # Rust / Tauri 后端
+├── src-tauri/
+│   ├── icons/                    # 应用图标（由 docs/images/app-icon-source.png 生成）
 │   ├── src/
 │   │   ├── commands/             # Tauri 命令薄层
 │   │   ├── session/              # 本地 PTY · SSH · SFTP

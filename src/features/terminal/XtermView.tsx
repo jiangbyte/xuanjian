@@ -7,6 +7,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { dialogs } from "@/lib/dialogs";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { useTranslation } from "react-i18next";
@@ -19,7 +20,6 @@ import {
 } from "@/components/ContextMenu";
 import { canReconnect, reconnectTermTab } from "@/lib/sessionConnect";
 import type { TermTab } from "@/stores/ui";
-import { useDialog } from "@/components/Dialog";
 import { useSettingsStore } from "@/stores/settings";
 
 /** 避免 StrictMode / 重挂载对同一次断线重复弹出确认框 */
@@ -30,8 +30,7 @@ const promptedClosed = new Set<string>();
  */
 export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
   const { t } = useTranslation();
-  const dialog = useDialog();
-  const { open: openMenu } = useContextMenu();
+    const { open: openMenu } = useContextMenu();
   const termFontSize = useSettingsStore((s) => s.termFontSize);
   const termFontFamily = useSettingsStore((s) => s.termFontFamily);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -279,16 +278,16 @@ export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
       const rows = termRef.current?.rows;
       await reconnectTermTab(tab.id, { cols, rows });
     } catch (e) {
-      await dialog.alert(String(e));
+      await dialogs.alert(String(e));
     } finally {
       setBusy(false);
     }
-  }, [busy, tab, dialog]);
+  }, [busy, tab]);
 
   const askReconnect = useCallback(async () => {
     if (busy || !canReconnect(tab)) return;
     if (tab.status !== "closed" && tab.status !== "error") return;
-    const ok = await dialog.confirm(t("terminal.reconnectConfirm"), {
+    const ok = await dialogs.confirm(t("terminal.reconnectConfirm"), {
       title:
         tab.status === "error"
           ? t("terminal.disconnectedError")
@@ -298,7 +297,7 @@ export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
     });
     if (!ok) return;
     await doReconnect();
-  }, [busy, tab, dialog, t, doReconnect]);
+  }, [busy, tab, t, doReconnect]);
 
   // 本标签断线（或激活时已断线）时弹出一次重连确认
   useEffect(() => {
@@ -376,7 +375,7 @@ export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
 
       {tab.status === "connecting" && !tab.sessionId && (
         <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center">
-          <div className="rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-xs muted shadow">
+          <div className="rounded-md border border-border bg-popover px-3 py-1.5 text-xs text-muted-foreground shadow">
             {t("terminal.connecting")}
           </div>
         </div>

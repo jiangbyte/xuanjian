@@ -212,5 +212,25 @@ CREATE INDEX IF NOT EXISTS idx_network_history_created ON network_history(create
 "#,
             kind: MigrationKind::Up,
         },
+        // —— 迁移 v8：Docker 编排项目 ——
+        Migration {
+            version: 8,
+            description: "docker_projects",
+            sql: r#"
+CREATE TABLE IF NOT EXISTS docker_projects (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  compose_json TEXT NOT NULL DEFAULT '{}',
+  dockerfiles_json TEXT NOT NULL DEFAULT '{}',
+  layout_json TEXT NOT NULL DEFAULT '{}',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_docker_projects_updated ON docker_projects(updated_at DESC);
+"#,
+            kind: MigrationKind::Up,
+        },
     ]
 }

@@ -1,25 +1,14 @@
 /**
  * @file scrollbar-xterm.css
- * Author: Charlie
- * @description 滚动条与 xterm 高度
+ * @author Charlie
+ * @description xterm 高度铺满；滚动条颜色走全局 token。
  */
 
-/* ========== Scrollbar / xterm ========== */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+.xterm {
+  height: 100%;
+  padding: 0;
 }
 
-::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
-}
-
-.xterm,
 .xterm-viewport {
-  height: 100% !important;
+  overflow-y: auto !important;
 }

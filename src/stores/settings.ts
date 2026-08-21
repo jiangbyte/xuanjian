@@ -82,14 +82,14 @@ export function applyTheme(theme: ThemeMode) {
   const root = document.documentElement;
   const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
   const dark = theme === "dark" || (theme === "system" && prefersDark);
-  root.classList.toggle("light", !dark);
   root.classList.toggle("dark", dark);
+  root.classList.remove("light");
   localStorage.setItem("xuanjian.theme", theme);
 }
 
 /** 当前是否为暗色应用主题（看 documentElement class） */
 export function isAppDark(): boolean {
-  return !document.documentElement.classList.contains("light");
+  return document.documentElement.classList.contains("dark");
 }
 
 /**

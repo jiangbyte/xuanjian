@@ -6,10 +6,12 @@
  * 仅允许安全字符作为 docker 引用参数，防止命令注入。
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { dialogs } from "@/lib/dialogs";
 import { useTranslation } from "react-i18next";
 import {
   Copy,
+  Loader2,
   Play,
   RefreshCw,
   RotateCcw,
@@ -19,9 +21,24 @@ import {
   Terminal,
   Trash2,
 } from "lucide-react";
-import { api } from "@/lib/tauri";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { FloatingWindow } from "@/components/FloatingWindow";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { api, onSessionExecOutput } from "@/lib/tauri";
 import { clipboardWriteText } from "@/lib/clipboard";
-import { useDialog } from "@/components/Dialog";
+import { toast } from "sonner";
+
+const LOG_MAX_LINES = 1000;
 
 type Section = "containers" | "images" | "networks" | "volumes";
 
@@ -106,11 +123,30 @@ function stateTone(state: string): "accent" | "warn" | "danger" | "muted" {
   return "muted";
 }
 
-function tipClass(tone: "accent" | "warn" | "danger" | "muted") {
-  if (tone === "accent") return "chip chip-accent";
-  if (tone === "warn") return "chip chip-warn";
-  if (tone === "danger") return "chip chip-danger";
-  return "chip";
+function badgeVariant(tone: "accent" | "warn" | "danger" | "muted") {
+  if (tone === "danger") return "destructive" as const;
+  if (tone === "warn") return "outline" as const;
+  if (tone === "accent") return "default" as const;
+  return "secondary" as const;
+}
+
+/** 去掉 ANSI / 残留着色码，便于纯文本阅读 */
+function stripAnsi(text: string): string {
+  return text
+    .replace(/\u001b\[[\d;?]*[ -/]*[@-~]/g, "")
+    .replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)/g, "")
+    .replace(/\u001b./g, "")
+    .replace(/\[[\d;]*m/g, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n");
+}
+
+/** 追加日志并裁到最多 LOG_MAX_LINES 行 */
+function appendCapped(prev: string, chunk: string): string {
+  const next = prev + chunk;
+  const lines = next.split("\n");
+  if (lines.length <= LOG_MAX_LINES) return next;
+  return lines.slice(-LOG_MAX_LINES).join("\n");
 }
 
 /**
@@ -126,7 +162,6 @@ export function DockerPane({
   shellId?: string | null;
 }) {
   const { t } = useTranslation();
-  const dialog = useDialog();
   const [section, setSection] = useState<Section>("containers");
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"all" | "running" | "exited">("all");
@@ -134,9 +169,15 @@ export function DockerPane({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [logsView, setLogsView] = useState<{
-    title: string;
+    id: string;
+    name: string;
     body: string;
   } | null>(null);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsLive, setLogsLive] = useState(false);
+  const logsJobRef = useRef<string | null>(null);
+  const logsScrollRef = useRef<HTMLDivElement | null>(null);
+  const stickBottomRef = useRef(true);
 
   const [containers, setContainers] = useState<ContainerRow[]>([]);
   const [images, setImages] = useState<ImageRow[]>([]);
@@ -251,7 +292,7 @@ export function DockerPane({
   ) => {
     if (!sessionId) return;
     if (confirmMsg) {
-      const ok = await dialog.confirm(confirmMsg, { danger: true });
+      const ok = await dialogs.confirm(confirmMsg, { danger: true });
       if (!ok) return;
     }
     setBusy(key);
@@ -263,11 +304,11 @@ export function DockerPane({
         /^Error response from daemon:/im.test(text) ||
         /^Error:/im.test(text)
       ) {
-        if (text) await dialog.alert(text.slice(0, 800));
+        if (text) await dialogs.alert(text.slice(0, 800));
       }
       await refresh();
     } catch (e) {
-      await dialog.alert(String(e));
+      await dialogs.alert(String(e));
     } finally {
       setBusy(null);
     }
@@ -277,7 +318,7 @@ export function DockerPane({
     try {
       await clipboardWriteText(text);
     } catch {
-      await dialog.alert(t("termTab.copyFail"));
+      await dialogs.alert(t("termTab.copyFail"));
     }
   };
 
@@ -287,28 +328,98 @@ export function DockerPane({
       const ref = safeArg(id);
       await api.sessionWrite(sessionId, `docker exec -it ${ref} sh\n`);
     } catch (e) {
-      await dialog.alert(String(e));
+      await dialogs.alert(String(e));
     }
   };
 
-  const showLogs = async (id: string, name: string) => {
-    if (!sessionId) return;
-    setBusy(`logs:${id}`);
-    try {
-      const ref = safeArg(id);
-      const raw = await api.sessionExec(
-        sessionId,
-        `docker logs --tail 120 ${ref} 2>&1`,
-      );
-      setLogsView({
-        title: t("termTab.dockerLogsTitle", { name }),
-        body: raw.trim() || t("termTab.dockerLogsEmpty"),
-      });
-    } catch (e) {
-      await dialog.alert(String(e));
-    } finally {
-      setBusy(null);
+  const stopLogsStream = useCallback(async () => {
+    const jobId = logsJobRef.current;
+    logsJobRef.current = null;
+    setLogsLive(false);
+    if (jobId) {
+      try {
+        await api.sessionExecCancel(jobId);
+      } catch {
+        /* ignore */
+      }
     }
+  }, []);
+
+  const startLogsStream = useCallback(
+    async (id: string, name: string) => {
+      if (!sessionId) return;
+      await stopLogsStream();
+      setLogsView({ id, name, body: "" });
+      setLogsLoading(true);
+      setBusy(`logs:${id}`);
+      stickBottomRef.current = true;
+      try {
+        const ref = safeArg(id);
+        const jobId = await api.sessionExecStream(
+          sessionId,
+          `docker logs -f --tail ${LOG_MAX_LINES} ${ref}`,
+        );
+        logsJobRef.current = jobId;
+        setLogsLive(true);
+      } catch (e) {
+        setLogsLive(false);
+        await dialogs.alert(String(e));
+        setLogsView(null);
+      } finally {
+        setLogsLoading(false);
+        setBusy(null);
+      }
+    },
+    [sessionId, stopLogsStream],
+  );
+
+  useEffect(() => {
+    let un: (() => void) | undefined;
+    void onSessionExecOutput((p) => {
+      if (!logsJobRef.current || p.jobId !== logsJobRef.current) return;
+      if (p.done) {
+        logsJobRef.current = null;
+        setLogsLive(false);
+        setLogsView((cur) =>
+          cur && !cur.body.trim()
+            ? { ...cur, body: t("termTab.dockerLogsEmpty") }
+            : cur,
+        );
+        return;
+      }
+      if (!p.data) return;
+      const chunk = stripAnsi(p.data);
+      setLogsView((cur) =>
+        cur ? { ...cur, body: appendCapped(cur.body, chunk) } : cur,
+      );
+    }).then((fn) => {
+      un = fn;
+    });
+    return () => {
+      un?.();
+    };
+  }, [t]);
+
+  useEffect(() => {
+    if (!logsView) return;
+    if (!stickBottomRef.current) return;
+    const el = logsScrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [logsView?.body]);
+
+  useEffect(() => {
+    return () => {
+      void stopLogsStream();
+    };
+  }, [stopLogsStream]);
+
+  const showLogs = async (id: string, name: string) => {
+    await startLogsStream(id, name);
+  };
+
+  const closeLogs = () => {
+    void stopLogsStream();
+    setLogsView(null);
   };
 
   const filteredContainers = useMemo(() => {
@@ -381,30 +492,39 @@ export function DockerPane({
   ];
 
   return (
-    <div className="panel flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground">
       {/* —— 标题与刷新 —— */}
-      <div className="panel-header flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
         <span className="text-xs font-medium">{t("termTab.docker")}</span>
-        <span className="text-xs muted">
+        <span className="text-xs text-muted-foreground">
           {t("termTab.dockerCount", { count })}
         </span>
-        <button
-          className="icon-btn icon-btn-sm tip ml-auto"
-          data-tip={t("terminal.refresh")}
-          onClick={() => refresh()}
-        >
-          <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              className="ml-auto"
+              aria-label={t("terminal.refresh")}
+              onClick={() => refresh()}
+            >
+              <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{t("terminal.refresh")}</TooltipContent>
+        </Tooltip>
       </div>
 
       {/* —— 分区、搜索与容器状态过滤 —— */}
-      <div className="border-b border-[var(--border)] px-2 py-2">
+      <div className="border-b border-border px-2 py-2">
         <div className="flex flex-wrap gap-1">
           {sections.map((s) => (
-            <button
+            <Button
               key={s.id}
               type="button"
-              className={`btn btn-sm ${section === s.id ? "btn-primary" : ""}`}
+              size="xs"
+              variant={section === s.id ? "default" : "outline"}
               onClick={() => {
                 setSection(s.id);
                 setQ("");
@@ -412,20 +532,24 @@ export function DockerPane({
               }}
             >
               {s.label}
-            </button>
+            </Button>
           ))}
         </div>
-        <div className="field-icon-wrap mt-2">
-          <Search size={13} className="field-icon" />
-          <input
-            className="field field-sm"
-            placeholder={t("termTab.dockerSearch")}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
+        <div className="mt-2">
+          <InputGroup className="h-7">
+            <InputGroupAddon>
+              <Search size={13} />
+            </InputGroupAddon>
+            <InputGroupInput
+              className="text-xs"
+              placeholder={t("termTab.dockerSearch")}
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+          </InputGroup>
         </div>
         {section === "containers" && (
-          <div className="mt-2 flex gap-1">
+          <div className="mt-2 flex flex-wrap gap-1">
             {(
               [
                 ["all", t("termTab.filterAll")],
@@ -433,151 +557,201 @@ export function DockerPane({
                 ["exited", t("termTab.dockerExited")],
               ] as const
             ).map(([key, label]) => (
-              <button
+              <Button
                 key={key}
                 type="button"
-                className={`btn btn-sm ${filter === key ? "btn-primary" : ""}`}
+                size="xs"
+                variant={filter === key ? "default" : "outline"}
                 onClick={() => setFilter(key)}
               >
                 {label}
-              </button>
+              </Button>
             ))}
           </div>
         )}
       </div>
 
       {/* —— 资源列表（容器 / 镜像 / 网络 / 卷） —— */}
-      <div className="panel-body panel-list min-h-0 flex-1 overflow-y-auto p-1.5">
+      <div className="min-h-0 flex-1 space-y-0.5 overflow-auto p-1.5">
         {!sessionId || kind == null ? (
-          <div className="px-2 py-6 text-center text-xs muted">
+          <div className="px-2 py-6 text-center text-xs text-muted-foreground">
             {t("scripts.needSessionShort")}
           </div>
         ) : error ? (
-          <div className="px-2 py-4 text-xs text-danger">{error}</div>
+          <div className="px-2 py-4 text-xs text-destructive">{error}</div>
         ) : section === "containers" ? (
           filteredContainers.length === 0 ? (
-            <div className="px-2 py-6 text-center text-xs muted">
+            <div className="px-2 py-6 text-center text-xs text-muted-foreground">
               {t("termTab.dockerEmpty")}
             </div>
           ) : (
             filteredContainers.map((c) => (
-              <div key={c.id} className="list-row list-row-stack">
+              <div key={c.id} className="flex flex-col gap-1 rounded-md px-2 py-1.5 hover:bg-accent">
                 <div className="flex w-full min-w-0 items-start gap-2">
                   <div
-                    className={`list-row-dot mt-1.5 ${
+                    className={`mt-1.5 size-2 shrink-0 rounded-full ${
                       isRunning(c.state)
-                        ? "is-ok"
+                        ? "bg-success"
                         : c.state.toLowerCase() === "exited"
-                          ? "is-danger"
-                          : "is-warn"
+                          ? "bg-destructive"
+                          : "bg-primary"
                     }`}
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="list-row-title truncate" title={c.name}>
+                    <div className="text-sm font-medium truncate" title={c.name}>
                       {c.name || shortId(c.id)}
                     </div>
-                    <div className="list-row-sub truncate" title={c.image}>
+                    <div className="text-xs text-muted-foreground truncate" title={c.image}>
                       {c.image}
                     </div>
-                    <div className="list-row-meta truncate">
+                    <div className="text-[10px] text-muted-foreground truncate">
                       {shortId(c.id)}
                       {c.ports ? ` · ${c.ports}` : ""}
                     </div>
                     <div className="mt-1.5 flex flex-wrap gap-1">
-                      <span className={tipClass(stateTone(c.state))}>
+                      <Badge variant={badgeVariant(stateTone(c.state))}>
                         {c.state || "?"}
-                      </span>
-                      <span className="chip" title={c.status}>
+                      </Badge>
+                      <Badge variant="secondary" title={c.status}>
                         {c.status || "-"}
-                      </span>
+                      </Badge>
                     </div>
                   </div>
                 </div>
                 <div className="mt-1.5 flex flex-wrap gap-0.5 pl-[13px]">
                   {isRunning(c.state) ? (
-                    <button
-                      className="icon-btn icon-btn-sm tip"
-                      data-tip={t("termTab.dockerStop")}
-                      disabled={busy === c.id}
-                      onClick={() =>
-                        runDocker(
-                          c.id,
-                          `docker stop ${safeArg(c.id)}`,
-                          t("termTab.dockerStopConfirm", {
-                            name: c.name || shortId(c.id),
-                          }),
-                        )
-                      }
-                    >
-                      <Square size={13} />
-                    </button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label={t("termTab.dockerStop")}
+                          disabled={busy === c.id}
+                          onClick={() =>
+                            runDocker(
+                              c.id,
+                              `docker stop ${safeArg(c.id)}`,
+                              t("termTab.dockerStopConfirm", {
+                                name: c.name || shortId(c.id),
+                              }),
+                            )
+                          }
+                        >
+                          <Square size={13} />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>{t("termTab.dockerStop")}</TooltipContent>
+                    </Tooltip>
                   ) : (
-                    <button
-                      className="icon-btn icon-btn-sm tip"
-                      data-tip={t("termTab.dockerStart")}
-                      disabled={busy === c.id}
-                      onClick={() =>
-                        runDocker(c.id, `docker start ${safeArg(c.id)}`)
-                      }
-                    >
-                      <Play size={13} />
-                    </button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label={t("termTab.dockerStart")}
+                          disabled={busy === c.id}
+                          onClick={() =>
+                            runDocker(c.id, `docker start ${safeArg(c.id)}`)
+                          }
+                        >
+                          <Play size={13} />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>{t("termTab.dockerStart")}</TooltipContent>
+                    </Tooltip>
                   )}
-                  <button
-                    className="icon-btn icon-btn-sm tip"
-                    data-tip={t("termTab.dockerRestart")}
-                    disabled={busy === c.id}
-                    onClick={() =>
-                      runDocker(c.id, `docker restart ${safeArg(c.id)}`)
-                    }
-                  >
-                    <RotateCcw size={13} />
-                  </button>
-                  <button
-                    className="icon-btn icon-btn-sm tip"
-                    data-tip={t("termTab.dockerShell")}
-                    onClick={() => openShell(c.id)}
-                  >
-                    <Terminal size={13} />
-                  </button>
-                  <button
-                    className="icon-btn icon-btn-sm tip"
-                    data-tip={t("termTab.dockerLogs")}
-                    disabled={!!busy}
-                    onClick={() => showLogs(c.id, c.name || shortId(c.id))}
-                  >
-                    <ScrollText size={13} />
-                  </button>
-                  <button
-                    className="icon-btn icon-btn-sm tip"
-                    data-tip={t("termTab.dockerCopy")}
-                    onClick={() => copyText(c.name || c.id)}
-                  >
-                    <Copy size={13} />
-                  </button>
-                  <button
-                    className="icon-btn icon-btn-sm tip"
-                    data-tip={t("termTab.dockerRemove")}
-                    disabled={busy === c.id}
-                    onClick={() =>
-                      runDocker(
-                        c.id,
-                        `docker rm -f ${safeArg(c.id)}`,
-                        t("termTab.dockerRmContainerConfirm", {
-                          name: c.name || shortId(c.id),
-                        }),
-                      )
-                    }
-                  >
-                    <Trash2 size={13} />
-                  </button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label={t("termTab.dockerRestart")}
+                        disabled={busy === c.id}
+                        onClick={() =>
+                          runDocker(c.id, `docker restart ${safeArg(c.id)}`)
+                        }
+                      >
+                        <RotateCcw size={13} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t("termTab.dockerRestart")}</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label={t("termTab.dockerShell")}
+                        onClick={() => openShell(c.id)}
+                      >
+                        <Terminal size={13} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t("termTab.dockerShell")}</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label={t("termTab.dockerLogs")}
+                        disabled={!!busy}
+                        onClick={() => showLogs(c.id, c.name || shortId(c.id))}
+                      >
+                        <ScrollText size={13} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t("termTab.dockerLogs")}</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label={t("termTab.dockerCopy")}
+                        onClick={() => copyText(c.name || c.id)}
+                      >
+                        <Copy size={13} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t("termTab.dockerCopy")}</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label={t("termTab.dockerRemove")}
+                        disabled={busy === c.id}
+                        onClick={() =>
+                          runDocker(
+                            c.id,
+                            `docker rm -f ${safeArg(c.id)}`,
+                            t("termTab.dockerRmContainerConfirm", {
+                              name: c.name || shortId(c.id),
+                            }),
+                          )
+                        }
+                      >
+                        <Trash2 size={13} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t("termTab.dockerRemove")}</TooltipContent>
+                  </Tooltip>
                 </div>
               </div>
             ))
           )
         ) : section === "images" ? (
           filteredImages.length === 0 ? (
-            <div className="px-2 py-6 text-center text-xs muted">
+            <div className="px-2 py-6 text-center text-xs text-muted-foreground">
               {t("termTab.dockerEmpty")}
             </div>
           ) : (
@@ -589,164 +763,252 @@ export function DockerPane({
               return (
                 <div
                   key={`${img.id}:${img.tag}`}
-                  className="list-row items-start gap-2"
+                  className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="list-row-title truncate" title={ref}>
+                    <div className="text-sm font-medium truncate" title={ref}>
                       {img.repository}
                     </div>
-                    <div className="list-row-sub truncate">
+                    <div className="text-xs text-muted-foreground truncate">
                       {img.tag} · {shortId(img.id)}
                     </div>
-                    <div className="list-row-meta">
+                    <div className="text-[10px] text-muted-foreground">
                       {img.size}
                       {img.created ? ` · ${img.created}` : ""}
                     </div>
                   </div>
-                  <button
-                    className="icon-btn icon-btn-sm tip"
-                    data-tip={t("termTab.dockerCopy")}
-                    onClick={() => copyText(ref)}
-                  >
-                    <Copy size={13} />
-                  </button>
-                  <button
-                    className="icon-btn icon-btn-sm tip"
-                    data-tip={t("termTab.dockerRemove")}
-                    disabled={busy === img.id}
-                    onClick={() =>
-                      runDocker(
-                        img.id,
-                        `docker rmi ${safeArg(img.id)}`,
-                        t("termTab.dockerRmImageConfirm", { name: ref }),
-                      )
-                    }
-                  >
-                    <Trash2 size={13} />
-                  </button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label={t("termTab.dockerCopy")}
+                        onClick={() => copyText(ref)}
+                      >
+                        <Copy size={13} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t("termTab.dockerCopy")}</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label={t("termTab.dockerRemove")}
+                        disabled={busy === img.id}
+                        onClick={() =>
+                          runDocker(
+                            img.id,
+                            `docker rmi ${safeArg(img.id)}`,
+                            t("termTab.dockerRmImageConfirm", { name: ref }),
+                          )
+                        }
+                      >
+                        <Trash2 size={13} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t("termTab.dockerRemove")}</TooltipContent>
+                  </Tooltip>
                 </div>
               );
             })
           )
         ) : section === "networks" ? (
           filteredNetworks.length === 0 ? (
-            <div className="px-2 py-6 text-center text-xs muted">
+            <div className="px-2 py-6 text-center text-xs text-muted-foreground">
               {t("termTab.dockerEmpty")}
             </div>
           ) : (
             filteredNetworks.map((n) => {
               const builtin = ["bridge", "host", "none"].includes(n.name);
               return (
-                <div key={n.id} className="list-row items-start gap-2">
+                <div key={n.id} className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-accent">
                   <div className="min-w-0 flex-1">
-                    <div className="list-row-title truncate">{n.name}</div>
-                    <div className="list-row-sub">
+                    <div className="text-sm font-medium truncate">{n.name}</div>
+                    <div className="text-xs text-muted-foreground">
                       {n.driver} · {n.scope}
                     </div>
-                    <div className="list-row-meta">{shortId(n.id)}</div>
+                    <div className="text-[10px] text-muted-foreground">{shortId(n.id)}</div>
                     {builtin && (
                       <div className="mt-1.5">
-                        <span className="chip">
+                        <Badge variant="secondary">
                           {t("termTab.dockerBuiltin")}
-                        </span>
+                        </Badge>
                       </div>
                     )}
                   </div>
-                  <button
-                    className="icon-btn icon-btn-sm tip"
-                    data-tip={t("termTab.dockerCopy")}
-                    onClick={() => copyText(n.name)}
-                  >
-                    <Copy size={13} />
-                  </button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label={t("termTab.dockerCopy")}
+                        onClick={() => copyText(n.name)}
+                      >
+                        <Copy size={13} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t("termTab.dockerCopy")}</TooltipContent>
+                  </Tooltip>
                   {!builtin && (
-                    <button
-                      className="icon-btn icon-btn-sm tip"
-                      data-tip={t("termTab.dockerRemove")}
-                      disabled={busy === n.id}
-                      onClick={() =>
-                        runDocker(
-                          n.id,
-                          `docker network rm ${safeArg(n.id)}`,
-                          t("termTab.dockerRmNetworkConfirm", { name: n.name }),
-                        )
-                      }
-                    >
-                      <Trash2 size={13} />
-                    </button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label={t("termTab.dockerRemove")}
+                          disabled={busy === n.id}
+                          onClick={() =>
+                            runDocker(
+                              n.id,
+                              `docker network rm ${safeArg(n.id)}`,
+                              t("termTab.dockerRmNetworkConfirm", { name: n.name }),
+                            )
+                          }
+                        >
+                          <Trash2 size={13} />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>{t("termTab.dockerRemove")}</TooltipContent>
+                    </Tooltip>
                   )}
                 </div>
               );
             })
           )
         ) : filteredVolumes.length === 0 ? (
-          <div className="px-2 py-6 text-center text-xs muted">
+          <div className="px-2 py-6 text-center text-xs text-muted-foreground">
             {t("termTab.dockerEmpty")}
           </div>
         ) : (
           filteredVolumes.map((v) => (
-            <div key={v.name} className="list-row items-start gap-2">
+            <div key={v.name} className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-accent">
               <div className="min-w-0 flex-1">
-                <div className="list-row-title truncate">{v.name}</div>
-                <div className="list-row-sub">
+                <div className="text-sm font-medium truncate">{v.name}</div>
+                <div className="text-xs text-muted-foreground">
                   {v.driver} · {v.scope}
                 </div>
                 {v.mountpoint ? (
-                  <div className="list-row-meta truncate" title={v.mountpoint}>
+                  <div className="text-[10px] text-muted-foreground truncate" title={v.mountpoint}>
                     {v.mountpoint}
                   </div>
                 ) : null}
               </div>
-              <button
-                className="icon-btn icon-btn-sm tip"
-                data-tip={t("termTab.dockerCopy")}
-                onClick={() => copyText(v.name)}
-              >
-                <Copy size={13} />
-              </button>
-              <button
-                className="icon-btn icon-btn-sm tip"
-                data-tip={t("termTab.dockerRemove")}
-                disabled={busy === v.name}
-                onClick={() =>
-                  runDocker(
-                    v.name,
-                    `docker volume rm ${safeArg(v.name)}`,
-                    t("termTab.dockerRmVolumeConfirm", { name: v.name }),
-                  )
-                }
-              >
-                <Trash2 size={13} />
-              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label={t("termTab.dockerCopy")}
+                    onClick={() => copyText(v.name)}
+                  >
+                    <Copy size={13} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{t("termTab.dockerCopy")}</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label={t("termTab.dockerRemove")}
+                    disabled={busy === v.name}
+                    onClick={() =>
+                      runDocker(
+                        v.name,
+                        `docker volume rm ${safeArg(v.name)}`,
+                        t("termTab.dockerRmVolumeConfirm", { name: v.name }),
+                      )
+                    }
+                  >
+                    <Trash2 size={13} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{t("termTab.dockerRemove")}</TooltipContent>
+              </Tooltip>
             </div>
           ))
         )}
       </div>
 
-      {/* —— 容器日志弹层 —— */}
-      {logsView && (
-        <div
-          className="overlay z-[95] flex items-center justify-center p-4"
-          onClick={() => setLogsView(null)}
+      {/* —— 容器日志：实时 follow，最多 1000 行 —— */}
+      {logsView ? (
+        <FloatingWindow
+          title={t("termTab.dockerLogsTitle", { name: logsView.name })}
+          onClose={closeLogs}
+          initialWidth={820}
+          initialHeight={560}
+          bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden p-0"
+          headerActions={
+            <div className="flex items-center gap-1">
+              {logsLive ? (
+                <Badge variant="secondary" className="text-[10px]">
+                  {t("termTab.dockerLogsLive")}
+                </Badge>
+              ) : null}
+              <Button
+                type="button"
+                size="xs"
+                variant="outline"
+                disabled={logsLoading}
+                onClick={() =>
+                  void startLogsStream(logsView.id, logsView.name)
+                }
+              >
+                {logsLoading ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <RefreshCw size={12} />
+                )}
+                {t("termTab.dockerLogsRefresh")}
+              </Button>
+              <Button
+                type="button"
+                size="xs"
+                variant="outline"
+                disabled={!logsView.body}
+                onClick={() => {
+                  void clipboardWriteText(logsView.body).then(() =>
+                    toast.success(t("termTab.dockerLogsCopied")),
+                  );
+                }}
+              >
+                <Copy size={12} />
+                {t("termTab.dockerCopy")}
+              </Button>
+            </div>
+          }
         >
           <div
-            className="modal-card flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
+            ref={logsScrollRef}
+            className="min-h-0 flex-1 overflow-auto bg-zinc-950 px-3 py-2"
+            onScroll={(e) => {
+              const el = e.currentTarget;
+              stickBottomRef.current =
+                el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+            }}
           >
-            <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-5 py-3">
-              <h3 className="truncate text-sm font-semibold">
-                {logsView.title}
-              </h3>
-              <button className="btn btn-sm" onClick={() => setLogsView(null)}>
-                {t("dialog.ok")}
-              </button>
-            </div>
-            <pre className="min-h-0 flex-1 overflow-auto bg-[var(--bg)] px-4 py-3 font-mono text-[11px] leading-relaxed">
-              {logsView.body}
-            </pre>
+            {logsLoading && !logsView.body ? (
+              <div className="flex h-full items-center justify-center text-xs text-zinc-400">
+                <Loader2 size={16} className="mr-2 animate-spin" />
+                {t("termTab.dockerLogsLoading")}
+              </div>
+            ) : (
+              <pre className="whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-zinc-200">
+                {logsView.body || t("termTab.dockerLogsEmpty")}
+              </pre>
+            )}
           </div>
-        </div>
-      )}
+        </FloatingWindow>
+      ) : null}
     </div>
   );
 }

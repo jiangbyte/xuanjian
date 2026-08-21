@@ -8,6 +8,7 @@
 import {
   appendLogChunks,
   createSessionLog,
+  finalizeOrphanOpenLogs,
   finalizeSessionLog,
   getHost,
   pruneSessionLogs,
@@ -344,11 +345,28 @@ export async function endRecordingForTab(tabId: string): Promise<void> {
 /**
  * 应用加载时安装一次。HMR 时重新绑定单一监听（替换旧的）。
  * React StrictMode 重挂载不得叠加监听。
+ * 同时收尾无对应活跃会话的 orphan「进行中」日志。
  */
 export function initSessionRecorder(): () => void {
   ensureOutputListener();
   ensureWriteWrap();
+  void reconcileOrphanOpenLogs();
   return () => {
     /* 保持监听贯穿应用生命周期 / HMR 安全单例 */
   };
+}
+
+/** 将 DB 中 open、且不在当前录制/标签中的日志标为 closed */
+export async function reconcileOrphanOpenLogs(): Promise<void> {
+  try {
+    const liveSessions = new Set<string>([...g().bySession.keys()]);
+    for (const tab of useUiStore.getState().tabs) {
+      if (tab.sessionId && (tab.status === "open" || tab.status === "connecting")) {
+        liveSessions.add(tab.sessionId);
+      }
+    }
+    await finalizeOrphanOpenLogs([...liveSessions]);
+  } catch (e) {
+    console.error("reconcileOrphanOpenLogs failed", e);
+  }
 }

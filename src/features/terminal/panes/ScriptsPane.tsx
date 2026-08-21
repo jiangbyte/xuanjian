@@ -7,8 +7,16 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { dialogs } from "@/lib/dialogs";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight, Play, Search, Zap } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import {
   listScriptPackages,
   listScripts,
@@ -18,7 +26,10 @@ import {
 import { previewScriptBody } from "@/lib/scriptVars";
 import { runScriptOnSession } from "@/lib/runScript";
 import { useNavigate } from "react-router-dom";
-import { useDialog } from "@/components/Dialog";
+import { cn } from "@/lib/utils";
+
+const listRowClass =
+  "flex w-full items-center gap-2 rounded-md p-2 text-left hover:bg-accent";
 
 /** 包分组：有名包或未分组 */
 type PackageGroup = {
@@ -32,7 +43,6 @@ type PackageGroup = {
  */
 export function ScriptsPane({ sessionId }: { sessionId: string | null }) {
   const { t } = useTranslation();
-  const dialog = useDialog();
   const navigate = useNavigate();
   const [packages, setPackages] = useState<ScriptPackageRow[]>([]);
   const [scripts, setScripts] = useState<ScriptRow[]>([]);
@@ -88,7 +98,6 @@ export function ScriptsPane({ sessionId }: { sessionId: string | null }) {
   }, [packages, filtered, t]);
 
   const isCollapsed = (id: number | "none") => {
-    // 搜索时强制展开，保证匹配项可见
     if (q.trim()) return false;
     return !!collapsed[String(id)];
   };
@@ -100,54 +109,59 @@ export function ScriptsPane({ sessionId }: { sessionId: string | null }) {
 
   const run = async (script: ScriptRow) => {
     if (!sessionId) {
-      await dialog.alert(t("scripts.needSessionShort"));
+      await dialogs.alert(t("scripts.needSessionShort"));
       return;
     }
     if (runningId != null) return;
     setRunningId(script.id);
     try {
       await runScriptOnSession(sessionId, script, (label, def) =>
-        dialog.prompt(label, { defaultValue: def }),
+        dialogs.prompt(label, { defaultValue: def }),
       );
     } catch (e) {
-      await dialog.alert(String(e));
+      await dialogs.alert(String(e));
     } finally {
       setRunningId(null);
     }
   };
 
   return (
-    <div className="panel flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground">
       {/* —— 标题与管理入口 —— */}
-      <div className="panel-header flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
         <span className="text-xs font-medium">{t("termTab.scripts")}</span>
-        <button
-          className="btn btn-sm ml-auto"
+        <Button
+          type="button"
+          size="xs"
+          variant="outline"
+          className="ml-auto"
           onClick={() => navigate("/scripts")}
         >
           {t("termTab.manageScripts")}
-        </button>
+        </Button>
       </div>
 
       {/* —— 搜索 —— */}
-      <div className="border-b border-[var(--border)] px-2 py-2">
-        <div className="field-icon-wrap">
-          <Search size={13} className="field-icon" />
-          <input
-            className="field field-sm"
+      <div className="border-b border-border px-2 py-2">
+        <InputGroup className="h-7">
+          <InputGroupAddon>
+            <Search size={13} />
+          </InputGroupAddon>
+          <InputGroupInput
+            className="text-xs"
             placeholder={t("scripts.search")}
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
-        </div>
+        </InputGroup>
       </div>
 
       {/* —— 按包分组的脚本列表 —— */}
-      <div className="panel-body panel-list min-h-0 flex-1 overflow-y-auto p-1.5">
+      <div className="min-h-0 flex-1 space-y-0.5 overflow-auto p-1.5">
         {filtered.length === 0 ? (
-          <div className="px-2 py-6 text-center text-xs muted">
+          <p className="px-2 py-4 text-center text-xs text-muted-foreground">
             {t("scripts.empty")}
-          </div>
+          </p>
         ) : (
           groups.map((group) => {
             const closed = isCollapsed(group.id);
@@ -155,45 +169,58 @@ export function ScriptsPane({ sessionId }: { sessionId: string | null }) {
               <div key={String(group.id)} className="mb-1">
                 <button
                   type="button"
-                  className="list-row py-1.5"
+                  className={cn(listRowClass, "py-1.5")}
                   onClick={() => toggle(group.id)}
                 >
                   {closed ? (
-                    <ChevronRight size={13} className="shrink-0 muted" />
+                    <ChevronRight
+                      size={13}
+                      className="shrink-0 text-muted-foreground"
+                    />
                   ) : (
-                    <ChevronDown size={13} className="shrink-0 muted" />
+                    <ChevronDown
+                      size={13}
+                      className="shrink-0 text-muted-foreground"
+                    />
                   )}
                   <span className="min-w-0 flex-1 truncate text-left text-xs font-medium">
                     {group.name}
                   </span>
-                  <span className="count-badge">{group.scripts.length}</span>
+                  <Badge variant="secondary">{group.scripts.length}</Badge>
                 </button>
                 {!closed &&
                   group.scripts.map((s) => (
                     <button
                       key={s.id}
                       type="button"
-                      className="list-row items-start pl-6"
+                      className={cn(
+                        listRowClass,
+                        "items-start pl-6",
+                        runningId != null && "opacity-60",
+                      )}
                       disabled={runningId != null}
                       onClick={() => run(s)}
                     >
                       <Zap
                         size={14}
-                        className="mt-0.5 shrink-0 text-[var(--accent)]"
+                        className="mt-0.5 shrink-0 text-primary"
                       />
-                      <div className="min-w-0 flex-1 text-left">
-                        <div className="list-row-title truncate">{s.name}</div>
-                        <div className="list-row-sub truncate font-mono">
+                      <div className="min-w-0 flex-1 space-y-0.5 text-left">
+                        <div className="truncate text-sm font-semibold">
+                          {s.name}
+                        </div>
+                        <div className="truncate font-mono text-xs text-muted-foreground">
                           {previewScriptBody(s.body, 48)}
                         </div>
                       </div>
                       <Play
                         size={13}
-                        className={`mt-0.5 shrink-0 ${
+                        className={cn(
+                          "mt-0.5 shrink-0",
                           runningId === s.id
-                            ? "opacity-100 text-[var(--accent)]"
-                            : "opacity-50"
-                        }`}
+                            ? "text-primary opacity-100"
+                            : "opacity-50",
+                        )}
                       />
                     </button>
                   ))}

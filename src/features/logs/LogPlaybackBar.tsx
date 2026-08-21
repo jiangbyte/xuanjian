@@ -5,6 +5,7 @@
  * 由日志详情页在回放模式下挂载。
  */
 
+import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
 import { FastForward, Pause, Play, SkipForward } from "lucide-react";
 import { formatDurationMs } from "@/features/logs/logExport";
@@ -36,32 +37,30 @@ export function LogPlaybackBar({
   const pct = Math.min(100, (currentMs / max) * 100);
 
   return (
-    <div className="flex flex-wrap items-center gap-3 border-t border-[var(--border)] bg-[var(--panel)] px-4 py-2">
-      {/* —— 播放 / 瞬时到末 —— */}
-      <button
-        type="button"
-        className="icon-btn"
+    <div className="flex flex-wrap items-center gap-3 border-t border-border bg-card px-4 py-2">
+      <Button
+        variant="ghost"
+        size="icon-sm"
         title={playing ? t("logs.pause") : t("logs.play")}
         onClick={onTogglePlay}
       >
         {playing ? <Pause size={16} /> : <Play size={16} />}
-      </button>
-      <button
-        type="button"
-        className="icon-btn"
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon-sm"
         title={t("logs.instant")}
         onClick={onInstant}
       >
         <SkipForward size={16} />
-      </button>
-      {/* —— 进度条 —— */}
+      </Button>
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        <span className="w-12 shrink-0 text-right font-mono text-[11px] muted">
+        <span className="w-12 shrink-0 text-right font-mono text-[11px] text-muted-foreground">
           {formatDurationMs(currentMs)}
         </span>
         <input
           type="range"
-          className="h-1.5 w-full accent-[var(--accent)]"
+          className="h-1.5 w-full accent-primary"
           min={0}
           max={max}
           step={1}
@@ -69,25 +68,24 @@ export function LogPlaybackBar({
           onChange={(e) => onSeek(Number(e.target.value))}
           aria-label={t("logs.scrub")}
         />
-        <span className="w-12 shrink-0 font-mono text-[11px] muted">
+        <span className="w-12 shrink-0 font-mono text-[11px] text-muted-foreground">
           {formatDurationMs(durationMs)}
         </span>
       </div>
-      {/* —— 倍速 —— */}
       <div className="flex items-center gap-1">
-        <FastForward size={14} className="muted" />
+        <FastForward size={14} className="text-muted-foreground" />
         {SPEEDS.map((s) => (
-          <button
+          <Button
             key={s}
-            type="button"
-            className={`btn btn-sm ${speed === s ? "btn-primary" : ""}`}
+            size="xs"
+            variant={speed === s ? "default" : "outline"}
             onClick={() => onSpeedChange(s)}
           >
             {s}x
-          </button>
+          </Button>
         ))}
       </div>
-      <div className="hidden w-10 text-right text-[10px] muted sm:block">
+      <div className="hidden w-10 text-right text-[10px] text-muted-foreground sm:block">
         {pct.toFixed(0)}%
       </div>
     </div>

@@ -11,7 +11,7 @@ import {
   enqueueRemoteCopy,
   enqueueUpload,
 } from "@/stores/transfer";
-import type { DialogApi } from "@/components/Dialog";
+import type { DialogApi } from "@/lib/dialogs";
 import {
   askOverwrite,
   findDestEntry,

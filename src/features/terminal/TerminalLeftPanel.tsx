@@ -17,6 +17,13 @@ import {
   Network,
   Zap,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import { TerminalSidePanel } from "@/features/terminal/TerminalSidePanel";
 import { ScriptsPane } from "@/features/terminal/panes/ScriptsPane";
 import { HistoryPane } from "@/features/terminal/panes/HistoryPane";
@@ -77,27 +84,36 @@ export function TerminalLeftPanel({
   return (
     <div className="flex h-full min-w-0 overflow-hidden">
       {/* —— 左侧图标轨 —— */}
-      <nav className="term-rail" aria-label={t("termTab.rail")}>
+      <nav
+        className="flex w-11 shrink-0 flex-col items-center gap-1 border-r border-border bg-background py-2"
+        aria-label={t("termTab.rail")}
+      >
         {tabs.map((item) => {
           const Icon = item.icon;
           const active = tab === item.id;
           return (
-            <button
-              key={item.id}
-              type="button"
-              className={`term-rail-btn tip ${active ? "is-active" : ""}`}
-              data-tip={item.label}
-              aria-label={item.label}
-              onClick={() => setTab(item.id)}
-            >
-              <Icon size={16} />
-            </button>
+            <Tooltip key={item.id}>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant={active ? "secondary" : "ghost"}
+                  className={cn(!active && "text-muted-foreground")}
+                  aria-label={item.label}
+                  aria-pressed={active}
+                  onClick={() => setTab(item.id)}
+                >
+                  <Icon size={16} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">{item.label}</TooltipContent>
+            </Tooltip>
           );
         })}
       </nav>
 
       {/* —— 当前标签内容 —— */}
-      <div className="min-w-0 flex-1 overflow-hidden">
+      <div className="h-full min-w-0 flex-1 overflow-hidden">
         {tab === "files" && (
           <TerminalSidePanel
             sessionId={sessionId}

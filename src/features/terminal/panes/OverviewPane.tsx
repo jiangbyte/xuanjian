@@ -13,6 +13,12 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useTranslation } from "react-i18next";
 import {
   Activity,
@@ -245,7 +251,7 @@ function Spark({
   dataKey: keyof Sample;
 }) {
   if (data.length < 2) {
-    return <div className="h-8 rounded-sm bg-[var(--hover)]" />;
+    return <div className="h-8 rounded-sm bg-muted" />;
   }
   return (
     <ResponsiveContainer width="100%" height={32}>
@@ -269,7 +275,7 @@ function Spark({
 function Bar({ value, color }: { value: number; color: string }) {
   const v = Math.max(0, Math.min(100, value));
   return (
-    <div className="h-1.5 overflow-hidden rounded-full bg-[var(--hover)]">
+    <div className="h-1.5 overflow-hidden rounded-full bg-muted">
       <div
         className="h-full rounded-full transition-[width] duration-500"
         style={{ width: `${v}%`, background: color }}
@@ -361,46 +367,52 @@ export function OverviewPane({
   const swapPct = pct(metrics?.swapUsed ?? 0, metrics?.swapTotal ?? 0);
 
   return (
-    <div className="panel flex h-full flex-col">
-      <div className="panel-header flex items-center gap-2">
+    <div className="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
         <span className="text-xs font-medium">{t("termTab.overview")}</span>
-        <button
-          className="icon-btn icon-btn-sm tip ml-auto"
-          data-tip={t("terminal.refresh")}
-          onClick={() => refresh()}
-        >
-          <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              className="ml-auto"
+              onClick={() => refresh()}
+            >
+              <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{t("terminal.refresh")}</TooltipContent>
+        </Tooltip>
       </div>
-      <div className="panel-body min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
+      <div className="min-h-0 flex-1 space-y-2 overflow-auto p-2">
         {!sessionId || kind == null ? (
-          <div className="px-2 py-6 text-center text-xs muted">
+          <p className="px-2 py-8 text-center text-xs text-muted-foreground">
             {t("scripts.needSessionShort")}
-          </div>
+          </p>
         ) : error && !metrics ? (
-          <div className="px-2 py-4 text-xs text-danger">{error}</div>
+          <div className="px-2 py-4 text-xs text-destructive">{error}</div>
         ) : (
           <>
             {/* —— 主机身份与负载 —— */}
-            <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2.5">
+            <div className="rounded-md border border-border bg-background px-2.5 py-2.5">
               <div className="flex items-start gap-2">
-                <Server
-                  size={14}
-                  className="mt-0.5 shrink-0 text-[var(--accent)]"
-                />
+                <Server size={14} className="mt-0.5 shrink-0 text-primary" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold">
                     {metrics?.host || "-"}
                   </div>
-                  <div className="mt-0.5 truncate text-[11px] muted">
+                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
                     {metrics?.ips || "-"}
-                  </div>
+                  </p>
                 </div>
-                <div className="shrink-0 text-right text-[11px] muted">
-                  <div>{metrics?.uptime || "-"}</div>
-                  <div className="mt-0.5">
+                <div className="shrink-0 text-right">
+                  <p className="text-[11px] text-muted-foreground">
+                    {metrics?.uptime || "-"}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
                     {t("termTab.load")} {metrics?.load || "-"}
-                  </div>
+                  </p>
                 </div>
               </div>
             </div>
@@ -470,9 +482,9 @@ export function OverviewPane({
             />
 
             {(metrics?.swapTotal ?? 0) > 0 && (
-              <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2">
+              <div className="rounded-md border border-border bg-background px-2.5 py-2">
                 <div className="mb-1 flex items-center justify-between text-[11px]">
-                  <span className="muted">{t("termTab.swap")}</span>
+                  <span className="text-muted-foreground">{t("termTab.swap")}</span>
                   <span className="font-medium">
                     {fmtBytes(metrics!.swapUsed)} /{" "}
                     {fmtBytes(metrics!.swapTotal)}
@@ -495,13 +507,13 @@ export function OverviewPane({
 
             {/* —— Top 进程 —— */}
             {metrics && metrics.top.length > 0 && (
-              <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg)] px-2 py-2">
-                <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium muted">
+              <div className="rounded-md border border-border bg-background px-2 py-2">
+                <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
                   <Activity size={12} />
                   {t("termTab.topProcesses")}
                 </div>
                 <div className="space-y-1.5">
-                  <div className="flex items-center gap-2 px-0.5 text-[10px] muted">
+                  <div className="flex items-center gap-2 px-0.5 text-[10px] text-muted-foreground">
                     <span className="w-16 shrink-0">PID</span>
                     <span className="min-w-0 flex-1">
                       {t("termTab.procName")}
@@ -514,7 +526,7 @@ export function OverviewPane({
                       key={`${p.pid}-${p.name}`}
                       className="flex items-center gap-2 text-[11px]"
                     >
-                      <span className="w-16 shrink-0 truncate font-mono tabular-nums muted">
+                      <span className="w-16 shrink-0 truncate font-mono tabular-nums text-muted-foreground">
                         {p.pid}
                       </span>
                       <span
@@ -562,7 +574,7 @@ function ResourceCard({
   spark?: ReactNode;
 }) {
   return (
-    <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2.5">
+    <div className="rounded-md border border-border bg-background px-2.5 py-2.5">
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <div
@@ -573,9 +585,9 @@ function ResourceCard({
             {title}
           </div>
           <div className="mt-1 text-xl font-semibold leading-none">{value}</div>
-          <div className="mt-1 truncate text-[11px] muted">{detail}</div>
+          <p className="mt-1 truncate text-[11px] text-muted-foreground">{detail}</p>
           {extra && (
-            <div className="mt-0.5 truncate text-[10px] muted">{extra}</div>
+            <p className="mt-0.5 truncate text-[10px] text-muted-foreground">{extra}</p>
           )}
         </div>
       </div>
@@ -590,8 +602,8 @@ function ResourceCard({
 /** 系统/内核等键值信息格 */
 function InfoBox({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2">
-      <div className="muted">{label}</div>
+    <div className="rounded-md border border-border bg-background px-2.5 py-2">
+      <p className="text-xs text-muted-foreground">{label}</p>
       <div className="mt-0.5 truncate font-medium" title={value}>
         {value}
       </div>

@@ -9,6 +9,13 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { NotebookPen, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import { AiChatPanel } from "@/features/terminal/AiChatPanel";
 import { NotesPane } from "@/features/terminal/panes/NotesPane";
 
@@ -41,23 +48,29 @@ export function TerminalRightPanel() {
 
       {/* —— 右侧图标轨 —— */}
       <nav
-        className="term-rail term-rail-right"
+        className="flex w-11 shrink-0 flex-col items-center gap-1 border-l border-border bg-background py-2"
         aria-label={t("termTab.rightRail")}
       >
         {tabs.map((item) => {
           const Icon = item.icon;
           const active = tab === item.id;
           return (
-            <button
-              key={item.id}
-              type="button"
-              className={`term-rail-btn tip ${active ? "is-active" : ""}`}
-              data-tip={item.label}
-              aria-label={item.label}
-              onClick={() => setTab(item.id)}
-            >
-              <Icon size={16} />
-            </button>
+            <Tooltip key={item.id}>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant={active ? "secondary" : "ghost"}
+                  className={cn(!active && "text-muted-foreground")}
+                  aria-label={item.label}
+                  aria-pressed={active}
+                  onClick={() => setTab(item.id)}
+                >
+                  <Icon size={16} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="left">{item.label}</TooltipContent>
+            </Tooltip>
           );
         })}
       </nav>

@@ -6,9 +6,12 @@
 
 import { useTranslation } from "react-i18next";
 import { Server } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { deleteHost, HostRow } from "@/lib/db";
 import { openContextMenu, useContextMenu } from "@/components/ContextMenu";
-import { useDialog } from "@/components/Dialog";
+import { dialogs } from "@/lib/dialogs";
 
 /** 单个主机卡片 */
 export function HostCard({
@@ -24,11 +27,10 @@ export function HostCard({
 }) {
   const { t } = useTranslation();
   const { open: openMenu } = useContextMenu();
-  const dialog = useDialog();
 
   return (
-    <div
-      className="host-card relative overflow-hidden"
+    <Card
+      className="relative overflow-hidden p-4"
       onContextMenu={(e) =>
         openContextMenu(e, openMenu, [
           {
@@ -52,7 +54,7 @@ export function HostCard({
             danger: true,
             onClick: async () => {
               if (
-                !(await dialog.confirm(t("context.confirmDelete"), {
+                !(await dialogs.confirm(t("context.confirmDelete"), {
                   danger: true,
                 }))
               )
@@ -71,50 +73,52 @@ export function HostCard({
         />
       ) : null}
       <div className="flex items-start gap-3">
-        <div className="host-avatar">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
           <Server size={18} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate font-semibold">{host.name || host.host}</div>
-          <div className="truncate text-xs muted">
+          <p className="truncate font-semibold">{host.name || host.host}</p>
+          <p className="truncate text-xs text-muted-foreground">
             {host.username}@{host.host}:{host.port}
-          </div>
+          </p>
           {host.remark ? (
-            <div className="mt-1 line-clamp-2 text-xs muted">{host.remark}</div>
+            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+              {host.remark}
+            </p>
           ) : null}
           <div className="mt-2 flex flex-wrap gap-1">
-            {host.group_name && <span className="chip">{host.group_name}</span>}
+            {host.group_name && (
+              <Badge variant="secondary">{host.group_name}</Badge>
+            )}
             {(host.tags || "")
               .split(",")
               .filter(Boolean)
               .map((tag) => (
-                <span key={tag} className="chip chip-accent">
+                <Badge key={tag} variant="outline">
                   {tag}
-                </span>
+                </Badge>
               ))}
           </div>
         </div>
       </div>
-      <div className="mt-3 flex gap-2">
-        <button
-          className="btn btn-sm btn-primary"
-          onClick={() => onConnect(host)}
-        >
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button size="xs" onClick={() => onConnect(host)}>
           {t("hosts.connect")}
-        </button>
-        <button className="btn btn-sm" onClick={() => onEdit(host)}>
+        </Button>
+        <Button size="xs" variant="outline" onClick={() => onEdit(host)}>
           {t("hosts.editHost")}
-        </button>
-        <button
-          className="btn btn-sm btn-danger"
+        </Button>
+        <Button
+          size="xs"
+          variant="destructive"
           onClick={async () => {
             await deleteHost(host.id);
             await onReload();
           }}
         >
           {t("hosts.delete")}
-        </button>
+        </Button>
       </div>
-    </div>
+    </Card>
   );
 }

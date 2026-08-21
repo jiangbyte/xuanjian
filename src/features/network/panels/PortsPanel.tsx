@@ -6,6 +6,19 @@
 
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { api, type TcpProbeResult } from "@/lib/tauri";
 import { COMMON_PORTS } from "@/lib/ipcalc";
 import { addNetworkHistory } from "@/lib/db";
@@ -91,107 +104,98 @@ export function PortsPanel() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 p-4">
       <div className="flex flex-wrap items-end gap-2">
-        <label className="flex min-w-[180px] flex-1 flex-col gap-1 text-xs muted">
-          {t("network.host")}
-          <input
-            className="field"
+        <div className="min-w-[180px] flex-1 space-y-1.5">
+          <Label htmlFor="ports-host">{t("network.host")}</Label>
+          <Input
+            id="ports-host"
             value={host}
             onChange={(e) => setHost(e.target.value)}
           />
-        </label>
-        <label className="flex min-w-[200px] flex-[2] flex-col gap-1 text-xs muted">
-          {t("network.portRange")}
-          <input
-            className="field"
+        </div>
+        <div className="min-w-[200px] flex-[2] space-y-1.5">
+          <Label htmlFor="ports-range">{t("network.portRange")}</Label>
+          <Input
+            id="ports-range"
             value={range}
             onChange={(e) => setRange(e.target.value)}
           />
-        </label>
-        <label className="flex w-28 flex-col gap-1 text-xs muted">
-          {t("network.timeoutMs")}
-          <input
-            className="field"
+        </div>
+        <div className="w-28 space-y-1.5">
+          <Label htmlFor="ports-timeout">{t("network.timeoutMs")}</Label>
+          <Input
+            id="ports-timeout"
             type="number"
             value={timeoutMs}
-            onChange={(e) => setTimeoutMs(Number(e.target.value) || 800)}
-          />
-        </label>
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={busy}
-          onClick={probe}
-        >
-          {busy ? `${progress}%` : t("network.probe")}
-        </button>
-        <button
-          type="button"
-          className="btn"
-          disabled={!results.length}
-          onClick={exportCsv}
-        >
-          {t("network.export")}
-        </button>
-      </div>
-      <div className="flex flex-wrap gap-1">
-        <span className="text-xs muted">{t("network.commonPorts")}:</span>
-        {COMMON_PORTS.map((p) => (
-          <button
-            key={p.port}
-            type="button"
-            className="chip"
-            onClick={() =>
-              setRange((prev) =>
-                prev.includes(String(p.port))
-                  ? prev
-                  : prev
-                    ? `${prev},${p.port}`
-                    : String(p.port),
-              )
+            onChange={(e) =>
+              setTimeoutMs(Number(e.target.value) || 800)
             }
-          >
-            {p.port}/{p.name}
-          </button>
-        ))}
-      </div>
-      {busy && (
-        <div className="h-1 overflow-hidden rounded bg-[var(--border)]">
-          <div
-            className="h-full bg-[var(--accent)] transition-all"
-            style={{ width: `${progress}%` }}
           />
         </div>
-      )}
-      <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-[var(--border)]">
-        <table className="w-full text-left text-xs">
-          <thead className="sticky top-0 bg-[var(--bg-elevated)] muted">
-            <tr>
-              <th className="px-3 py-2">{t("network.port")}</th>
-              <th className="px-3 py-2">{t("network.status")}</th>
-              <th className="px-3 py-2">RTT</th>
-              <th className="px-3 py-2">Error</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Button disabled={busy} onClick={probe}>
+          {busy ? `${progress}%` : t("network.probe")}
+        </Button>
+        <Button variant="outline" disabled={!results.length} onClick={exportCsv}>
+          {t("network.export")}
+        </Button>
+      </div>
+      <div className="flex flex-wrap gap-1">
+        <span className="text-xs text-muted-foreground">
+          {t("network.commonPorts")}:
+        </span>
+        {COMMON_PORTS.map((p) => (
+          <Badge
+            key={p.port}
+            asChild
+            variant="secondary"
+            className="cursor-pointer"
+          >
+            <button
+              type="button"
+              onClick={() =>
+                setRange((prev) =>
+                  prev.includes(String(p.port))
+                    ? prev
+                    : prev
+                      ? `${prev},${p.port}`
+                      : String(p.port),
+                )
+              }
+            >
+              {p.port}/{p.name}
+            </button>
+          </Badge>
+        ))}
+      </div>
+      {busy && <Progress value={progress} />}
+      <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border">
+        <Table>
+          <TableHeader className="sticky top-0 z-10 bg-card">
+            <TableRow>
+              <TableHead>{t("network.port")}</TableHead>
+              <TableHead>{t("network.status")}</TableHead>
+              <TableHead>RTT</TableHead>
+              <TableHead>Error</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {results.map((r) => (
-              <tr
-                key={`${r.host}:${r.port}`}
-                className="border-t border-[var(--border)]"
-              >
-                <td className="px-3 py-1.5 font-mono">{r.port || "—"}</td>
-                <td className="px-3 py-1.5">
-                  <span className={`chip ${r.open ? "chip-accent" : ""}`}>
+              <TableRow key={`${r.host}:${r.port}`}>
+                <TableCell className="font-mono">{r.port || "—"}</TableCell>
+                <TableCell>
+                  <Badge variant={r.open ? "default" : "secondary"}>
                     {r.open ? t("network.open") : t("network.closed")}
-                  </span>
-                </td>
-                <td className="px-3 py-1.5">
+                  </Badge>
+                </TableCell>
+                <TableCell>
                   {r.latencyMs != null ? `${r.latencyMs} ms` : "—"}
-                </td>
-                <td className="px-3 py-1.5 muted">{r.error || ""}</td>
-              </tr>
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {r.error || ""}
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </div>
   );

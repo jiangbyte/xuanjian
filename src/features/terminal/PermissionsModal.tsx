@@ -8,7 +8,17 @@
 
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 /** 单组读写执行位 */
 type PermBits = { r: boolean; w: boolean; x: boolean };
@@ -117,65 +127,59 @@ export function PermissionsModal({
   ];
 
   return (
-    <div
-      className="overlay z-[90] flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <div
-        className="modal-card flex w-full max-w-md flex-col overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* —— 标题与关闭 —— */}
-        <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
-          <div className="min-w-0">
-            <div className="text-sm font-medium">{t("perms.title")}</div>
-            <div className="truncate text-xs muted" title={path}>
-              {name}
-            </div>
-          </div>
-          <button className="icon-btn" onClick={onClose} title="Close">
-            <X size={16} />
-          </button>
-        </div>
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t("perms.title")}</DialogTitle>
+          <p className="truncate text-xs text-muted-foreground" title={path}>
+            {name}
+          </p>
+        </DialogHeader>
 
-        {/* —— 八进制输入 + 勾选位 —— */}
-        <div className="flex flex-col gap-3 p-4">
-          <label className="field-label">
-            {t("perms.octal")}
-            <div className="flex items-center gap-2">
-              <input
-                className="field font-mono"
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="perm-octal">{t("perms.octal")}</Label>
+            <div className="relative">
+              <Input
+                id="perm-octal"
                 value={octalInput}
                 maxLength={4}
+                className="pr-24 font-mono"
                 onChange={(e) =>
                   applyOctal(e.target.value.replace(/[^0-7]/g, ""))
                 }
               />
-              <span className="chip chip-accent font-mono">{symbolic}</span>
+              <Badge
+                variant="secondary"
+                className="absolute top-1/2 right-2 -translate-y-1/2 font-mono"
+              >
+                {symbolic}
+              </Badge>
             </div>
-          </label>
+          </div>
 
-          <div className="flex flex-col gap-2">
+          <div className="space-y-2">
             {roles.map((role) => (
               <div
                 key={role.key}
-                className="flex flex-wrap items-center gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5"
+                className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-background px-3 py-2.5"
               >
-                <span className="w-14 shrink-0 text-xs muted">
+                <span className="w-14 shrink-0 text-xs text-muted-foreground">
                   {role.label}
                 </span>
                 <div className="flex flex-1 flex-wrap gap-1.5">
                   {flags.map((flag) => {
                     const on = state[role.key][flag.key];
                     return (
-                      <button
+                      <Button
                         key={flag.key}
                         type="button"
-                        className={`btn btn-sm ${on ? "btn-primary" : "btn-ghost"}`}
+                        size="xs"
+                        variant={on ? "default" : "outline"}
                         onClick={() => toggle(role.key, flag.key)}
                       >
                         {flag.label}
-                      </button>
+                      </Button>
                     );
                   })}
                 </div>
@@ -183,16 +187,15 @@ export function PermissionsModal({
             ))}
           </div>
 
-          {error && <div className="text-xs text-danger">{error}</div>}
+          {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
 
-        {/* —— 底部操作 —— */}
-        <div className="flex justify-end gap-2 border-t border-[var(--border)] px-4 py-3">
-          <button className="btn" onClick={onClose} disabled={saving}>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
             {t("hosts.cancel")}
-          </button>
-          <button
-            className="btn btn-primary"
+          </Button>
+          <Button
+            type="button"
             disabled={saving}
             onClick={async () => {
               setSaving(true);
@@ -208,9 +211,9 @@ export function PermissionsModal({
             }}
           >
             {t("perms.apply")}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

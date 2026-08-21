@@ -7,7 +7,18 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { AppWindow, Code2, Minus, Plus, Terminal } from "lucide-react";
+import { AppWindow, Code2, Terminal } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 import {
   useSettingsStore,
   ThemeMode,
@@ -23,10 +34,11 @@ import { getSetting, setSetting } from "@/lib/db";
 import { api, LocalShellInfo } from "@/lib/tauri";
 import { useUiStore } from "@/stores/ui";
 import { FloatingWindow } from "@/components/FloatingWindow";
-import { Select } from "@/components/Select";
 import i18n from "@/i18n";
 
 type SectionId = "appearance" | "terminal" | "editor";
+
+const SYSTEM_SHELL = "none";
 
 /** 设置项标签 + 可选说明 + 控件 */
 function SettingRow({
@@ -41,73 +53,11 @@ function SettingRow({
   return (
     <div className="mb-5">
       <div className="mb-1 text-sm font-medium">{label}</div>
-      {hint ? <p className="mb-2 text-[11px] muted">{hint}</p> : null}
+      {hint ? (
+        <p className="mb-2 text-[11px] text-muted-foreground">{hint}</p>
+      ) : null}
       {children}
     </div>
-  );
-}
-
-/** 数值加减步进器 */
-function Stepper({
-  value,
-  min,
-  max,
-  suffix,
-  onChange,
-}: {
-  value: number;
-  min: number;
-  max: number;
-  suffix?: string;
-  onChange: (n: number) => void;
-}) {
-  return (
-    <div className="settings-stepper">
-      <button
-        type="button"
-        className="settings-stepper-btn"
-        disabled={value <= min}
-        onClick={() => onChange(value - 1)}
-      >
-        <Minus size={14} />
-      </button>
-      <span className="settings-stepper-value">
-        {value}
-        {suffix}
-      </span>
-      <button
-        type="button"
-        className="settings-stepper-btn"
-        disabled={value >= max}
-        onClick={() => onChange(value + 1)}
-      >
-        <Plus size={14} />
-      </button>
-    </div>
-  );
-}
-
-/** 开关切换控件 */
-function Toggle({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      className={`settings-switch ${checked ? "is-on" : ""}`}
-      onClick={() => onChange(!checked)}
-    >
-      <span className="settings-switch-knob" />
-    </button>
   );
 }
 
@@ -192,6 +142,17 @@ export function SettingsModal() {
     },
   ];
 
+  const applyFontSize = async (
+    n: string | number,
+    setLocal: (v: number) => void,
+    key: string,
+  ) => {
+    const value = typeof n === "number" ? n : Number(n);
+    if (!Number.isFinite(value)) return;
+    setLocal(value);
+    await setSetting(key, String(value));
+  };
+
   return (
     <FloatingWindow
       title={t("settings.title")}
@@ -201,18 +162,24 @@ export function SettingsModal() {
       bodyClassName="p-0"
     >
       <div className="flex h-full min-h-0">
-        {/* —— 分区导航 —— */}
-        <aside className="flex w-44 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg)]">
-          <div className="settings-nav-label">{t("settings.title")}</div>
+        <aside className="flex w-44 shrink-0 flex-col border-r border-border bg-background">
+          <div className="px-3 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {t("settings.title")}
+          </div>
           <nav className="flex flex-1 flex-col gap-0.5 px-2 pb-3">
             {nav.map((item) => (
               <button
                 key={item.id}
                 type="button"
-                className={`list-row ${section === item.id ? "is-active" : ""}`}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+                  section === item.id
+                    ? "bg-accent text-accent-foreground"
+                    : "hover:bg-muted",
+                )}
                 onClick={() => setSection(item.id)}
               >
-                <span className="flex items-center gap-2 truncate text-sm">
+                <span className="flex items-center gap-2 truncate">
                   {item.icon}
                   {item.label}
                 </span>
@@ -236,50 +203,63 @@ export function SettingsModal() {
                       ["dark", t("settings.themeDark")],
                     ] as const
                   ).map(([value, label]) => (
-                    <button
+                    <Button
                       key={value}
-                      className={theme === value ? "btn btn-primary" : "btn"}
+                      variant={theme === value ? "default" : "outline"}
                       onClick={async () => {
                         setTheme(value);
                         await setSetting("theme", value);
                       }}
                     >
                       {label}
-                    </button>
+                    </Button>
                   ))}
                 </div>
               </SettingRow>
               <SettingRow label={t("settings.language")}>
                 <Select
-                  className="w-full max-w-xs"
                   value={locale}
-                  options={[
-                    { value: "zh-CN", label: "简体中文" },
-                    { value: "en", label: "English" },
-                  ]}
-                  onChange={async (value) => {
+                  onValueChange={async (value) => {
                     setLocale(value);
                     await i18n.changeLanguage(value);
                     await setSetting("locale", value);
                   }}
-                />
+                >
+                  <SelectTrigger className="w-full max-w-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="zh-CN">简体中文</SelectItem>
+                    <SelectItem value="en">English</SelectItem>
+                  </SelectContent>
+                </Select>
               </SettingRow>
               <SettingRow
                 label={t("settings.defaultShell")}
                 hint={t("settings.defaultShellHint")}
               >
                 <Select
-                  className="w-full max-w-xs"
-                  value={defaultLocalShell}
-                  options={[
-                    { value: "", label: t("settings.system") },
-                    ...shells.map((s) => ({ value: s.id, label: s.name })),
-                  ]}
-                  onChange={async (value) => {
-                    setDefaultLocalShell(value);
-                    await setSetting("default_local_shell", value);
+                  value={defaultLocalShell || SYSTEM_SHELL}
+                  onValueChange={async (value) => {
+                    const next = value === SYSTEM_SHELL ? "" : value;
+                    setDefaultLocalShell(next);
+                    await setSetting("default_local_shell", next);
                   }}
-                />
+                >
+                  <SelectTrigger className="w-full max-w-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SYSTEM_SHELL}>
+                      {t("settings.system")}
+                    </SelectItem>
+                    {shells.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </SettingRow>
             </section>
           )}
@@ -294,44 +274,57 @@ export function SettingsModal() {
                 hint={t("settings.termFontHint")}
               >
                 <Select
-                  className="w-full max-w-md"
                   value={termFontFamily}
-                  options={TERM_FONT_FAMILIES.map((f) => ({
-                    value: f.id,
-                    label: f.label,
-                  }))}
-                  onChange={async (value) => {
+                  onValueChange={async (value) => {
                     setTermFontFamily(value);
                     await setSetting("term_font_family", value);
                   }}
-                />
+                >
+                  <SelectTrigger className="w-full max-w-md">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TERM_FONT_FAMILIES.map((f) => (
+                      <SelectItem key={f.id} value={f.id}>
+                        {f.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </SettingRow>
               <SettingRow label={t("settings.termFontSize")}>
-                <Stepper
-                  value={termFontSize}
-                  min={TERM_FONT_MIN}
-                  max={TERM_FONT_MAX}
-                  suffix="px"
-                  onChange={async (n) => {
-                    setTermFontSize(n);
-                    await setSetting("term_font_size", String(n));
-                  }}
-                />
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    className="w-[140px]"
+                    value={termFontSize}
+                    min={TERM_FONT_MIN}
+                    max={TERM_FONT_MAX}
+                    onChange={(e) =>
+                      applyFontSize(
+                        e.currentTarget.value,
+                        setTermFontSize,
+                        "term_font_size",
+                      )
+                    }
+                  />
+                  <span className="text-sm text-muted-foreground">px</span>
+                </div>
               </SettingRow>
               <SettingRow
                 label={t("settings.termWordWrap")}
                 hint={t("settings.termWordWrapHint")}
               >
-                <div className="settings-switch-row">
-                  <Toggle
+                <div className="flex items-center gap-2">
+                  <Switch
                     checked={editorWordWrap}
-                    label={t("settings.termWordWrap")}
-                    onChange={async (v) => {
+                    aria-label={t("settings.termWordWrap")}
+                    onCheckedChange={async (v) => {
                       setEditorWordWrap(v);
                       await setSetting("editor_word_wrap", v ? "1" : "0");
                     }}
                   />
-                  <span className="text-xs muted">
+                  <span className="text-xs text-muted-foreground">
                     {editorWordWrap
                       ? t("settings.wordWrapOn")
                       : t("settings.wordWrapOff")}
@@ -351,55 +344,76 @@ export function SettingsModal() {
                 hint={t("settings.editorThemeHint")}
               >
                 <Select
-                  className="w-full max-w-md"
                   value={editorTheme}
-                  options={[
-                    { value: "follow", label: t("settings.editorThemeFollow") },
-                    { value: "vs-dark", label: t("settings.editorThemeDark") },
-                    { value: "light", label: t("settings.editorThemeLight") },
-                    {
-                      value: "hc-black",
-                      label: t("settings.editorThemeHighContrast"),
-                    },
-                  ]}
-                  onChange={async (value) => {
+                  onValueChange={async (value) => {
                     setEditorTheme(value as EditorThemeMode);
                     await setSetting("editor_theme", value);
                   }}
-                />
+                >
+                  <SelectTrigger className="w-full max-w-md">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="follow">
+                      {t("settings.editorThemeFollow")}
+                    </SelectItem>
+                    <SelectItem value="vs-dark">
+                      {t("settings.editorThemeDark")}
+                    </SelectItem>
+                    <SelectItem value="light">
+                      {t("settings.editorThemeLight")}
+                    </SelectItem>
+                    <SelectItem value="hc-black">
+                      {t("settings.editorThemeHighContrast")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </SettingRow>
               <SettingRow label={t("settings.editorFontSize")}>
-                <Stepper
-                  value={editorFontSize}
-                  min={EDITOR_FONT_MIN}
-                  max={EDITOR_FONT_MAX}
-                  suffix="px"
-                  onChange={async (n) => {
-                    setEditorFontSize(n);
-                    await setSetting("editor_font_size", String(n));
-                  }}
-                />
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    className="w-[140px]"
+                    value={editorFontSize}
+                    min={EDITOR_FONT_MIN}
+                    max={EDITOR_FONT_MAX}
+                    onChange={(e) =>
+                      applyFontSize(
+                        e.currentTarget.value,
+                        setEditorFontSize,
+                        "editor_font_size",
+                      )
+                    }
+                  />
+                  <span className="text-sm text-muted-foreground">px</span>
+                </div>
               </SettingRow>
               <SettingRow
                 label={t("settings.markdownStyle")}
                 hint={t("settings.markdownStyleHint")}
               >
                 <Select
-                  className="w-full max-w-md"
                   value={markdownColorMode}
-                  options={[
-                    {
-                      value: "follow",
-                      label: t("settings.editorThemeFollow"),
-                    },
-                    { value: "dark", label: t("settings.themeDark") },
-                    { value: "light", label: t("settings.themeLight") },
-                  ]}
-                  onChange={async (value) => {
+                  onValueChange={async (value) => {
                     setMarkdownColorMode(value as EditorPreviewMode);
                     await setSetting("markdown_color_mode", value);
                   }}
-                />
+                >
+                  <SelectTrigger className="w-full max-w-md">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="follow">
+                      {t("settings.editorThemeFollow")}
+                    </SelectItem>
+                    <SelectItem value="dark">
+                      {t("settings.themeDark")}
+                    </SelectItem>
+                    <SelectItem value="light">
+                      {t("settings.themeLight")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </SettingRow>
             </section>
           )}

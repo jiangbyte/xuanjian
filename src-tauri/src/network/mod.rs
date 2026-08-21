@@ -1,9 +1,14 @@
-//! 本机网络运维工具：ping、DNS、TCP 探测、抓包摘要、HTTP/TLS/WHOIS 等。
+//! 本机网络运维工具：ping、DNS、TCP 探测、HTTP/TLS/WHOIS 等。
 //!
 //! 长时间任务通过事件流式输出，并可用 job_id 取消。
 //!
 //! Author: Charlie
 
+mod parse;
+pub mod speed;
+pub mod speed_server;
+
+use parse::{parse_tool_line, ToolMode};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -12,19 +17,18 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
-use tokio::process::Command as TokioCommand;
 use uuid::Uuid;
 
 pub struct NetworkState {
     pub cancels: Mutex<HashMap<String, Arc<AtomicBool>>>,
-    pub captures: Mutex<HashMap<String, u32>>,
+    pub speed_server: speed_server::SpeedServerState,
 }
 
 impl NetworkState {
     pub fn new() -> Self {
         Self {
             cancels: Mutex::new(HashMap::new()),
-            captures: Mutex::new(HashMap::new()),
+            speed_server: speed_server::SpeedServerState::default(),
         }
     }
 }
@@ -41,6 +45,8 @@ pub struct NetworkOutputPayload {
     pub job_id: String,
     pub line: String,
     pub done: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event: Option<parse::NetworkToolEvent>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -58,38 +64,6 @@ pub struct TcpProbeResult {
     pub open: bool,
     pub latency_ms: Option<u64>,
     pub error: Option<String>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CaptureTools {
-    pub tshark: Option<String>,
-    pub dumpcap: Option<String>,
-    pub wireshark: Option<String>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PcapSummary {
-    pub packet_count: u64,
-    pub protocols: Vec<ProtoCount>,
-    pub sessions: Vec<SessionRow>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProtoCount {
-    pub name: String,
-    pub count: u64,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SessionRow {
-    pub src: String,
-    pub dst: String,
-    pub protocol: String,
-    pub packets: u64,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -113,12 +87,23 @@ pub struct TlsCertInfo {
 }
 
 fn emit_line(app: &AppHandle, job_id: &str, line: &str, done: bool) {
+    emit_parsed(app, job_id, line, done, None);
+}
+
+fn emit_parsed(
+    app: &AppHandle,
+    job_id: &str,
+    line: &str,
+    done: bool,
+    event: Option<parse::NetworkToolEvent>,
+) {
     let _ = app.emit(
         "network-tool-output",
         NetworkOutputPayload {
             job_id: job_id.to_string(),
             line: line.to_string(),
             done,
+            event,
         },
     );
 }
@@ -159,7 +144,11 @@ pub async fn network_ping(
     let cancel = Arc::new(AtomicBool::new(false));
     state.cancels.lock().insert(job_id.clone(), cancel.clone());
 
-    let count = count.unwrap_or(4).clamp(1, 100);
+    let continuous = matches!(count, Some(0));
+    let n = count
+        .filter(|&c| c > 0)
+        .unwrap_or(4)
+        .clamp(1, 100);
     let job = job_id.clone();
     let target_c = target.clone();
     let st = state.inner().clone();
@@ -168,16 +157,25 @@ pub async fn network_ping(
         #[cfg(windows)]
         let mut cmd = {
             let mut c = Command::new("ping");
-            c.args(["-n", &count.to_string(), &target_c]);
+            if continuous {
+                c.args(["-t", &target_c]);
+            } else {
+                c.args(["-n", &n.to_string(), &target_c]);
+            }
             c
         };
         #[cfg(not(windows))]
         let mut cmd = {
             let mut c = Command::new("ping");
-            c.args(["-c", &count.to_string(), &target_c]);
+            if continuous {
+                c.arg(&target_c);
+            } else {
+                c.args(["-c", &n.to_string(), &target_c]);
+            }
             c
         };
         cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+        let mut seq_hint: u32 = 0;
         match cmd.spawn() {
             Ok(mut child) => {
                 if let Some(stdout) = child.stdout.take() {
@@ -190,7 +188,8 @@ pub async fn network_ping(
                             st.cancels.lock().remove(&job);
                             return;
                         }
-                        emit_line(&app, &job, &line, false);
+                        let event = parse_tool_line(&line, ToolMode::Ping, &mut seq_hint);
+                        emit_parsed(&app, &job, &line, false, event);
                     }
                 }
                 let _ = child.wait();
@@ -227,6 +226,7 @@ pub async fn network_traceroute(
         cmd.arg(&target_c)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        let mut seq_hint: u32 = 0;
         match cmd.spawn() {
             Ok(mut child) => {
                 if let Some(stdout) = child.stdout.take() {
@@ -239,7 +239,9 @@ pub async fn network_traceroute(
                             st.cancels.lock().remove(&job);
                             return;
                         }
-                        emit_line(&app, &job, &line, false);
+                        let event =
+                            parse_tool_line(&line, ToolMode::Traceroute, &mut seq_hint);
+                        emit_parsed(&app, &job, &line, false, event);
                     }
                 }
                 let _ = child.wait();
@@ -349,168 +351,6 @@ pub fn network_cancel(state: State<'_, Arc<NetworkState>>, job_id: String) -> Re
         flag.store(true, Ordering::SeqCst);
     }
     Ok(())
-}
-
-#[tauri::command]
-pub fn network_detect_capture_tools() -> CaptureTools {
-    CaptureTools {
-        tshark: which_bin("tshark"),
-        dumpcap: which_bin("dumpcap"),
-        wireshark: which_bin("wireshark").or_else(|| {
-            #[cfg(windows)]
-            {
-                let candidates = [
-                    r"C:\Program Files\Wireshark\Wireshark.exe",
-                    r"C:\Program Files (x86)\Wireshark\Wireshark.exe",
-                ];
-                candidates
-                    .iter()
-                    .find(|p| std::path::Path::new(p).exists())
-                    .map(|s| s.to_string())
-            }
-            #[cfg(not(windows))]
-            {
-                None
-            }
-        }),
-    }
-}
-
-#[tauri::command]
-pub async fn network_capture_start(
-    state: State<'_, Arc<NetworkState>>,
-    iface: String,
-    filter: Option<String>,
-    output_path: String,
-) -> Result<String, String> {
-    let tools = network_detect_capture_tools();
-    let bin = tools
-        .dumpcap
-        .or(tools.tshark)
-        .ok_or_else(|| "tshark/dumpcap not found".to_string())?;
-    let job_id = Uuid::new_v4().to_string();
-
-    let mut args = vec![
-        "-i".to_string(),
-        iface,
-        "-w".to_string(),
-        output_path.clone(),
-    ];
-    if let Some(f) = filter.filter(|s| !s.trim().is_empty()) {
-        args.push("-f".to_string());
-        args.push(f);
-    }
-
-    let mut child = TokioCommand::new(&bin)
-        .args(&args)
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| e.to_string())?;
-
-    let pid = child.id().unwrap_or(0);
-    state.captures.lock().insert(job_id.clone(), pid);
-
-    let jid = job_id.clone();
-    let st = state.inner().clone();
-    tokio::spawn(async move {
-        let _ = child.wait().await;
-        st.captures.lock().remove(&jid);
-    });
-
-    Ok(job_id)
-}
-
-#[tauri::command]
-pub fn network_capture_stop(
-    state: State<'_, Arc<NetworkState>>,
-    job_id: String,
-) -> Result<(), String> {
-    if let Some(pid) = state.captures.lock().remove(&job_id) {
-        #[cfg(windows)]
-        {
-            let _ = Command::new("taskkill")
-                .args(["/PID", &pid.to_string(), "/F"])
-                .output();
-        }
-        #[cfg(not(windows))]
-        {
-            let _ = Command::new("kill")
-                .args(["-INT", &pid.to_string()])
-                .output();
-        }
-    }
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn network_pcap_summary(path: String) -> Result<PcapSummary, String> {
-    let tools = network_detect_capture_tools();
-    let tshark = tools.tshark.ok_or_else(|| "tshark not found".to_string())?;
-
-    let count_out = TokioCommand::new(&tshark)
-        .args(["-r", &path, "-T", "fields", "-e", "frame.number"])
-        .output()
-        .await
-        .map_err(|e| e.to_string())?;
-    let packet_count = String::from_utf8_lossy(&count_out.stdout)
-        .lines()
-        .filter(|l| !l.trim().is_empty())
-        .count() as u64;
-
-    let proto_out = TokioCommand::new(&tshark)
-        .args(["-r", &path, "-q", "-z", "io,phs"])
-        .output()
-        .await
-        .map_err(|e| e.to_string())?;
-    let mut protocols = Vec::new();
-    for line in String::from_utf8_lossy(&proto_out.stdout).lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with("Protocol") || trimmed.starts_with("====") {
-            continue;
-        }
-        let parts: Vec<_> = trimmed.split_whitespace().collect();
-        if parts.len() >= 2 {
-            if let Ok(n) = parts[1].parse::<u64>() {
-                protocols.push(ProtoCount {
-                    name: parts[0].to_string(),
-                    count: n,
-                });
-            }
-        }
-    }
-    protocols.sort_by(|a, b| b.count.cmp(&a.count));
-    protocols.truncate(20);
-
-    let conv_out = TokioCommand::new(&tshark)
-        .args(["-r", &path, "-q", "-z", "conv,ip"])
-        .output()
-        .await
-        .map_err(|e| e.to_string())?;
-    let mut sessions = Vec::new();
-    for line in String::from_utf8_lossy(&conv_out.stdout).lines() {
-        let trimmed = line.trim();
-        if !trimmed.contains("<->") {
-            continue;
-        }
-        let parts: Vec<_> = trimmed.split_whitespace().collect();
-        if parts.len() >= 3 {
-            let frames: u64 = parts.iter().rev().find_map(|p| p.parse().ok()).unwrap_or(0);
-            sessions.push(SessionRow {
-                src: parts[0].to_string(),
-                dst: parts.get(2).unwrap_or(&"").to_string(),
-                protocol: "IP".into(),
-                packets: frames,
-            });
-        }
-    }
-    sessions.truncate(50);
-
-    Ok(PcapSummary {
-        packet_count,
-        protocols,
-        sessions,
-    })
 }
 
 #[tauri::command]

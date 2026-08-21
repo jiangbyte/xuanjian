@@ -1,14 +1,16 @@
 /**
  * @file 传输任务列表面板
  * @author Charlie
- * @description 展示上传/下载/复制任务队列，支持按状态筛选与批量暂停/恢复。
- * 单行可右键暂停、恢复、重试、取消或移除。
- * 数据来自 transfer store，与 SFTP 双栏传输共用。
+ * @description 展示上传/下载/复制任务队列；筛选与操作用 Tabs / 卡片行。
  */
 
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowDownUp, Pause, Play, RotateCcw, Trash2, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   filterJobs,
   formatBytes,
@@ -21,8 +23,8 @@ import {
   useContextMenu,
   type ContextMenuItem,
 } from "@/components/ContextMenu";
+import { cn } from "@/lib/utils";
 
-/** 筛选标签：全部 / 进行中 / 排队 / 暂停 / 需处理 / 已完成 */
 const TABS: { id: TransferFilter; labelKey: string }[] = [
   { id: "all", labelKey: "transfer.tabAll" },
   { id: "running", labelKey: "transfer.tabRunning" },
@@ -32,14 +34,12 @@ const TABS: { id: TransferFilter; labelKey: string }[] = [
   { id: "completed", labelKey: "transfer.tabCompleted" },
 ];
 
-/** 任务类型文案 */
 function kindLabel(kind: TransferJob["kind"], t: (k: string) => string) {
   if (kind === "upload") return t("transfer.upload");
   if (kind === "download") return t("transfer.download");
   return t("transfer.copy");
 }
 
-/** 任务状态文案 */
 function statusLabel(status: TransferJob["status"], t: (k: string) => string) {
   switch (status) {
     case "running":
@@ -59,7 +59,6 @@ function statusLabel(status: TransferJob["status"], t: (k: string) => string) {
   }
 }
 
-/** 单条传输任务行：进度、路径、快捷操作与右键菜单 */
 function TransferRow({ job }: { job: TransferJob }) {
   const { t } = useTranslation();
   const { open: openMenu } = useContextMenu();
@@ -80,7 +79,7 @@ function TransferRow({ job }: { job: TransferJob }) {
 
   return (
     <div
-      className="transfer-row"
+      className="rounded-md bg-background p-2"
       onContextMenu={(e) => {
         const items: ContextMenuItem[] = [];
         if (job.status === "running" || job.status === "queued") {
@@ -125,107 +124,113 @@ function TransferRow({ job }: { job: TransferJob }) {
         openContextMenu(e, openMenu, items);
       }}
     >
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium">{job.name}</span>
-          <span className="chip shrink-0">{kindLabel(job.kind, t)}</span>
-          <span className="text-[11px] muted shrink-0">
-            {statusLabel(job.status, t)}
-          </span>
-        </div>
-        <div className="mt-0.5 truncate text-[11px] muted">
-          {job.kind === "upload"
-            ? `${job.localPath} → ${job.remotePath}`
-            : job.kind === "download"
-              ? `${job.remotePath} → ${job.localPath}`
-              : `${job.remotePath} → ${job.localPath}`}
-        </div>
-        <div className="transfer-progress mt-1.5">
-          <div
-            className={`transfer-progress-bar ${
-              job.status === "failed"
-                ? "is-error"
-                : job.status === "completed"
-                  ? "is-done"
-                  : ""
-            }`}
-            style={{ width: `${pct}%` }}
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1 space-y-0.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="min-w-0 flex-1 truncate text-sm font-medium">
+              {job.name}
+            </span>
+            <Badge variant="secondary">{kindLabel(job.kind, t)}</Badge>
+            <span className="text-xs text-muted-foreground">
+              {statusLabel(job.status, t)}
+            </span>
+          </div>
+          <p className="truncate text-xs text-muted-foreground">
+            {job.kind === "upload"
+              ? `${job.localPath} → ${job.remotePath}`
+              : job.kind === "download"
+                ? `${job.remotePath} → ${job.localPath}`
+                : `${job.remotePath} → ${job.localPath}`}
+          </p>
+          <Progress
+            value={pct}
+            className={cn(
+              "h-1.5",
+              job.status === "failed" && "[&_[data-slot=progress-indicator]]:bg-destructive",
+              job.status === "completed" &&
+                "[&_[data-slot=progress-indicator]]:bg-success",
+            )}
           />
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>
+              {formatBytes(job.bytesDone)}
+              {job.bytesTotal > 0 ? ` / ${formatBytes(job.bytesTotal)}` : ""}
+            </span>
+            {job.bytesTotal > 0 ? <span>{pct}%</span> : null}
+            {job.error ? (
+              <span className="truncate text-destructive">{job.error}</span>
+            ) : null}
+          </div>
         </div>
-        <div className="mt-0.5 flex gap-2 text-[10px] muted">
-          <span>
-            {formatBytes(job.bytesDone)}
-            {job.bytesTotal > 0 ? ` / ${formatBytes(job.bytesTotal)}` : ""}
-          </span>
-          {job.bytesTotal > 0 ? <span>{pct}%</span> : null}
-          {job.error ? (
-            <span className="truncate text-[var(--danger)]">{job.error}</span>
-          ) : null}
-        </div>
-      </div>
-      <div className="flex shrink-0 items-center gap-0.5">
-        {(job.status === "running" || job.status === "queued") && (
-          <button
+        <div className="flex shrink-0 items-center gap-0.5">
+          {(job.status === "running" || job.status === "queued") && (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              title={t("transfer.pause")}
+              aria-label={t("transfer.pause")}
+              onClick={() => pause(job.id)}
+            >
+              <Pause size={13} />
+            </Button>
+          )}
+          {job.status === "paused" && (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              title={t("transfer.resume")}
+              aria-label={t("transfer.resume")}
+              onClick={() => resume(job.id)}
+            >
+              <Play size={13} />
+            </Button>
+          )}
+          {(job.status === "failed" || job.status === "cancelled") && (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              title={t("transfer.retry")}
+              aria-label={t("transfer.retry")}
+              onClick={() => retry(job.id)}
+            >
+              <RotateCcw size={13} />
+            </Button>
+          )}
+          {(job.status === "running" ||
+            job.status === "queued" ||
+            job.status === "paused") && (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              className="text-destructive hover:text-destructive"
+              title={t("transfer.cancel")}
+              aria-label={t("transfer.cancel")}
+              onClick={() => cancel(job.id)}
+            >
+              <X size={13} />
+            </Button>
+          )}
+          <Button
             type="button"
-            className="icon-btn icon-btn-sm"
-            title={t("transfer.pause")}
-            onClick={() => pause(job.id)}
-          >
-            <Pause size={13} />
-          </button>
-        )}
-        {job.status === "paused" && (
-          <button
-            type="button"
-            className="icon-btn icon-btn-sm"
-            title={t("transfer.resume")}
-            onClick={() => resume(job.id)}
-          >
-            <Play size={13} />
-          </button>
-        )}
-        {(job.status === "failed" || job.status === "cancelled") && (
-          <button
-            type="button"
-            className="icon-btn icon-btn-sm"
-            title={t("transfer.retry")}
-            onClick={() => retry(job.id)}
-          >
-            <RotateCcw size={13} />
-          </button>
-        )}
-        {(job.status === "running" ||
-          job.status === "queued" ||
-          job.status === "paused") && (
-          <button
-            type="button"
-            className="icon-btn icon-btn-sm"
-            title={t("transfer.cancel")}
-            onClick={() => cancel(job.id)}
-          >
-            <X size={13} />
-          </button>
-        )}
-        {(job.status === "completed" ||
-          job.status === "failed" ||
-          job.status === "cancelled") && (
-          <button
-            type="button"
-            className="icon-btn icon-btn-sm"
+            size="icon-sm"
+            variant="ghost"
             title={t("transfer.remove")}
+            aria-label={t("transfer.remove")}
             onClick={() => remove(job.id)}
           >
             <Trash2 size={13} />
-          </button>
-        )}
+          </Button>
+        </div>
       </div>
     </div>
   );
 }
 
-/**
- * 传输列表面板：筛选标签 + 批量操作 + 任务列表。
- */
+/** 传输队列面板 */
 export function TransferPanel() {
   const { t } = useTranslation();
   const jobs = useTransferStore((s) => s.jobs);
@@ -234,10 +239,10 @@ export function TransferPanel() {
   const pauseAll = useTransferStore((s) => s.pauseAll);
   const resumeAll = useTransferStore((s) => s.resumeAll);
   const clearFinished = useTransferStore((s) => s.clearFinished);
-
   const filtered = useMemo(() => filterJobs(jobs, filter), [jobs, filter]);
+
   const counts = useMemo(() => {
-    const c = {
+    const c: Record<TransferFilter, number> = {
       all: jobs.length,
       running: 0,
       queued: 0,
@@ -256,70 +261,69 @@ export function TransferPanel() {
   }, [jobs]);
 
   return (
-    <div className="transfer-panel flex h-full min-h-0 flex-col">
-      {/* —— 标题与批量操作 —— */}
-      <div className="flex items-center gap-2 border-b border-[var(--border)] px-3 py-2">
-        <h3 className="text-sm font-semibold">{t("transfer.title")}</h3>
-        <div className="ml-auto flex items-center gap-1">
-          <button
-            type="button"
-            className="btn btn-sm"
-            onClick={() => pauseAll()}
-          >
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
+        <h2 className="text-sm font-medium">{t("transfer.title")}</h2>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button type="button" size="xs" variant="outline" onClick={() => pauseAll()}>
             <Pause size={13} />
             {t("transfer.pauseAll")}
-          </button>
-          <button
-            type="button"
-            className="btn btn-sm"
-            onClick={() => resumeAll()}
-          >
+          </Button>
+          <Button type="button" size="xs" variant="outline" onClick={() => resumeAll()}>
             <Play size={13} />
             {t("transfer.resumeAll")}
-          </button>
-          <button
-            type="button"
-            className="btn btn-sm"
-            onClick={() => clearFinished()}
-          >
+          </Button>
+          <Button type="button" size="xs" variant="outline" onClick={() => clearFinished()}>
             <Trash2 size={13} />
             {t("transfer.clearFinished")}
-          </button>
+          </Button>
         </div>
       </div>
 
-      {/* —— 状态筛选标签 —— */}
-      <div className="transfer-tabs flex gap-0 overflow-x-auto border-b border-[var(--border)] px-2">
+      <Tabs
+        value={filter}
+        onValueChange={(v) => setFilter(v as TransferFilter)}
+        className="flex min-h-0 flex-1 flex-col gap-0"
+      >
+        <TabsList variant="line" className="h-auto w-full shrink-0 justify-start overflow-x-auto overflow-y-hidden rounded-none border-b border-border bg-transparent p-0">
+          {TABS.map((tab) => (
+            <TabsTrigger
+              key={tab.id}
+              value={tab.id}
+              className="rounded-none px-2.5 py-1.5 text-xs"
+            >
+              {t(tab.labelKey)}
+              {counts[tab.id] > 0 ? (
+                <Badge variant="secondary" className="ml-1 h-4 px-1.5">
+                  {counts[tab.id]}
+                </Badge>
+              ) : null}
+            </TabsTrigger>
+          ))}
+        </TabsList>
         {TABS.map((tab) => (
-          <button
+          <TabsContent
             key={tab.id}
-            type="button"
-            className={`transfer-tab ${filter === tab.id ? "is-active" : ""}`}
-            onClick={() => setFilter(tab.id)}
+            value={tab.id}
+            className="min-h-0 flex-1 overflow-auto p-2"
           >
-            {t(tab.labelKey)}
-            {counts[tab.id] > 0 ? (
-              <span className="count-badge ml-1">{counts[tab.id]}</span>
-            ) : null}
-          </button>
+            {filtered.length === 0 ? (
+              <div className="flex min-h-40 flex-col items-center justify-center gap-2 py-8">
+                <ArrowDownUp size={28} className="opacity-40" />
+                <p className="text-sm text-muted-foreground">
+                  {t("transfer.empty")}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filtered.map((job) => (
+                  <TransferRow key={job.id} job={job} />
+                ))}
+              </div>
+            )}
+          </TabsContent>
         ))}
-      </div>
-
-      {/* —— 任务列表 —— */}
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        {filtered.length === 0 ? (
-          <div className="flex h-full min-h-[160px] flex-col items-center justify-center gap-2 py-8 text-sm muted">
-            <ArrowDownUp size={28} className="opacity-40" />
-            {t("transfer.empty")}
-          </div>
-        ) : (
-          <div className="space-y-1.5">
-            {filtered.map((job) => (
-              <TransferRow key={job.id} job={job} />
-            ))}
-          </div>
-        )}
-      </div>
+      </Tabs>
     </div>
   );
 }

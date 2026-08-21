@@ -1,10 +1,9 @@
 /**
  * @file terminal-split.css
- * Author: Charlie
- * @description 终端分栏与拖拽分隔条
+ * @author Charlie
+ * @description 终端分栏手柄；颜色走 token。
  */
 
-/* ========== Terminal split ========== */
 .pane-resize-handle {
   position: absolute;
   top: 0;
@@ -27,14 +26,13 @@
   background: var(--border);
   transition:
     background-color 0.12s ease,
-    width 0.12s ease,
-    height 0.12s ease;
+    width 0.12s ease;
 }
 
 .pane-resize-handle:hover::after,
 .pane-resize-handle:active::after {
   width: 2px;
-  background: var(--accent);
+  background: var(--primary);
 }
 
 .pane-resize-handle-left {
@@ -43,30 +41,6 @@
 
 .pane-resize-handle-right {
   left: -3px;
-}
-
-.pane-resize-handle-bottom {
-  top: -3px;
-  left: 0;
-  right: 0;
-  width: auto;
-  height: 6px;
-  cursor: row-resize;
-}
-
-.pane-resize-handle-bottom::after {
-  top: 50%;
-  left: 0;
-  right: 0;
-  width: auto;
-  height: 1px;
-  transform: translateY(-50%);
-}
-
-.pane-resize-handle-bottom:hover::after,
-.pane-resize-handle-bottom:active::after {
-  width: auto;
-  height: 2px;
 }
 
 .terminal-split-pane {
@@ -81,10 +55,6 @@
   border-left: 1px solid var(--border);
 }
 
-.terminal-split-bottom {
-  border-top: 1px solid var(--border);
-}
-
 .terminal-split-left > :first-child,
 .terminal-split-right > :last-child {
   min-width: 0;
@@ -94,10 +64,6 @@
 body.is-pane-resizing {
   cursor: col-resize !important;
   user-select: none !important;
-}
-
-body.is-pane-resizing-y {
-  cursor: row-resize !important;
 }
 
 body.is-pane-resizing iframe,

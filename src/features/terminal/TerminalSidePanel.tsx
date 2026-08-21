@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { dialogs } from "@/lib/dialogs";
 import { useTranslation } from "react-i18next";
 import {
   ArrowUpToLine,
@@ -28,6 +29,8 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { api, SftpEntry } from "@/lib/tauri";
@@ -48,7 +51,6 @@ import {
   useContextMenu,
   type ContextMenuItem,
 } from "@/components/ContextMenu";
-import { useDialog } from "@/components/Dialog";
 import { PathBookmarkButton } from "@/components/PathBookmarkButton";
 import { bookmarkScope } from "@/stores/pathBookmarks";
 
@@ -153,8 +155,7 @@ export function TerminalSidePanel({
 }) {
   const { t } = useTranslation();
   const { open: openMenu } = useContextMenu();
-  const dialog = useDialog();
-  const remote = kind === "ssh";
+    const remote = kind === "ssh";
   const [cwd, setCwd] = useState(kind === "ssh" ? "/" : "");
   const [pathInput, setPathInput] = useState("");
   const [entries, setEntries] = useState<SftpEntry[]>([]);
@@ -279,7 +280,7 @@ export function TerminalSidePanel({
 
   const openFile = async (entry: SftpEntry) => {
     if (isTooBig(entry)) {
-      await dialog.alert(t("terminal.fileTooLarge"));
+      await dialogs.alert(t("terminal.fileTooLarge"));
       return;
     }
     setEditorTarget({
@@ -302,7 +303,7 @@ export function TerminalSidePanel({
       const existing = await findDestEntry(destEp, cwd, name);
       if (existing) {
         const decision = await askOverwrite(
-          dialog,
+          dialogs,
           t,
           conflict,
           destPath,
@@ -318,7 +319,7 @@ export function TerminalSidePanel({
   };
 
   const onNewFolder = async () => {
-    const name = await dialog.prompt(t("terminal.newFolder"), {
+    const name = await dialogs.prompt(t("terminal.newFolder"), {
       title: t("context.newFolder"),
     });
     if (!name?.trim()) return;
@@ -329,7 +330,7 @@ export function TerminalSidePanel({
   };
 
   const onNewFile = async () => {
-    const name = await dialog.prompt(t("terminal.fileNamePrompt"), {
+    const name = await dialogs.prompt(t("terminal.fileNamePrompt"), {
       title: t("context.newFile"),
     });
     if (!name?.trim()) return;
@@ -353,7 +354,7 @@ export function TerminalSidePanel({
   };
 
   const deleteEntry = async (entry: SftpEntry) => {
-    if (!(await dialog.confirm(t("context.confirmDelete"), { danger: true })))
+    if (!(await dialogs.confirm(t("context.confirmDelete"), { danger: true })))
       return;
     try {
       if (remote && sessionId) {
@@ -363,7 +364,7 @@ export function TerminalSidePanel({
       }
       await reload();
     } catch (e) {
-      await dialog.alert(String(e));
+      await dialogs.alert(String(e));
     }
   };
 
@@ -375,7 +376,7 @@ export function TerminalSidePanel({
   };
 
   const renameEntry = async (entry: SftpEntry) => {
-    const name = await dialog.prompt(t("context.renamePrompt"), {
+    const name = await dialogs.prompt(t("context.renamePrompt"), {
       title: t("context.rename"),
       defaultValue: entry.name,
     });
@@ -387,7 +388,7 @@ export function TerminalSidePanel({
       else await api.renameLocalPath(entry.path, next);
       await reload();
     } catch (e) {
-      await dialog.alert(String(e));
+      await dialogs.alert(String(e));
     }
   };
 
@@ -404,7 +405,7 @@ export function TerminalSidePanel({
       else await api.renameLocalPath(entry.path, next);
       await reload();
     } catch (e) {
-      await dialog.alert(String(e));
+      await dialogs.alert(String(e));
     }
   };
 
@@ -486,7 +487,7 @@ export function TerminalSidePanel({
         icon: <ExternalLink size={14} />,
         onClick: () => {
           openPath(entry.path).catch((e) => {
-            dialog.alert(String(e)).catch(() => undefined);
+            dialogs.alert(String(e)).catch(() => undefined);
           });
         },
       });
@@ -555,22 +556,29 @@ export function TerminalSidePanel({
 
   return (
     <div
-      className="panel file-browser h-full"
+      className="file-browser flex h-full flex-col bg-sidebar text-sidebar-foreground"
       onContextMenu={(e) => openContextMenu(e, openMenu, blankMenuItems())}
     >
       {/* —— 面包屑导航 —— */}
-      <div className="flex items-center gap-1 border-b border-[var(--border)] px-2 py-2">
-        <button className="icon-btn icon-btn-sm" onClick={goHome} title="Home">
+      <div className="flex items-center gap-1 border-b border-border px-2 py-2">
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          onClick={goHome}
+          title="Home"
+          aria-label="Home"
+        >
           <Home size={14} />
-        </button>
-        <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto text-xs">
+        </Button>
+        <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto overflow-y-hidden text-xs">
           {segments.length === 0 ? (
-            <span className="muted">{remote ? "/" : cwd}</span>
+            <span className="text-muted-foreground">{remote ? "/" : cwd}</span>
           ) : (
             segments.map((seg, i) => (
               <button
                 key={seg.path}
-                className="crumb-btn"
+                className="inline-flex shrink-0 items-center gap-0.5 rounded-md px-1 py-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
                 onClick={() => setCwd(seg.path)}
               >
                 {i > 0 && <ChevronRight size={12} className="opacity-50" />}
@@ -583,10 +591,11 @@ export function TerminalSidePanel({
 
       {/* —— 路径输入与补全 —— */}
       <div
-        className="relative border-b border-[var(--border)] px-2 py-2"
+        className="relative border-b border-border px-2 py-2"
         ref={pathBoxRef}
       >
-        <input
+        <Input
+          className="h-7 text-xs"
           value={pathInput}
           onChange={(e) => setPathInput(e.target.value)}
           onFocus={() => setPathFocus(true)}
@@ -597,17 +606,17 @@ export function TerminalSidePanel({
               setPathFocus(false);
             }
           }}
-          className="field field-sm"
         />
         {pathFocus && suggestions.length > 0 && (
-          <div className="suggest-menu">
+          <div className="absolute top-full right-2 left-2 z-20 mt-1 max-h-48 overflow-auto rounded-md border border-border bg-popover p-1 shadow-md">
             {suggestions.map((p) => (
               <button
+                type="button"
                 key={p}
-                className="suggest-item"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent"
                 onClick={() => commitPath(p)}
               >
-                <span className="entry-icon folder-icon">
+                <span className="flex size-4 shrink-0 items-center justify-center text-primary">
                   <Folder size={12} />
                 </span>
                 <span className="truncate">{p}</span>
@@ -618,7 +627,7 @@ export function TerminalSidePanel({
       </div>
 
       {/* —— 工具条 —— */}
-      <div className="flex items-center gap-0.5 border-b border-[var(--border)] px-1.5 py-1">
+      <div className="flex items-center gap-0.5 border-b border-border px-1.5 py-1">
         <PathBookmarkButton
           scope={bookmarkScope({ kind, hostId })}
           path={cwd}
@@ -627,86 +636,111 @@ export function TerminalSidePanel({
             setPathInput(p);
           }}
         />
-        <button
-          className="icon-btn icon-btn-sm"
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
           title={t("terminal.sftp")}
+          aria-label={t("terminal.sftp")}
           onClick={() => setTransferOpen(true)}
         >
           <ArrowLeftRight size={14} />
-        </button>
+        </Button>
         {kind === "ssh" && (
-          <button
-            className="icon-btn icon-btn-sm"
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
             title={t("terminal.upload")}
+            aria-label={t("terminal.upload")}
             onClick={onUpload}
           >
             <Upload size={14} />
-          </button>
+          </Button>
         )}
-        <button
-          className="icon-btn icon-btn-sm is-active"
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="secondary"
           title={t("terminal.listView")}
+          aria-label={t("terminal.listView")}
         >
           <List size={14} />
-        </button>
-        <button
-          className={`icon-btn icon-btn-sm ${showSearch ? "is-active" : ""}`}
+        </Button>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant={showSearch ? "secondary" : "ghost"}
           title={t("terminal.search")}
+          aria-label={t("terminal.search")}
           onClick={() => setShowSearch((v) => !v)}
         >
           <Search size={14} />
-        </button>
-        <button
-          className="icon-btn icon-btn-sm"
+        </Button>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
           title={t("terminal.newFolder")}
+          aria-label={t("terminal.newFolder")}
           onClick={onNewFolder}
         >
           <FolderPlus size={14} />
-        </button>
-        <button
-          className="icon-btn icon-btn-sm"
+        </Button>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
           title={t("terminal.newFile")}
+          aria-label={t("terminal.newFile")}
           onClick={onNewFile}
         >
           <FilePlus size={14} />
-        </button>
-        <button
-          className={`icon-btn icon-btn-sm ${showHidden ? "is-active" : ""}`}
+        </Button>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant={showHidden ? "secondary" : "ghost"}
           title={t("terminal.showHidden")}
+          aria-label={t("terminal.showHidden")}
           onClick={() => setShowHidden((v) => !v)}
         >
           <Eye size={14} />
-        </button>
-        <button
-          className="icon-btn icon-btn-sm"
+        </Button>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
           title={t("terminal.refresh")}
+          aria-label={t("terminal.refresh")}
           onClick={() => reload()}
         >
           <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-        </button>
+        </Button>
       </div>
 
       {showSearch && (
-        <div className="border-b border-[var(--border)] px-2 py-1.5">
-          <input
+        <div className="border-b border-border px-2 py-1.5">
+          <Input
             autoFocus
+            className="h-7 text-xs"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t("terminal.search")}
-            className="field field-sm"
           />
         </div>
       )}
 
       {/* —— 表头 —— */}
-      <div className="file-table-head">
+      <div className="grid shrink-0 grid-cols-[20px_minmax(100px,1.5fr)_108px_86px_60px_48px] items-center gap-2 border-b border-border bg-muted/40 px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
         <span />
         <button
-          className="flex items-center gap-1 text-left hover:text-[var(--text)]"
+          type="button"
+          className="flex items-center gap-1 text-left hover:text-foreground"
           onClick={() => setSortAsc((v) => !v)}
         >
           {t("terminal.name")}
-          <span className="text-accent">{sortAsc ? "↑" : "↓"}</span>
+          <span className="text-primary">{sortAsc ? "↑" : "↓"}</span>
         </button>
         <span>{t("terminal.modified")}</span>
         <span>{t("terminal.permissions")}</span>
@@ -716,26 +750,33 @@ export function TerminalSidePanel({
 
       {/* —— 文件列表 —— */}
       <div
-        className="panel-body"
+        className="min-h-0 flex-1 overflow-auto p-1"
         onContextMenu={(e) => openContextMenu(e, openMenu, blankMenuItems())}
       >
         {error && (
-          <div className="px-3 py-2 text-[11px] text-danger">{error}</div>
+          <div className="px-3 py-2 text-[11px] text-destructive">{error}</div>
         )}
-        <button className="file-row" onClick={goParent}>
-          <span className="entry-icon folder-icon">
+        <button
+          type="button"
+          className="grid w-full grid-cols-[20px_minmax(100px,1.5fr)_108px_86px_60px_48px] items-center gap-2 rounded-md px-2 py-1 text-left text-xs hover:bg-accent"
+          onClick={goParent}
+        >
+          <span className="flex size-5 items-center justify-center text-primary">
             <Folder size={14} />
           </span>
           <span className="truncate font-medium">..</span>
-          <span className="muted">--</span>
-          <span className="muted">--</span>
-          <span className="muted">--</span>
-          <span className="muted">{t("terminal.folder")}</span>
+          <span className="truncate text-muted-foreground">--</span>
+          <span className="truncate text-muted-foreground">--</span>
+          <span className="truncate text-muted-foreground">--</span>
+          <span className="truncate text-muted-foreground">
+            {t("terminal.folder")}
+          </span>
         </button>
         {visible.map((e) => (
           <button
+            type="button"
             key={e.path}
-            className="file-row"
+            className="grid w-full grid-cols-[20px_minmax(100px,1.5fr)_108px_86px_60px_48px] items-center gap-2 rounded-md px-2 py-1 text-left text-xs hover:bg-accent"
             onDoubleClick={() => {
               if (e.isDir) setCwd(e.path);
               else openFile(e);
@@ -748,19 +789,23 @@ export function TerminalSidePanel({
             }
           >
             <span
-              className={`entry-icon ${e.isDir ? "folder-icon" : "file-icon"}`}
+              className={`flex size-5 items-center justify-center ${
+                e.isDir ? "text-primary" : "text-muted-foreground"
+              }`}
             >
               {e.isDir ? <Folder size={14} /> : <File size={14} />}
             </span>
             <span className="truncate">{e.name}</span>
-            <span className="truncate muted">{e.modifiedAt || "--"}</span>
-            <span className="truncate muted font-mono text-[11px]">
+            <span className="truncate text-muted-foreground">
+              {e.modifiedAt || "--"}
+            </span>
+            <span className="truncate font-mono text-[11px] text-muted-foreground">
               {e.permissions || "--"}
             </span>
-            <span className="truncate muted">
+            <span className="truncate text-muted-foreground">
               {formatSize(e.size, e.isDir)}
             </span>
-            <span className="truncate muted">
+            <span className="truncate text-muted-foreground">
               {fileExtType(e.name, e.isDir, t)}
             </span>
           </button>

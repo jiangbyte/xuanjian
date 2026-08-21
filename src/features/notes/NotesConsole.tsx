@@ -4,9 +4,33 @@
  * @description 分类侧栏 + 笔记列表 + Markdown 编辑区，支持置顶、搜索与自动保存。
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+} from "react";
+import { dialogs } from "@/lib/dialogs";
 import { useTranslation } from "react-i18next";
-import { FolderPlus, Pin, Plus, Search, Trash2 } from "lucide-react";
+import { FolderPlus, Loader2, Pin, Plus, Search, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import {
   createNote,
   createNoteCategory,
@@ -20,15 +44,14 @@ import {
   updateNote,
 } from "@/lib/db";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
-import { Select } from "@/components/Select";
 import { openContextMenu, useContextMenu } from "@/components/ContextMenu";
-import { useDialog } from "@/components/Dialog";
+
+const NONE = "none";
 
 /** 笔记管理主界面 */
 export function NotesConsole() {
   const { t } = useTranslation();
   const { open: openMenu } = useContextMenu();
-  const dialog = useDialog();
   const [categories, setCategories] = useState<NoteCategoryRow[]>([]);
   const [notes, setNotes] = useState<NoteRow[]>([]);
   const [categoryId, setCategoryId] = useState<number | null>(null);
@@ -122,11 +145,11 @@ export function NotesConsole() {
       setDirty(false);
       await reload();
     } catch (e) {
-      await dialog.alert(String(e));
+      await dialogs.alert(String(e));
     } finally {
       setSaving(false);
     }
-  }, [active, saving, title, body, pinned, noteCategoryId, reload, dialog]);
+  }, [active, saving, title, body, pinned, noteCategoryId, reload]);
 
   useEffect(() => {
     if (!dirty || !active) return;
@@ -147,14 +170,14 @@ export function NotesConsole() {
       await reload();
       setActiveId(id);
     } catch (e) {
-      await dialog.alert(String(e));
+      await dialogs.alert(String(e));
     }
   };
 
   const remove = async () => {
     if (!active) return;
     if (
-      !(await dialog.confirm(t("notes.deleteConfirm"), {
+      !(await dialogs.confirm(t("notes.deleteConfirm"), {
         danger: true,
         title: t("notes.delete"),
       }))
@@ -168,7 +191,7 @@ export function NotesConsole() {
 
   const categoryOptions = useMemo(
     () => [
-      { value: "", label: t("notes.uncategorized") },
+      { value: NONE, label: t("notes.uncategorized") },
       ...categories.map((c) => ({ value: String(c.id), label: c.name })),
     ],
     [categories, t],
@@ -176,66 +199,64 @@ export function NotesConsole() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* —— 工具栏 —— */}
-      <div className="flex items-center gap-3 border-b border-[var(--border)] px-5 py-4">
-        <div className="field-icon-wrap flex-1">
-          <Search size={14} className="field-icon" />
-          <input
-            className="field"
-            placeholder={t("notes.search")}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      <div className="border-b border-border px-5 py-4">
+        <div className="flex flex-nowrap items-center gap-3">
+          <InputGroup className="min-w-0 flex-1">
+            <InputGroupAddon>
+              <Search size={14} />
+            </InputGroupAddon>
+            <InputGroupInput
+              placeholder={t("notes.search")}
+              value={search}
+              onChange={(e) => setSearch(e.currentTarget.value)}
+            />
+          </InputGroup>
+          <Button onClick={() => create()}>
+            <Plus size={14} />
+            {t("notes.new")}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={async () => {
+              const name = await dialogs.prompt(t("notes.categoryNamePrompt"), {
+                title: t("notes.newCategory"),
+              });
+              if (!name?.trim()) return;
+              try {
+                const id = await createNoteCategory(name);
+                await reload();
+                setCategoryId(id);
+              } catch (e) {
+                await dialogs.alert(String(e));
+              }
+            }}
+          >
+            <FolderPlus size={14} />
+            {t("notes.newCategory")}
+          </Button>
         </div>
-        <button className="btn btn-primary" onClick={() => create()}>
-          <Plus size={14} />
-          {t("notes.new")}
-        </button>
-        <button
-          className="btn"
-          onClick={async () => {
-            const name = await dialog.prompt(t("notes.categoryNamePrompt"), {
-              title: t("notes.newCategory"),
-            });
-            if (!name?.trim()) return;
-            try {
-              const id = await createNoteCategory(name);
-              await reload();
-              setCategoryId(id);
-            } catch (e) {
-              await dialog.alert(String(e));
-            }
-          }}
-        >
-          <FolderPlus size={14} />
-          {t("notes.newCategory")}
-        </button>
       </div>
 
-      {/* —— 分类侧栏 + 列表 + 编辑区 —— */}
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-44 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg)]">
+        <aside className="flex w-44 shrink-0 flex-col border-r border-border bg-background">
           <div className="px-3 py-3">
-            <span className="text-xs font-medium uppercase tracking-wide muted">
+            <span className="text-xs font-medium uppercase text-muted-foreground">
               {t("notes.categories")}
             </span>
           </div>
-          <div className="side-nav flex-1 overflow-y-auto px-2 pb-3">
-            <button
-              type="button"
-              className={`list-row ${categoryId == null ? "is-active" : ""}`}
+          <div className="flex flex-1 flex-col gap-1 overflow-y-auto px-2 pb-2">
+            <SidebarNavItem
+              active={categoryId == null}
+              label={t("notes.allCategories")}
+              count={notes.length}
               onClick={() => setCategoryId(null)}
-            >
-              <span className="min-w-0 flex-1 truncate text-left text-sm">
-                {t("notes.allCategories")}
-              </span>
-              <span className="count-badge">{notes.length}</span>
-            </button>
+            />
             {categories.map((c) => (
-              <button
+              <SidebarNavItem
                 key={c.id}
-                type="button"
-                className={`list-row ${categoryId === c.id ? "is-active" : ""}`}
+                active={categoryId === c.id}
+                label={c.name}
+                count={categoryCounts.get(c.id) || 0}
                 onClick={() => setCategoryId(c.id)}
                 onContextMenu={(e) =>
                   openContextMenu(e, openMenu, [
@@ -243,7 +264,7 @@ export function NotesConsole() {
                       id: "rename",
                       label: t("notes.renameCategory"),
                       onClick: async () => {
-                        const name = await dialog.prompt(
+                        const name = await dialogs.prompt(
                           t("notes.categoryNamePrompt"),
                           {
                             title: t("notes.renameCategory"),
@@ -261,7 +282,7 @@ export function NotesConsole() {
                       danger: true,
                       onClick: async () => {
                         if (
-                          !(await dialog.confirm(
+                          !(await dialogs.confirm(
                             t("notes.deleteCategoryConfirm"),
                             { danger: true },
                           ))
@@ -274,40 +295,27 @@ export function NotesConsole() {
                     },
                   ])
                 }
-              >
-                <span className="min-w-0 flex-1 truncate text-left text-sm">
-                  {c.name}
-                </span>
-                <span className="count-badge">
-                  {categoryCounts.get(c.id) || 0}
-                </span>
-              </button>
+              />
             ))}
-            <button
-              type="button"
-              className={`list-row ${categoryId === -1 ? "is-active" : ""}`}
+            <SidebarNavItem
+              active={categoryId === -1}
+              label={t("notes.uncategorized")}
+              count={categoryCounts.get("none") || 0}
               onClick={() => setCategoryId(-1)}
-            >
-              <span className="min-w-0 flex-1 truncate text-left text-sm">
-                {t("notes.uncategorized")}
-              </span>
-              <span className="count-badge">
-                {categoryCounts.get("none") || 0}
-              </span>
-            </button>
+            />
           </div>
         </aside>
 
-        <aside className="flex w-64 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg)]">
+        <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-background">
           <div className="px-3 py-3">
-            <span className="text-xs font-medium uppercase tracking-wide muted">
+            <span className="text-xs font-medium uppercase text-muted-foreground">
               {t("notes.title")}
             </span>
           </div>
-          <div className="side-nav flex-1 overflow-y-auto px-2 pb-3">
+          <div className="flex flex-1 flex-col gap-1 overflow-y-auto px-2 pb-2">
             {filtered.length === 0 ? (
-              <div
-                className="px-2 py-6 text-center text-xs muted"
+              <span
+                className="px-2 py-4 text-center text-xs text-muted-foreground"
                 onContextMenu={(e) =>
                   openContextMenu(e, openMenu, [
                     {
@@ -321,15 +329,16 @@ export function NotesConsole() {
                 }
               >
                 {t("notes.empty")}
-              </div>
+              </span>
             ) : (
               filtered.map((n) => (
                 <button
                   key={n.id}
                   type="button"
-                  className={`list-row list-row-stack ${
-                    activeId === n.id ? "is-active" : ""
-                  }`}
+                  className={cn(
+                    "flex w-full rounded-md p-2 text-left transition-colors hover:bg-muted",
+                    activeId === n.id && "bg-muted",
+                  )}
                   onClick={() => setActiveId(n.id)}
                   onContextMenu={(e) =>
                     openContextMenu(e, openMenu, [
@@ -362,7 +371,7 @@ export function NotesConsole() {
                         danger: true,
                         onClick: async () => {
                           if (
-                            !(await dialog.confirm(t("notes.deleteConfirm"), {
+                            !(await dialogs.confirm(t("notes.deleteConfirm"), {
                               danger: true,
                               title: t("notes.delete"),
                             }))
@@ -378,15 +387,17 @@ export function NotesConsole() {
                     ])
                   }
                 >
-                  <span className="list-row-title flex w-full items-center gap-1 truncate">
-                    {!!n.pinned && <Pin size={12} className="shrink-0" />}
-                    <span className="truncate">{n.title}</span>
-                  </span>
-                  <span className="list-row-sub truncate">
-                    {n.category_name || t("notes.uncategorized")}
-                    {" · "}
-                    {n.updated_at || n.created_at || ""}
-                  </span>
+                  <div className="min-w-0 w-full space-y-0.5">
+                    <p className="flex items-center gap-1 truncate text-sm font-semibold">
+                      {!!n.pinned && <Pin size={12} className="shrink-0" />}
+                      <span className="truncate">{n.title}</span>
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {n.category_name || t("notes.uncategorized")}
+                      {" · "}
+                      {n.updated_at || n.created_at || ""}
+                    </p>
+                  </div>
                 </button>
               ))
             )}
@@ -395,55 +406,76 @@ export function NotesConsole() {
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {!active ? (
-            <div className="flex h-full items-center justify-center text-sm muted">
-              {t("notes.pickOrCreate")}
+            <div className="flex h-full items-center justify-center">
+              <span className="text-sm text-muted-foreground">
+                {t("notes.pickOrCreate")}
+              </span>
             </div>
           ) : (
             <>
-              <div className="flex items-center gap-2 border-b border-[var(--border)] px-4 py-2">
-                <input
-                  className="field flex-1 border-none bg-transparent px-0 text-base font-semibold shadow-none"
-                  value={title}
-                  onChange={(e) => {
-                    setTitle(e.target.value);
-                    setDirty(true);
-                  }}
-                />
-                <Select
-                  className="w-36"
-                  aria-label={t("notes.category")}
-                  value={noteCategoryId == null ? "" : String(noteCategoryId)}
-                  options={categoryOptions}
-                  onChange={(v) => {
-                    setNoteCategoryId(v === "" ? null : Number(v));
-                    setDirty(true);
-                  }}
-                />
-                <button
-                  className={`btn btn-sm tip ${pinned ? "btn-primary" : ""}`}
-                  data-tip={t("notes.pin")}
-                  onClick={() => {
-                    setPinned((v) => !v);
-                    setDirty(true);
-                  }}
-                >
-                  <Pin size={13} />
-                </button>
-                <button
-                  className="btn btn-sm"
-                  disabled={saving || !dirty}
-                  onClick={() => save()}
-                >
-                  {saving ? t("notes.saving") : t("notes.save")}
-                </button>
-                <button
-                  className="btn btn-sm btn-danger"
-                  onClick={() => remove()}
-                >
-                  <Trash2 size={13} />
-                </button>
+              <div className="border-b border-border px-4 py-2">
+                <div className="flex flex-nowrap items-center gap-2">
+                  <Input
+                    className="flex-1 border-0 bg-transparent px-0 text-base font-semibold shadow-none focus-visible:ring-0"
+                    value={title}
+                    onChange={(e) => {
+                      setTitle(e.currentTarget.value);
+                      setDirty(true);
+                    }}
+                  />
+                  <Select
+                    value={
+                      noteCategoryId == null ? NONE : String(noteCategoryId)
+                    }
+                    onValueChange={(v) => {
+                      setNoteCategoryId(v === NONE ? null : Number(v));
+                      setDirty(true);
+                    }}
+                  >
+                    <SelectTrigger
+                      className="w-36"
+                      aria-label={t("notes.category")}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categoryOptions.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant={pinned ? "default" : "outline"}
+                    size="icon-sm"
+                    title={t("notes.pin")}
+                    onClick={() => {
+                      setPinned((v) => !v);
+                      setDirty(true);
+                    }}
+                  >
+                    <Pin size={13} />
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    disabled={saving || !dirty}
+                    onClick={() => save()}
+                  >
+                    {saving ? <Loader2 className="animate-spin" /> : null}
+                    {saving ? t("notes.saving") : t("notes.save")}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="icon-sm"
+                    onClick={() => remove()}
+                  >
+                    <Trash2 size={13} />
+                  </Button>
+                </div>
               </div>
-              <div className="min-h-0 flex-1 p-2">
+              <div className="flex min-h-0 flex-1 flex-col p-2">
                 <MarkdownEditor
                   value={body}
                   onChange={(v) => {
@@ -459,5 +491,38 @@ export function NotesConsole() {
         </div>
       </div>
     </div>
+  );
+}
+
+function SidebarNavItem({
+  active,
+  label,
+  count,
+  onClick,
+  onContextMenu,
+}: {
+  active: boolean;
+  label: string;
+  count: number;
+  onClick: () => void;
+  onContextMenu?: (e: MouseEvent) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        "flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+        active
+          ? "bg-accent text-accent-foreground"
+          : "text-foreground hover:bg-muted",
+      )}
+      onClick={onClick}
+      onContextMenu={onContextMenu}
+    >
+      <span className="truncate">{label}</span>
+      <Badge variant="secondary" className="shrink-0">
+        {count}
+      </Badge>
+    </button>
   );
 }

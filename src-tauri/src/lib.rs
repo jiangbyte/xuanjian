@@ -75,6 +75,8 @@ pub fn run() {
             session_resize,
             session_close,
             session_exec,
+            session_exec_stream,
+            session_exec_cancel,
             sftp_list,
             sftp_upload,
             sftp_download,
@@ -101,13 +103,13 @@ pub fn run() {
             network::network_dns_lookup,
             network::network_tcp_probe,
             network::network_cancel,
-            network::network_detect_capture_tools,
-            network::network_capture_start,
-            network::network_capture_stop,
-            network::network_pcap_summary,
             network::network_http_request,
             network::network_tls_cert,
             network::network_whois,
+            network::speed::network_speed_test,
+            network::speed_server::network_speed_server_start,
+            network::speed_server::network_speed_server_stop,
+            network::speed_server::network_speed_server_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

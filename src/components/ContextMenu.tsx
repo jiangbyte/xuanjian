@@ -1,21 +1,25 @@
 /**
- * @file 右键上下文菜单
+ * @file 右键上下文菜单（shadcn DropdownMenu）
  * @author Charlie
- * @description 全局 ContextMenu Provider + Portal 渲染菜单。
- * 支持分隔线、危险项、快捷键提示；点击外部或 Escape 关闭。
+ * @description 全局 open(x,y,items)；定位触发点 + DropdownMenu。
  */
 
 import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
-import { createPortal } from "react-dom";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 /** 菜单项：普通操作或分隔线 `"sep"` */
 export type ContextMenuItem =
@@ -43,19 +47,14 @@ type ContextMenuApi = {
 
 const Ctx = createContext<ContextMenuApi | null>(null);
 
-/**
- * 读取右键菜单 API；须在 ContextMenuProvider 内使用。
- * @throws 未包裹 Provider 时抛错
- */
+/** 读取右键菜单 API */
 export function useContextMenu() {
   const api = useContext(Ctx);
   if (!api) throw new Error("useContextMenu requires ContextMenuProvider");
   return api;
 }
 
-/**
- * 提供 open/close，并在菜单打开时 Portal 渲染 ContextMenuView。
- */
+/** Provider：Portal 由 DropdownMenu 处理 */
 export function ContextMenuProvider({ children }: { children: ReactNode }) {
   const [menu, setMenu] = useState<MenuState>(null);
 
@@ -72,103 +71,58 @@ export function ContextMenuProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider value={api}>
       {children}
       {menu && (
-        <ContextMenuView
-          x={menu.x}
-          y={menu.y}
-          items={menu.items}
-          onClose={close}
-        />
+        <DropdownMenu
+          open
+          onOpenChange={(o) => {
+            if (!o) close();
+          }}
+        >
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-hidden
+              className="fixed size-px opacity-0"
+              style={{ left: menu.x, top: menu.y }}
+            />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            side="bottom"
+            sideOffset={0}
+            className="min-w-40"
+          >
+            {menu.items.map((item, i) => {
+              if (item === "sep") {
+                return <DropdownMenuSeparator key={`sep-${i}`} />;
+              }
+              return (
+                <DropdownMenuItem
+                  key={item.id}
+                  disabled={item.disabled}
+                  variant={item.danger ? "destructive" : "default"}
+                  onSelect={() => {
+                    close();
+                    item.onClick();
+                  }}
+                >
+                  {item.icon}
+                  <span className="flex-1">{item.label}</span>
+                  {item.shortcut ? (
+                    <span className="ml-auto font-mono text-xs text-muted-foreground">
+                      {item.shortcut}
+                    </span>
+                  ) : null}
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
     </Ctx.Provider>
   );
 }
 
-/** 菜单视图：贴边夹紧位置，处理 Escape / 外点关闭 */
-function ContextMenuView({
-  x,
-  y,
-  items,
-  onClose,
-}: {
-  x: number;
-  y: number;
-  items: ContextMenuItem[];
-  onClose: () => void;
-}) {
-  const [pos, setPos] = useState({ left: x, top: y });
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    const onPointer = (e: MouseEvent) => {
-      const el = e.target as HTMLElement | null;
-      if (el?.closest(".ctx-menu")) return;
-      onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("mousedown", onPointer);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("mousedown", onPointer);
-    };
-  }, [onClose]);
-
-  useEffect(() => {
-    const menu = document.querySelector(".ctx-menu") as HTMLElement | null;
-    if (!menu) return;
-    const rect = menu.getBoundingClientRect();
-    const left = Math.min(x, window.innerWidth - rect.width - 8);
-    const top = Math.min(y, window.innerHeight - rect.height - 8);
-    setPos({ left: Math.max(8, left), top: Math.max(8, top) });
-  }, [x, y, items]);
-
-  return createPortal(
-    <div
-      className="ctx-menu"
-      style={{ left: pos.left, top: pos.top }}
-      role="menu"
-      onContextMenu={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-      }}
-    >
-      {items.map((item, i) => {
-        if (item === "sep") {
-          return <div key={`sep-${i}`} className="ctx-sep" />;
-        }
-        return (
-          <button
-            key={item.id}
-            type="button"
-            role="menuitem"
-            className={`ctx-item ${item.danger ? "danger" : ""}`}
-            disabled={item.disabled}
-            onClick={() => {
-              if (item.disabled) return;
-              onClose();
-              item.onClick();
-            }}
-          >
-            {item.icon && <span className="ctx-icon">{item.icon}</span>}
-            <span className="truncate">{item.label}</span>
-            {item.shortcut && (
-              <span className="ctx-shortcut">{item.shortcut}</span>
-            )}
-          </button>
-        );
-      })}
-    </div>,
-    document.body,
-  );
-}
-
-/**
- * 在 React 右键事件上打开菜单（阻止默认与冒泡）。
- * @param e 鼠标事件
- * @param open Provider 的 open
- * @param items 菜单项列表
- */
+/** 在 React 右键事件上打开菜单 */
 export function openContextMenu(
   e: ReactMouseEvent,
   open: ContextMenuApi["open"],

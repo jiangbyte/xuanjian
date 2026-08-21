@@ -392,3 +392,105 @@ pub async fn exec_with_shell(
         Ok(output_to_string(output))
     }
 }
+
+/// 流式本地 exec；cancel 后杀掉子进程。stdout/stderr 合并推送。
+pub async fn exec_stream_with_shell(
+    shell_id: &str,
+    shell_path: &str,
+    shell_args: &[String],
+    command: &str,
+    cancel: Arc<AtomicBool>,
+    mut on_chunk: impl FnMut(String),
+) -> Result<()> {
+    use tokio::io::{AsyncBufReadExt, BufReader};
+    use tokio::sync::mpsc;
+
+    #[cfg(target_os = "windows")]
+    let mut child = {
+        let mut cmd = if shell_id.starts_with("local:wsl:") {
+            let distro = shell_id.strip_prefix("local:wsl:").unwrap_or("").trim();
+            let distro = shell_args
+                .windows(2)
+                .find(|w| w[0] == "-d")
+                .map(|w| w[1].as_str())
+                .unwrap_or(distro);
+            let mut c = tokio::process::Command::new("wsl.exe");
+            c.args(["-d", distro, "--", "sh", "-lc", command]);
+            c
+        } else if shell_id == "local:git-bash"
+            || shell_path.to_ascii_lowercase().contains("bash.exe")
+        {
+            let mut c = tokio::process::Command::new(shell_path);
+            c.args(["-lc", command]);
+            c
+        } else if shell_id.contains("powershell")
+            || shell_id.contains("pwsh")
+            || shell_path.to_ascii_lowercase().contains("powershell")
+            || shell_path.to_ascii_lowercase().contains("pwsh")
+        {
+            let mut c = tokio::process::Command::new(shell_path);
+            c.args(["-NoProfile", "-NonInteractive", "-Command", command]);
+            c
+        } else {
+            let mut c = tokio::process::Command::new("cmd.exe");
+            c.args(["/C", command]);
+            c
+        };
+        cmd.stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .context("spawn local stream exec")?
+    };
+
+    #[cfg(not(target_os = "windows"))]
+    let mut child = {
+        let _ = (shell_id, shell_path, shell_args);
+        tokio::process::Command::new("sh")
+            .args(["-lc", command])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .context("spawn local stream exec")?
+    };
+
+    let stdout = child.stdout.take().context("stdout")?;
+    let stderr = child.stderr.take().context("stderr")?;
+    let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+    let tx_err = tx.clone();
+    tokio::spawn(async move {
+        let mut lines = BufReader::new(stdout).lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            if tx.send(line).is_err() {
+                break;
+            }
+        }
+    });
+    tokio::spawn(async move {
+        let mut lines = BufReader::new(stderr).lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            if tx_err.send(line).is_err() {
+                break;
+            }
+        }
+    });
+
+    loop {
+        if cancel.load(Ordering::SeqCst) {
+            let _ = child.kill().await;
+            break;
+        }
+        tokio::select! {
+            msg = rx.recv() => {
+                match msg {
+                    Some(line) => on_chunk(format!("{line}\n")),
+                    None => break,
+                }
+            }
+            _ = tokio::time::sleep(std::time::Duration::from_millis(200)) => {}
+        }
+    }
+    let _ = child.wait().await;
+    Ok(())
+}

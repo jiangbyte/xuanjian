@@ -6,15 +6,26 @@
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { dialogs } from "@/lib/dialogs";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { Monitor, Server, Terminal, X } from "lucide-react";
+import { Loader2, Monitor, Server, Terminal } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { HostRow, listHosts, touchHostConnected } from "@/lib/db";
 import type { ScriptRow } from "@/lib/db";
 import { api, LocalShellInfo } from "@/lib/tauri";
 import { runScriptOnSession } from "@/lib/runScript";
 import { useUiStore, type TermTab } from "@/stores/ui";
-import { useDialog } from "@/components/Dialog";
 import { startRecordingForOpenTab } from "@/lib/sessionRecorder";
 
 type Target =
@@ -33,7 +44,6 @@ export function RunScriptTargetModal({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  const dialog = useDialog();
   const navigate = useNavigate();
   const tabs = useUiStore((s) => s.tabs);
   const activeTabId = useUiStore((s) => s.activeTabId);
@@ -93,7 +103,7 @@ export function RunScriptTargetModal({
   }, [shells, q]);
 
   const promptVar = (label: string, def?: string) =>
-    dialog.prompt(label, { defaultValue: def });
+    dialogs.prompt(label, { defaultValue: def });
 
   const runOnSession = async (sessionId: string, tabId?: string) => {
     await runScriptOnSession(sessionId, script, promptVar);
@@ -177,7 +187,7 @@ export function RunScriptTargetModal({
       setActiveTab(tabId);
       onClose();
     } catch (e) {
-      await dialog.alert(String(e));
+      await dialogs.alert(String(e));
     } finally {
       setRunning(false);
     }
@@ -193,39 +203,28 @@ export function RunScriptTargetModal({
           : "";
 
   return (
-    <div
-      className="overlay z-[95] flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <div
-        className="modal-card flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-5 py-3">
-          <div className="min-w-0">
-            <h3 className="text-sm font-semibold">{t("scripts.pickTarget")}</h3>
-            <div className="truncate text-xs muted">{script.name}</div>
-          </div>
-          <button className="icon-btn" onClick={onClose}>
-            <X size={16} />
-          </button>
-        </div>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{t("scripts.pickTarget")}</DialogTitle>
+          <DialogDescription className="truncate">
+            {script.name}
+          </DialogDescription>
+        </DialogHeader>
 
-        <div className="border-b border-[var(--border)] px-5 py-3">
-          <input
-            className="field"
-            placeholder={t("scripts.pickSearch")}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            autoFocus
-          />
-        </div>
+        <Input
+          placeholder={t("scripts.pickSearch")}
+          value={q}
+          onChange={(e) => setQ(e.currentTarget.value)}
+          autoFocus
+        />
 
-        {/* —— 目标列表：已开标签 / Shell / 主机 —— */}
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+        <div className="max-h-[50vh] space-y-4 overflow-y-auto">
           <Section title={t("scripts.openTabs")}>
             {filteredTabs.length === 0 ? (
-              <div className="text-xs muted">{t("scripts.noOpenTabs")}</div>
+              <div className="text-xs text-muted-foreground">
+                {t("scripts.noOpenTabs")}
+              </div>
             ) : (
               filteredTabs.map((tab) => (
                 <TargetRow
@@ -246,7 +245,9 @@ export function RunScriptTargetModal({
 
           <Section title={t("scripts.hosts")}>
             {filteredHosts.length === 0 ? (
-              <div className="text-xs muted">{t("hosts.empty")}</div>
+              <div className="text-xs text-muted-foreground">
+                {t("hosts.empty")}
+              </div>
             ) : (
               filteredHosts.map((host) => (
                 <TargetRow
@@ -263,7 +264,9 @@ export function RunScriptTargetModal({
 
           <Section title={t("scripts.localShells")}>
             {filteredShells.length === 0 ? (
-              <div className="text-xs muted">{t("scripts.noShells")}</div>
+              <div className="text-xs text-muted-foreground">
+                {t("scripts.noShells")}
+              </div>
             ) : (
               filteredShells.map((shell) => (
                 <TargetRow
@@ -279,29 +282,31 @@ export function RunScriptTargetModal({
           </Section>
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-[var(--border)] px-5 py-3">
-          <button className="btn" onClick={onClose} disabled={running}>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={running}>
             {t("hosts.cancel")}
-          </button>
-          <button
-            className="btn btn-primary"
+          </Button>
+          <Button
             disabled={!target || running}
             onClick={() => onConfirm().catch(console.error)}
           >
+            {running ? <Loader2 className="animate-spin" /> : null}
             {running ? t("scripts.running") : t("scripts.run")}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 /** 目标列表分组标题 */
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="menu-section">
-      <div className="menu-section-title">{title}</div>
-      <div className="menu-list">{children}</div>
+    <section className="space-y-1">
+      <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
+        {title}
+      </div>
+      <div className="space-y-0.5">{children}</div>
     </section>
   );
 }
@@ -323,13 +328,18 @@ function TargetRow({
   return (
     <button
       type="button"
-      className={`list-row ${active ? "is-active" : ""}`}
+      className={cn(
+        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+        active
+          ? "bg-accent text-accent-foreground"
+          : "hover:bg-muted",
+      )}
       onClick={onClick}
     >
-      <span className="shrink-0 text-[var(--accent)]">{icon}</span>
-      <div className="min-w-0 flex-1 text-left">
-        <div className="list-row-title truncate">{title}</div>
-        <div className="list-row-sub truncate">{sub}</div>
+      <span className="shrink-0 text-primary">{icon}</span>
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-medium">{title}</div>
+        <div className="truncate text-xs text-muted-foreground">{sub}</div>
       </div>
     </button>
   );

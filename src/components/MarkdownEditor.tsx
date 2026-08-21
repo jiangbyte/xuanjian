@@ -14,7 +14,7 @@ import { resolveMarkdownColorMode, useSettingsStore } from "@/stores/settings";
  * Markdown 所见即所得编辑器。
  * @param value 当前 Markdown 文本
  * @param onChange 内容变更回调
- * @param height 编辑器高度，默认 100%
+ * @param height 编辑器高度，默认铺满父容器
  * @param preview 预览模式：live / edit / preview
  * @param hideToolbar 是否隐藏工具栏
  */
@@ -37,22 +37,30 @@ export function MarkdownEditor({
   // 主题为 follow 时，应用主题变化需触发重新解析
   void theme;
 
+  const fillParent = height == null || height === "100%";
+
   return (
     <div
-      className="md-editor-wrap min-h-0 flex-1 overflow-hidden"
+      className={
+        fillParent
+          ? "md-editor-wrap relative min-h-0 flex-1 overflow-hidden"
+          : "md-editor-wrap overflow-hidden"
+      }
       data-color-mode={colorMode}
     >
-      <MDEditor
-        value={value}
-        onChange={(v) => onChange(v ?? "")}
-        height={height ?? "100%"}
-        preview={preview}
-        hideToolbar={hideToolbar}
-        visibleDragbar={false}
-        textareaProps={{
-          placeholder: "支持 Markdown…",
-        }}
-      />
+      <div className={fillParent ? "absolute inset-0" : undefined}>
+        <MDEditor
+          value={value}
+          onChange={(v) => onChange(v ?? "")}
+          height={fillParent ? "100%" : height}
+          preview={preview}
+          hideToolbar={hideToolbar}
+          visibleDragbar={false}
+          textareaProps={{
+            placeholder: "支持 Markdown…",
+          }}
+        />
+      </div>
     </div>
   );
 }

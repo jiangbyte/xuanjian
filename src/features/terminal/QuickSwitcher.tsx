@@ -7,14 +7,25 @@
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { dialogs } from "@/lib/dialogs";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { api, LocalShellInfo } from "@/lib/tauri";
 import { HostRow, listHosts, touchHostConnected } from "@/lib/db";
 import { useUiStore } from "@/stores/ui";
 import { useSettingsStore } from "@/stores/settings";
-import { useDialog } from "@/components/Dialog";
 import { startRecordingForOpenTab } from "@/lib/sessionRecorder";
+import { cn } from "@/lib/utils";
+
+const rowClass =
+  "flex w-full items-center gap-2 rounded-md p-2 text-left hover:bg-accent";
 
 /**
  * 快速切换器浮层：本地 Shell / 主机 / 标签三分区列表。
@@ -28,7 +39,6 @@ export function QuickSwitcher() {
   const updateTab = useUiStore((s) => s.updateTab);
   const defaultLocalShell = useSettingsStore((s) => s.defaultLocalShell);
   const { t } = useTranslation();
-  const dialog = useDialog();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [shells, setShells] = useState<LocalShellInfo[]>([]);
@@ -68,8 +78,6 @@ export function QuickSwitcher() {
     [shells, q],
   );
 
-  if (!open) return null;
-
   /** 打开本地 Shell 会话并切到终端页 */
   const openLocal = async (shell: LocalShellInfo) => {
     setSwitcherOpen(false);
@@ -95,7 +103,7 @@ export function QuickSwitcher() {
       await recording;
     } catch (e) {
       updateTab(tabId, { status: "error" });
-      await dialog.alert(String(e));
+      await dialogs.alert(String(e));
     }
   };
 
@@ -138,28 +146,25 @@ export function QuickSwitcher() {
       }
     } catch (e) {
       updateTab(tabId, { status: "error" });
-      await dialog.alert(String(e));
+      await dialogs.alert(String(e));
     }
   };
 
   return (
-    <div
-      className="overlay flex items-start justify-center pt-[12vh]"
-      onClick={() => setSwitcherOpen(false)}
-    >
-      <div
-        className="modal-card w-full max-w-xl overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
+    <Dialog open={open} onOpenChange={(next) => !next && setSwitcherOpen(false)}>
+      <DialogContent
+        showCloseButton={false}
+        className="gap-0 overflow-hidden p-0 sm:max-w-lg"
       >
-        <input
+        <DialogTitle className="sr-only">{t("switcher.title")}</DialogTitle>
+        <Input
           autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={t("switcher.title")}
-          className="switcher-input"
+          className="h-auto rounded-none border-0 border-b border-border px-4 py-3.5 text-[15px] shadow-none focus-visible:ring-0"
         />
         <div className="max-h-[50vh] overflow-auto px-2 py-2">
-          {/* —— 本地 Shell —— */}
           <Section title={t("switcher.localShell")}>
             {filteredShells.map((shell) => {
               const isDefault =
@@ -169,66 +174,70 @@ export function QuickSwitcher() {
                 <button
                   key={shell.id}
                   type="button"
-                  className="list-row justify-between"
+                  className={cn(rowClass, "justify-between")}
                   onClick={() => openLocal(shell)}
                 >
-                  <span className="list-row-title truncate">{shell.name}</span>
+                  <span className="truncate text-sm font-semibold">
+                    {shell.name}
+                  </span>
                   {isDefault && (
-                    <span className="chip chip-accent">
-                      {t("switcher.default")}
-                    </span>
+                    <Badge variant="secondary">{t("switcher.default")}</Badge>
                   )}
                 </button>
               );
             })}
           </Section>
-          {/* —— 已保存主机 —— */}
           <Section title={t("switcher.hosts")}>
             {filteredHosts.map((host) => (
               <button
                 key={host.id}
                 type="button"
-                className="list-row list-row-stack"
+                className={rowClass}
                 onClick={() => openHost(host)}
               >
-                <span className="list-row-title truncate">
-                  {host.name || host.host}
-                </span>
-                <span className="list-row-sub truncate">
-                  {host.username}@{host.host}
-                </span>
+                <div className="min-w-0 w-full space-y-0.5">
+                  <div className="truncate text-sm font-semibold">
+                    {host.name || host.host}
+                  </div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {host.username}@{host.host}
+                  </div>
+                </div>
               </button>
             ))}
           </Section>
-          {/* —— 已有标签页 —— */}
           <Section title={t("switcher.tabs")}>
             {filteredTabs.map((tab) => (
               <button
                 key={tab.id}
                 type="button"
-                className="list-row"
+                className={rowClass}
                 onClick={() => {
                   setActiveTab(tab.id);
                   setSwitcherOpen(false);
                   navigate("/terminal");
                 }}
               >
-                <span className="list-row-title truncate">{tab.title}</span>
+                <span className="truncate text-sm font-semibold">
+                  {tab.title}
+                </span>
               </button>
             ))}
           </Section>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 /** 切换器内部分组标题 + 列表 */
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="menu-section">
-      <div className="menu-section-title">{title}</div>
-      <div className="menu-list">{children}</div>
-    </section>
+    <div className="mb-2 space-y-1">
+      <div className="px-2 pt-1 text-xs font-semibold uppercase text-muted-foreground">
+        {title}
+      </div>
+      <div className="space-y-0.5">{children}</div>
+    </div>
   );
 }

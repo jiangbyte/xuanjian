@@ -13,6 +13,7 @@ import { NotesConsole } from "@/features/notes/NotesConsole";
 import { LogsConsole } from "@/features/logs/LogsConsole";
 import { LogDetailView } from "@/features/logs/LogDetailView";
 import { NetworkConsole } from "@/features/network/NetworkConsole";
+import { DockerConsole } from "@/features/docker/DockerConsole";
 
 /**
  * 应用根组件：挂载路由树，所有页面落在 AppShell 布局内。
@@ -24,6 +25,7 @@ export default function App() {
         <Route element={<AppShell />}>
           <Route index element={<HostsConsole />} />
           <Route path="network" element={<NetworkConsole />} />
+          <Route path="docker" element={<DockerConsole />} />
           <Route path="scripts" element={<ScriptsConsole />} />
           <Route path="notes" element={<NotesConsole />} />
           <Route path="logs" element={<LogsConsole />} />
