@@ -1,0 +1,48 @@
+import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { NotebookPen, Sparkles } from "lucide-react";
+import { AiChatPanel } from "./AiChatPanel";
+import { NotesPane } from "./panes/NotesPane";
+
+export type RightTabId = "ai" | "notes";
+
+export function TerminalRightPanel() {
+  const { t } = useTranslation();
+  const [tab, setTab] = useState<RightTabId>("ai");
+
+  const tabs = useMemo(
+    () =>
+      [
+        { id: "ai" as const, icon: Sparkles, label: t("termTab.ai") },
+        { id: "notes" as const, icon: NotebookPen, label: t("termTab.notes") },
+      ] as const,
+    [t],
+  );
+
+  return (
+    <div className="flex h-full min-w-0 flex-1 overflow-hidden">
+      <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+        {tab === "ai" && <AiChatPanel />}
+        {tab === "notes" && <NotesPane />}
+      </div>
+      <nav className="term-rail term-rail-right" aria-label={t("termTab.rightRail")}>
+        {tabs.map((item) => {
+          const Icon = item.icon;
+          const active = tab === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={`term-rail-btn tip ${active ? "is-active" : ""}`}
+              data-tip={item.label}
+              aria-label={item.label}
+              onClick={() => setTab(item.id)}
+            >
+              <Icon size={16} />
+            </button>
+          );
+        })}
+      </nav>
+    </div>
+  );
+}

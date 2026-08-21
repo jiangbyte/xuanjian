@@ -1,0 +1,43 @@
+[package]
+name = "xuanjian"
+version = "0.1.0"
+description = "玄鉴 / Xuanjian - Agent O&M tool"
+authors = ["CharlieByte"]
+edition = "2021"
+
+[lib]
+name = "xuanjian_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-sql = { version = "2", features = ["sqlite"] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+uuid = { version = "1", features = ["v4"] }
+portable-pty = "0.8"
+russh = "0.45"
+russh-keys = "0.45"
+russh-sftp = "2.0"
+async-trait = "0.1"
+futures = "0.3"
+parking_lot = "0.12"
+thiserror = "2"
+anyhow = "1"
+base64 = "0.22"
+aes-gcm = "0.10"
+rand = "0.8"
+sha2 = "0.10"
+dirs = "6"
+chrono = { version = "0.4", features = ["serde"] }
+if-addrs = "0.13"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "blocking"] }
+which = "7"
+tauri-plugin-clipboard-manager = "2.3.2"
+tauri-plugin-prevent-default = { version = "5.0.2", features = ["platform-windows"] }
