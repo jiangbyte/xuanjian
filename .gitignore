@@ -6,10 +6,20 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies / build
 node_modules
 dist
 dist-ssr
 *.local
+
+# 本地打包 / 发布产物（由 `pnpm tauri build` 生成后拷贝）
+/release/
+*.exe
+*.msi
+*.dmg
+*.AppImage
+*.deb
+*.rpm
 
 # Editor directories and files
 .vscode/*
@@ -21,3 +31,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# OS / temp
+Thumbs.db
+Desktop.ini
+*.tmp
+*.temp
+.cache/
