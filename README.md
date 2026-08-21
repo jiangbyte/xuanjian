@@ -34,90 +34,26 @@
 
 ## 界面预览
 
-### 主机与网络工具
+> 预览图仅使用演示环境数据（如 `1.1.1.1` / `127.0.0.1` / 私网示例网段），不含真实主机与会话信息。
+
+### 网络工具
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/hosts.png" alt="主机操作台" /></td>
     <td width="50%"><img src="docs/images/network-ping.png" alt="连通性 Ping" /></td>
-  </tr>
-  <tr>
-    <td align="center">主机操作台</td>
-    <td align="center">连通性 · Ping</td>
-  </tr>
-  <tr>
     <td width="50%"><img src="docs/images/network-traceroute.png" alt="路由追踪" /></td>
-    <td width="50%"><img src="docs/images/network-ipcalc.png" alt="IP 计算与子网拓扑" /></td>
   </tr>
   <tr>
+    <td align="center">连通性 · Ping</td>
     <td align="center">连通性 · 路由追踪</td>
-    <td align="center">IP 计算 · 子网拓扑</td>
   </tr>
   <tr>
+    <td width="50%"><img src="docs/images/network-ipcalc.png" alt="IP 计算与子网拓扑" /></td>
     <td width="50%"><img src="docs/images/network-ports.png" alt="端口探测" /></td>
-    <td></td>
   </tr>
   <tr>
+    <td align="center">IP 计算 · 子网拓扑</td>
     <td align="center">端口探测</td>
-    <td></td>
-  </tr>
-</table>
-
-### Docker · 脚本 · 笔记 · 日志
-
-<table>
-  <tr>
-    <td width="50%"><img src="docs/images/docker-compose.png" alt="Docker Compose 编排" /></td>
-    <td width="50%"><img src="docs/images/scripts.png" alt="脚本片段" /></td>
-  </tr>
-  <tr>
-    <td align="center">Docker Compose / Dockerfile 编排</td>
-    <td align="center">脚本包与片段</td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="docs/images/notes.png" alt="Markdown 笔记" /></td>
-    <td width="50%"><img src="docs/images/logs.png" alt="会话日志" /></td>
-  </tr>
-  <tr>
-    <td align="center">Markdown 笔记</td>
-    <td align="center">会话日志</td>
-  </tr>
-</table>
-
-### 终端工作区
-
-<table>
-  <tr>
-    <td width="50%"><img src="docs/images/terminal-files.png" alt="文件浏览器与笔记" /></td>
-    <td width="50%"><img src="docs/images/terminal-scripts.png" alt="终端内脚本库" /></td>
-  </tr>
-  <tr>
-    <td align="center">文件 / SFTP 与侧栏笔记</td>
-    <td align="center">终端内脚本库</td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="docs/images/terminal-history.png" alt="历史命令" /></td>
-    <td width="50%"><img src="docs/images/terminal-overview.png" alt="主机概览" /></td>
-  </tr>
-  <tr>
-    <td align="center">历史命令</td>
-    <td align="center">主机概览（CPU / 内存 / 磁盘 / 网络）</td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="docs/images/terminal-processes.png" alt="进程" /></td>
-    <td width="50%"><img src="docs/images/terminal-ports.png" alt="端口监听" /></td>
-  </tr>
-  <tr>
-    <td align="center">进程</td>
-    <td align="center">端口监听</td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="docs/images/terminal-docker.png" alt="会话内 Docker" /></td>
-    <td></td>
-  </tr>
-  <tr>
-    <td align="center">会话内 Docker（容器 / 镜像 / 网络 / 卷 · 实时日志）</td>
-    <td></td>
   </tr>
 </table>
 

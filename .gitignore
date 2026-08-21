@@ -21,6 +21,18 @@ dist-ssr
 *.deb
 *.rpm
 
+# 用户运行时数据（切勿提交 / 打进仓库）
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+secret.key
+**/xuanjian.db
+**/xuanjian/
+.xuanjian/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
