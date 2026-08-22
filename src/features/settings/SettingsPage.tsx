@@ -1,8 +1,7 @@
 /**
- * @file 应用设置浮窗
+ * @file 应用设置页
  * @author Charlie
- * @description 外观（主题/语言/默认 Shell）、终端字体与编辑器主题等偏好的读写界面。
- * 变更同步到 zustand store 与本地 settings 表。
+ * @description 外观、终端、编辑器、模型 / MCP / Agent、数据与关于等偏好；页面级布局。
  */
 
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -10,16 +9,18 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   AppWindow,
   Archive,
+  Bot,
+  Cable,
   Code2,
   FolderOpen,
   HardDrive,
   Info,
+  Sparkles,
   Terminal,
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { FloatingWindow } from "@/components/FloatingWindow";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -30,6 +31,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import {
+  AgentSettingsSection,
+  McpSettingsSection,
+  ModelsSettingsSection,
+} from "@/features/settings/AgentSettingsSections";
 import {
   DEFAULT_EXPORT_ALL,
   ShareExportDialog,
@@ -61,12 +67,14 @@ import {
   ThemeMode,
   useSettingsStore,
 } from "@/stores/settings";
-import { useUiStore } from "@/stores/ui";
 
 type SectionId =
   | "appearance"
   | "terminal"
   | "editor"
+  | "models"
+  | "mcp"
+  | "agent"
   | "data"
   | "backup"
   | "about";
@@ -94,10 +102,8 @@ function SettingRow({
   );
 }
 
-/** 应用设置模态框 */
-export function SettingsModal() {
-  const open = useUiStore((s) => s.settingsOpen);
-  const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
+/** 应用设置页（主内容区全页） */
+export function SettingsPage() {
   const { t } = useTranslation();
   const [section, setSection] = useState<SectionId>("appearance");
   const [shells, setShells] = useState<LocalShellInfo[]>([]);
@@ -127,7 +133,6 @@ export function SettingsModal() {
   const setMarkdownColorMode = useSettingsStore((s) => s.setMarkdownColorMode);
 
   useEffect(() => {
-    if (!open) return;
     api.listLocalShells().then(setShells).catch(console.error);
     api.getDataDirInfo().then(setDataInfo).catch(console.error);
     (async () => {
@@ -158,9 +163,7 @@ export function SettingsModal() {
       });
       if (localeVal) i18n.changeLanguage(localeVal);
     })().catch(console.error);
-  }, [open]);
-
-  if (!open) return null;
+  }, []);
 
   const nav: { id: SectionId; label: string; icon: ReactNode }[] = [
     {
@@ -177,6 +180,21 @@ export function SettingsModal() {
       id: "editor",
       label: t("settings.editor"),
       icon: <Code2 size={15} />,
+    },
+    {
+      id: "models",
+      label: t("settings.models"),
+      icon: <Sparkles size={15} />,
+    },
+    {
+      id: "mcp",
+      label: t("settings.mcp"),
+      icon: <Cable size={15} />,
+    },
+    {
+      id: "agent",
+      label: t("settings.agent"),
+      icon: <Bot size={15} />,
     },
     {
       id: "data",
@@ -230,41 +248,40 @@ export function SettingsModal() {
 
   return (
     <>
-      <FloatingWindow
-        title={t("settings.title")}
-        onClose={() => setSettingsOpen(false)}
-        initialWidth={720}
-        initialHeight={560}
-        bodyClassName="p-0"
-      >
-        <div className="flex h-full min-h-0">
-          <aside className="flex w-52 shrink-0 flex-col border-r border-border bg-muted/30">
-            <div className="px-3 py-3 text-sm font-semibold text-muted-foreground">
+      <div className="flex h-full min-h-0 bg-background">
+        <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-muted/20">
+          <div className="border-b border-border px-4 py-3.5">
+            <h1 className="text-base font-semibold tracking-tight">
               {t("settings.title")}
-            </div>
-            <nav className="flex flex-1 flex-col gap-0.5 px-2 pb-3">
-              {nav.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={cn(
-                    "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
-                    section === item.id
-                      ? "bg-accent font-medium text-accent-foreground"
-                      : "text-foreground hover:bg-muted",
-                  )}
-                  onClick={() => setSection(item.id)}
-                >
-                  <span className="flex items-center gap-2 truncate">
-                    {item.icon}
-                    {item.label}
-                  </span>
-                </button>
-              ))}
-            </nav>
-          </aside>
+            </h1>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {t("settings.pageHint")}
+            </p>
+          </div>
+          <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2.5">
+            {nav.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={cn(
+                  "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
+                  section === item.id
+                    ? "bg-accent font-medium text-accent-foreground"
+                    : "text-foreground hover:bg-muted",
+                )}
+                onClick={() => setSection(item.id)}
+              >
+                <span className="flex items-center gap-2 truncate">
+                  {item.icon}
+                  {item.label}
+                </span>
+              </button>
+            ))}
+          </nav>
+        </aside>
 
-          <div className="min-h-0 flex-1 overflow-y-auto p-5">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-3xl p-6 md:p-8">
             {section === "appearance" && (
               <section>
                 <h3 className="mb-4 text-base font-semibold tracking-tight">
@@ -499,6 +516,10 @@ export function SettingsModal() {
               </section>
             )}
 
+            {section === "models" && <ModelsSettingsSection />}
+            {section === "mcp" && <McpSettingsSection />}
+            {section === "agent" && <AgentSettingsSection />}
+
             {section === "data" && (
               <section>
                 <h3 className="mb-4 text-base font-semibold">
@@ -657,7 +678,7 @@ export function SettingsModal() {
             )}
           </div>
         </div>
-      </FloatingWindow>
+      </div>
       <ShareExportDialog
         open={backupExportOpen}
         onOpenChange={setBackupExportOpen}

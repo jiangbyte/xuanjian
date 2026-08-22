@@ -263,5 +263,92 @@ ALTER TABLE docker_projects ADD COLUMN kind TEXT NOT NULL DEFAULT 'full';
 "#,
             kind: MigrationKind::Up,
         },
+        // —— 迁移 v12：AI 供应商 / 模型 / MCP / Agent 会话 ——
+        Migration {
+            version: 12,
+            description: "ai_agent_tables",
+            sql: r#"
+CREATE TABLE IF NOT EXISTS ai_providers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  base_url TEXT NOT NULL,
+  api_format TEXT NOT NULL DEFAULT 'openai',
+  api_key_enc TEXT NOT NULL DEFAULT '',
+  enabled INTEGER NOT NULL DEFAULT 1,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS ai_models (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  provider_id INTEGER NOT NULL REFERENCES ai_providers(id) ON DELETE CASCADE,
+  model_id TEXT NOT NULL,
+  label TEXT NOT NULL DEFAULT '',
+  context_tag TEXT NOT NULL DEFAULT '',
+  enabled INTEGER NOT NULL DEFAULT 1,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS mcp_servers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  transport TEXT NOT NULL DEFAULT 'http',
+  command TEXT,
+  args_json TEXT,
+  url TEXT,
+  env_json TEXT,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  scope TEXT NOT NULL DEFAULT 'local',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS agent_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL DEFAULT '',
+  runtime TEXT NOT NULL DEFAULT 'local',
+  remote_agent_id TEXT,
+  model_ref TEXT,
+  permission_mode TEXT NOT NULL DEFAULT 'confirm',
+  host_id INTEGER,
+  tab_id TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS agent_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id INTEGER NOT NULL REFERENCES agent_sessions(id) ON DELETE CASCADE,
+  role TEXT NOT NULL,
+  parts_json TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS remote_agents (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  endpoint TEXT NOT NULL DEFAULT '',
+  enabled INTEGER NOT NULL DEFAULT 1,
+  last_seen TEXT
+);
+
+INSERT OR IGNORE INTO app_settings (key, value) VALUES ('agent.default_runtime', 'local');
+INSERT OR IGNORE INTO app_settings (key, value) VALUES ('agent.default_permission_mode', 'confirm');
+INSERT OR IGNORE INTO app_settings (key, value) VALUES ('agent.gateway_port', '18765');
+INSERT OR IGNORE INTO app_settings (key, value) VALUES ('backend.base_url', '');
+INSERT OR IGNORE INTO app_settings (key, value) VALUES ('backend.token', '');
+"#,
+            kind: MigrationKind::Up,
+        },
+        // —— 迁移 v13：模型最大输出 token ——
+        Migration {
+            version: 13,
+            description: "ai_models_max_output_tokens",
+            sql: r#"
+ALTER TABLE ai_models ADD COLUMN max_output_tokens INTEGER NOT NULL DEFAULT 0;
+"#,
+            kind: MigrationKind::Up,
+        },
     ]
 }

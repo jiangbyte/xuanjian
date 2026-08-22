@@ -192,7 +192,42 @@ export const api = {
   networkSpeedServerStop: () => invoke("network_speed_server_stop"),
   networkSpeedServerStatus: () =>
     invoke<SpeedServerInfo | null>("network_speed_server_status"),
+
+  aiChatCompletion: (params: AiChatProxyParams) =>
+    invoke<unknown>("ai_chat_completion", { params }),
+  aiChatStream: (params: AiChatProxyParams) =>
+    invoke<string>("ai_chat_stream", { params }),
+  aiChatCancel: (jobId: string) => invoke("ai_chat_cancel", { jobId }),
 };
+
+export type AiChatProxyParams = {
+  baseUrl: string;
+  apiFormat: string;
+  apiKey: string;
+  model: string;
+  messages: unknown;
+  tools?: unknown;
+  stream?: boolean;
+  /** off | high | max */
+  thinkingMode?: string;
+  maxTokens?: number;
+};
+
+export type AiChatChunk = {
+  jobId: string;
+  done: boolean;
+  delta?: string | null;
+  thinking?: string | null;
+  toolCalls?: unknown;
+  error?: string | null;
+  raw?: unknown;
+};
+
+export function onAiChatChunk(
+  cb: (payload: AiChatChunk) => void,
+): Promise<UnlistenFn> {
+  return listen<AiChatChunk>("ai-chat-chunk", (e) => cb(e.payload));
+}
 
 export type SpeedServerInfo = {
   port: number;

@@ -59,7 +59,6 @@ export function TitleBar() {
   const setActiveTab = useUiStore((s) => s.setActiveTab);
   const closeTab = useUiStore((s) => s.closeTab);
   const setSwitcherOpen = useUiStore((s) => s.setSwitcherOpen);
-  const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
   const leftCollapsed = useUiStore((s) => s.leftCollapsed);
   const rightCollapsed = useUiStore((s) => s.rightCollapsed);
   const transferOpen = useUiStore((s) => s.transferOpen);
@@ -298,9 +297,10 @@ export function TitleBar() {
           type="button"
           variant="ghost"
           size="icon-sm"
-          onClick={() => setSettingsOpen(true)}
+          onClick={() => navigate("/settings")}
           title={t("nav.settings")}
           aria-label={t("nav.settings")}
+          aria-current={location.pathname === "/settings" ? "page" : undefined}
         >
           <Settings size={14} />
         </Button>

@@ -107,6 +107,19 @@ export async function listScripts(): Promise<ScriptRow[]> {
   );
 }
 
+/** 按 id 取单条脚本（含包名） */
+export async function getScript(id: number): Promise<ScriptRow | null> {
+  const db = await getDb();
+  const rows = await db.select<ScriptRow[]>(
+    `SELECT s.*, p.name as package_name
+     FROM scripts s
+     LEFT JOIN script_packages p ON p.id = s.package_id
+     WHERE s.id = $1`,
+    [id],
+  );
+  return rows[0] ?? null;
+}
+
 /**
  * 新建脚本。
  * @returns 新脚本 id

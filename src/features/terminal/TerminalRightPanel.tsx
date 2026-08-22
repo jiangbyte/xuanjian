@@ -2,8 +2,7 @@
  * @file 终端右侧边栏
  * @author Charlie
  * @description 右侧窄轨切换 AI 对话与笔记两个面板。
- * AI 面板为占位实现；笔记面板对接本地数据库。
- * 轨按钮位于最右侧，内容区占满剩余宽度。
+ * 两面板保持挂载、仅 CSS 隐藏，避免切轨丢失 AI 会话状态。
  */
 
 import { NotebookPen, Sparkles } from "lucide-react";
@@ -19,15 +18,35 @@ import { AiChatPanel } from "@/features/terminal/AiChatPanel";
 import { NotesPane } from "@/features/terminal/panes/NotesPane";
 import { cn } from "@/lib/utils";
 
-/** 右侧边栏标签：AI（占位）或笔记 */
+/** 右侧边栏标签：AI 或笔记 */
 export type RightTabId = "ai" | "notes";
 
+const RIGHT_TAB_KEY = "xuanjian.terminal.rightTab";
+
+function loadRightTab(): RightTabId {
+  try {
+    const v = localStorage.getItem(RIGHT_TAB_KEY);
+    if (v === "ai" || v === "notes") return v;
+  } catch {
+    /* ignore */
+  }
+  return "ai";
+}
+
+function saveRightTab(tab: RightTabId) {
+  try {
+    localStorage.setItem(RIGHT_TAB_KEY, tab);
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
- * 终端右侧栏：在 AI 占位面板与笔记面板间切换。
+ * 终端右侧栏：在 AI 与笔记间切换（保持挂载）。
  */
 export function TerminalRightPanel() {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<RightTabId>("ai");
+  const [tab, setTab] = useState<RightTabId>(() => loadRightTab());
 
   const tabs = useMemo(
     () =>
@@ -38,12 +57,33 @@ export function TerminalRightPanel() {
     [t],
   );
 
+  const selectTab = (id: RightTabId) => {
+    setTab(id);
+    saveRightTab(id);
+  };
+
   return (
     <div className="flex h-full min-w-0 flex-1 overflow-hidden">
-      {/* —— 面板内容 —— */}
-      <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
-        {tab === "ai" && <AiChatPanel />}
-        {tab === "notes" && <NotesPane />}
+      {/* —— 面板内容：双挂载，切轨不丢状态 —— */}
+      <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+        <div
+          className={cn(
+            "absolute inset-0 flex flex-col",
+            tab !== "ai" && "invisible pointer-events-none",
+          )}
+          aria-hidden={tab !== "ai"}
+        >
+          <AiChatPanel />
+        </div>
+        <div
+          className={cn(
+            "absolute inset-0 flex flex-col",
+            tab !== "notes" && "invisible pointer-events-none",
+          )}
+          aria-hidden={tab !== "notes"}
+        >
+          <NotesPane />
+        </div>
       </div>
 
       {/* —— 右侧图标轨 —— */}
@@ -64,7 +104,7 @@ export function TerminalRightPanel() {
                   className={cn(!active && "text-muted-foreground")}
                   aria-label={item.label}
                   aria-pressed={active}
-                  onClick={() => setTab(item.id)}
+                  onClick={() => selectTab(item.id)}
                 >
                   <Icon size={16} />
                 </Button>

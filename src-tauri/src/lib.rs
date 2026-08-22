@@ -4,6 +4,7 @@
 //!
 //! Author: Charlie
 
+mod ai;
 mod commands;
 mod crypto;
 mod data_dir;
@@ -12,6 +13,7 @@ mod network;
 mod session;
 mod win_process;
 
+use ai::AiState;
 use commands::*;
 use network::NetworkState;
 use session::{AppState, SharedState};
@@ -55,6 +57,7 @@ fn build_prevent_default_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 pub fn run() {
     let state: SharedState = Arc::new(AppState::new());
     let network_state = Arc::new(NetworkState::new());
+    let ai_state = Arc::new(AiState::new());
     let db_url = data_dir::db_url().expect("resolve sqlite url");
 
     tauri::Builder::default()
@@ -70,6 +73,7 @@ pub fn run() {
         )
         .manage(state)
         .manage(network_state)
+        .manage(ai_state)
         .invoke_handler(tauri::generate_handler![
             list_local_shells,
             host_platform,
@@ -118,6 +122,9 @@ pub fn run() {
             network::speed_server::network_speed_server_start,
             network::speed_server::network_speed_server_stop,
             network::speed_server::network_speed_server_status,
+            ai::proxy::ai_chat_completion,
+            ai::proxy::ai_chat_stream,
+            ai::proxy::ai_chat_cancel,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

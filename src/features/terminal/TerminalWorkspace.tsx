@@ -30,7 +30,7 @@ const TerminalRightPanel = lazy(() =>
 
 /**
  * 终端主工作区：左栏 + 多标签 xterm + 右栏。
- * @param workspaceActive 是否在终端页可见；离页时只保留 xterm，卸载左右侧栏以停止轮询/MD 编辑器。
+ * @param workspaceActive 是否在终端页可见；离页时 xterm 降活跃，右栏仍挂载以保留 AI 会话。
  */
 export function TerminalWorkspace({
   workspaceActive = true,
@@ -167,7 +167,8 @@ export function TerminalWorkspace({
         </div>
       </ResizablePanel>
 
-      {workspaceActive && !rightCollapsed && (
+      {/* 右栏：离页仍保持挂载（整页已 hidden），避免 AI 会话状态丢失 */}
+      {!rightCollapsed && (
         <>
           <ResizableHandle />
           <ResizablePanel

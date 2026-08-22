@@ -45,6 +45,11 @@ const LogDetailView = lazy(() =>
     default: m.LogDetailView,
   })),
 );
+const SettingsPage = lazy(() =>
+  import("@/features/settings/SettingsPage").then((m) => ({
+    default: m.SettingsPage,
+  })),
+);
 
 function RouteFallback() {
   return (
@@ -115,6 +120,14 @@ export default function App() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <LogDetailView />
+              </Suspense>
+            }
+          />
+          <Route
+            path="settings"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <SettingsPage />
               </Suspense>
             }
           />

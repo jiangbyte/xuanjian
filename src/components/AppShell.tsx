@@ -24,26 +24,15 @@ const QuickSwitcher = lazy(() =>
     default: m.QuickSwitcher,
   })),
 );
-const SettingsModal = lazy(() =>
-  import("@/features/settings/SettingsModal").then((m) => ({
-    default: m.SettingsModal,
-  })),
-);
 
-/** 设置/快速切换独立订阅，避免打开弹层时重渲染整棵外壳 */
+/** 快速切换独立订阅，避免打开弹层时重渲染整棵外壳 */
 function ShellOverlays() {
   const switcherOpen = useUiStore((s) => s.switcherOpen);
-  const settingsOpen = useUiStore((s) => s.settingsOpen);
   return (
     <>
       {switcherOpen ? (
         <Suspense fallback={null}>
           <QuickSwitcher />
-        </Suspense>
-      ) : null}
-      {settingsOpen ? (
-        <Suspense fallback={null}>
-          <SettingsModal />
         </Suspense>
       ) : null}
     </>

@@ -28,6 +28,8 @@ type ActiveRec = {
     data: string;
     tMs: number;
   }>;
+  /** 近实时环形文本（agent terminal_tail） */
+  ring: string;
   flushTimer: ReturnType<typeof setTimeout> | null;
   ending: boolean;
   flushChain: Promise<void>;
@@ -82,6 +84,14 @@ function g(): RecorderGlobal {
 
 const FLUSH_MS = 250;
 const FLUSH_MAX = 48;
+const RING_MAX = 32_000;
+
+function pushRing(rec: ActiveRec, data: string) {
+  rec.ring += data;
+  if (rec.ring.length > RING_MAX) {
+    rec.ring = rec.ring.slice(rec.ring.length - RING_MAX);
+  }
+}
 
 function tMsOf(rec: ActiveRec) {
   return Math.max(0, Date.now() - rec.startedAtMs);
@@ -118,6 +128,7 @@ function scheduleFlush(rec: ActiveRec) {
 
 function enqueue(rec: ActiveRec, direction: "in" | "out", data: string) {
   if (!data || rec.ending) return;
+  if (direction === "out") pushRing(rec, data);
   rec.pending.push({
     seq: rec.nextSeq++,
     direction,
@@ -225,6 +236,7 @@ export async function startSessionRecording(opts: {
     startedAtMs: Date.now(),
     nextSeq: 0,
     pending: [],
+    ring: "",
     flushTimer: null,
     ending: false,
     flushChain: Promise.resolve(),
@@ -371,5 +383,36 @@ export async function reconcileOrphanOpenLogs(): Promise<void> {
     await finalizeOrphanOpenLogs([...liveSessions]);
   } catch (e) {
     console.error("reconcileOrphanOpenLogs failed", e);
+  }
+}
+
+/**
+ * 取会话近实时输出尾部（优先内存环；否则回落 DB 日志块）。
+ * @param maxChars 最大字符数，默认 8000
+ */
+export async function getTranscriptTail(
+  sessionId: string,
+  maxChars = 8000,
+): Promise<string> {
+  const rec = g().bySession.get(sessionId);
+  if (rec?.ring) {
+    const s = rec.ring;
+    return s.length > maxChars ? s.slice(s.length - maxChars) : s;
+  }
+  // 回落：从活跃 tab 的 logId 读
+  const tab = useUiStore
+    .getState()
+    .tabs.find((t) => t.sessionId === sessionId);
+  if (tab?.logId == null) return "";
+  try {
+    const { listSessionLogChunks } = await import("@/lib/db");
+    const chunks = await listSessionLogChunks(tab.logId);
+    let out = "";
+    for (const c of chunks) {
+      if (c.direction === "out") out += c.data;
+    }
+    return out.length > maxChars ? out.slice(out.length - maxChars) : out;
+  } catch {
+    return "";
   }
 }

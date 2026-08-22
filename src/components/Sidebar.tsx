@@ -10,6 +10,7 @@ import {
   NotebookPen,
   ScrollText,
   Server,
+  Settings,
   Zap,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -29,6 +30,7 @@ export function Sidebar() {
     { to: "/scripts", icon: Zap, label: t("nav.scripts") },
     { to: "/notes", icon: NotebookPen, label: t("nav.notes") },
     { to: "/logs", icon: ScrollText, label: t("nav.logs") },
+    { to: "/settings", icon: Settings, label: t("nav.settings") },
   ] as const;
 
   return (
