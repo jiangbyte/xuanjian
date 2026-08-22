@@ -368,7 +368,7 @@ export default {
     backupImport: "导入备份…",
     about: "关于",
     aboutDesc:
-      "面向运维与现场排查的桌面工作台：主机、终端、SFTP、脚本、笔记、网络工具与 Docker 编排，数据本地保存。",
+      "AI 桌面运维工作台：主机、终端、SFTP、脚本、笔记、网络工具、Docker 编排与内置 Agent，数据本地保存。",
     aboutVersion: "版本",
     aboutAuthor: "作者",
     aboutLicense: "许可证",

@@ -198,13 +198,9 @@ function normalizeAnthropic(raw: unknown): NormalizedLlmReply {
 function splitThinkTags(text: string): { thinking: string; text: string } {
   const re = /<think>([\s\S]*?)<\/think>/gi;
   const parts: string[] = [];
-  let cleaned = text;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text))) {
+  for (const m of text.matchAll(re)) {
     parts.push(m[1].trim());
   }
-  if (parts.length) {
-    cleaned = text.replace(re, "").trim();
-  }
+  const cleaned = parts.length ? text.replace(re, "").trim() : text;
   return { thinking: parts.join("\n"), text: cleaned };
 }

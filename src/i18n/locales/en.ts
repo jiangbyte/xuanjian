@@ -380,7 +380,7 @@ export default {
     backupImport: "Import backup…",
     about: "About",
     aboutDesc:
-      "A desktop ops workbench for hosts, terminals, SFTP, scripts, notes, network tools, and Docker — data stays local.",
+      "An AI desktop ops workbench — hosts, terminals, SFTP, scripts, notes, network tools, Docker, and a built-in Agent. Data stays local.",
     aboutVersion: "Version",
     aboutAuthor: "Author",
     aboutLicense: "License",
