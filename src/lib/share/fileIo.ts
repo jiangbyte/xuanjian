@@ -42,7 +42,7 @@ export function importFromFile(): Promise<ImportResult | null> {
       }
       try {
         const raw = await file.text();
-        const doc = parseExport(raw);
+        const doc = await parseExport(raw);
         const result = await applyImport(doc);
         resolve(result);
       } catch (e) {

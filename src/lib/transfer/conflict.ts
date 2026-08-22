@@ -5,7 +5,7 @@
  * 并在覆盖前清理类型冲突或本地文件，以便安全写入。
  */
 
-import type { DialogApi } from "@/lib/dialogs";
+import type { DialogApi } from "@/lib/ui/dialogs";
 import { api, type SftpEntry } from "@/lib/tauri";
 
 /** 覆盖策略：每次询问 / 一律覆盖 / 一律跳过 */

@@ -41,8 +41,9 @@ import { Input } from "@/components/ui/input";
 import type { FileEditorTarget } from "@/features/terminal/FileEditorModal";
 import { PermissionsModal } from "@/features/terminal/PermissionsModal";
 import { SftpTransferModal } from "@/features/terminal/SftpTransferModal";
-import { clipboardWriteText } from "@/lib/clipboard";
-import { dialogs } from "@/lib/dialogs";
+import { clipboardWriteText } from "@/lib/ui/clipboard";
+import { getHost } from "@/lib/db";
+import { dialogs } from "@/lib/ui/dialogs";
 import { api, SftpEntry } from "@/lib/tauri";
 import {
   askOverwrite,
@@ -50,10 +51,10 @@ import {
   type DestEndpoint,
   findDestEntry,
   prepareOverwrite,
-} from "@/lib/transferConflict";
+} from "@/lib/transfer/conflict";
 import { bookmarkScope } from "@/stores/pathBookmarks";
 import { enqueueDownload, enqueueUpload } from "@/stores/transfer";
-import { isWindowsOs } from "@/lib/platform";
+import { isWindowsOs } from "@/lib/core/platform";
 import {
   isWindowsPath,
   joinPath,
@@ -125,14 +126,18 @@ export function TerminalSidePanel({
   sessionId,
   kind,
   hostId,
+  shellId,
 }: {
   sessionId: string | null;
   kind: "local" | "ssh" | null;
   hostId?: number | null;
+  shellId?: string | null;
 }) {
   const { t } = useTranslation();
   const { open: openMenu } = useContextMenu();
+  const wslMode = Boolean(shellId?.startsWith("local:wsl:"));
   const remote = kind === "ssh";
+  const unixPaths = remote || wslMode;
   const [cwd, setCwd] = useState(kind === "ssh" ? "/" : "");
   const [pathInput, setPathInput] = useState("");
   const [entries, setEntries] = useState<SftpEntry[]>([]);
@@ -151,7 +156,7 @@ export function TerminalSidePanel({
   const pathBoxRef = useRef<HTMLDivElement>(null);
 
   const reload = async (path = cwd) => {
-    if (!sessionId && kind === "ssh") {
+    if (!sessionId && (kind === "ssh" || wslMode)) {
       setEntries([]);
       return;
     }
@@ -160,9 +165,11 @@ export function TerminalSidePanel({
     try {
       setError(null);
       const list =
-        kind === "ssh" && sessionId
+        remote && sessionId
           ? await api.sftpList(sessionId, path || "/")
-          : await api.listLocalDir(path);
+          : wslMode && sessionId
+            ? await api.wslListDir(sessionId, path)
+            : await api.listLocalDir(path);
       setEntries(list);
     } catch (e) {
       setError(String(e));
@@ -172,24 +179,45 @@ export function TerminalSidePanel({
   };
 
   useEffect(() => {
-    if (kind === "local" && !cwd) {
-      api.getHomeDir().then((home) => {
+    if (wslMode) {
+      if (!sessionId) return;
+      void api.wslHomeDir(sessionId).then((home) => {
+        setCwd(home);
+        setPathInput(home);
+      });
+      return;
+    }
+    if (kind === "ssh") {
+      const init = async () => {
+        if (hostId != null) {
+          const host = await getHost(hostId);
+          const remotePath = host?.remote_path?.trim();
+          if (remotePath) {
+            setCwd(remotePath);
+            setPathInput(remotePath);
+            return;
+          }
+        }
+        setCwd("/");
+        setPathInput("/");
+      };
+      void init();
+      return;
+    }
+    if (kind === "local") {
+      void api.getHomeDir().then((home) => {
         setCwd(home);
         setPathInput(home);
       });
     }
-    if (kind === "ssh") {
-      setCwd("/");
-      setPathInput("/");
-    }
-  }, [kind]);
+  }, [kind, wslMode, sessionId, shellId, hostId]);
 
   useEffect(() => {
     if (cwd) {
       setPathInput(cwd);
       reload(cwd);
     }
-  }, [sessionId, kind, cwd]);
+  }, [sessionId, kind, wslMode, cwd]);
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
@@ -199,7 +227,7 @@ export function TerminalSidePanel({
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
-  const segments = useMemo(() => pathSegments(cwd, remote), [cwd, remote]);
+  const segments = useMemo(() => pathSegments(cwd, unixPaths), [cwd, unixPaths]);
 
   const visible = useMemo(() => {
     let list = [...entries];
@@ -242,11 +270,16 @@ export function TerminalSidePanel({
       setCwd("/");
       return;
     }
+    if (wslMode && sessionId) {
+      const home = await api.wslHomeDir(sessionId);
+      setCwd(home);
+      return;
+    }
     const home = await api.getHomeDir();
     setCwd(home);
   };
 
-  const goParent = () => setCwd(parentPath(cwd, remote));
+  const goParent = () => setCwd(parentPath(cwd, unixPaths));
 
   const commitPath = (path: string) => {
     const next = path.trim();
@@ -262,8 +295,9 @@ export function TerminalSidePanel({
     }
     setEditorTarget({
       path: entry.path,
-      remote,
-      sessionId: remote ? sessionId : null,
+      remote: unixPaths,
+      wsl: wslMode,
+      sessionId: unixPaths ? sessionId : null,
     });
   };
 
@@ -300,8 +334,9 @@ export function TerminalSidePanel({
       title: t("context.newFolder"),
     });
     if (!name?.trim()) return;
-    const target = joinPath(cwd, name.trim(), remote);
+    const target = joinPath(cwd, name.trim(), unixPaths);
     if (remote && sessionId) await api.sftpMkdir(sessionId, target);
+    else if (wslMode && sessionId) await api.wslMkdir(sessionId, target);
     else await api.createLocalDir(target);
     await reload();
   };
@@ -311,14 +346,16 @@ export function TerminalSidePanel({
       title: t("context.newFile"),
     });
     if (!name?.trim()) return;
-    const target = joinPath(cwd, name.trim(), remote);
+    const target = joinPath(cwd, name.trim(), unixPaths);
     if (remote && sessionId) await api.sftpWrite(sessionId, target, "");
+    else if (wslMode && sessionId) await api.wslWriteFile(sessionId, target, "");
     else await api.writeLocalFile(target, "");
     await reload();
     setEditorTarget({
       path: target,
-      remote,
-      sessionId: remote ? sessionId : null,
+      remote: unixPaths,
+      wsl: wslMode,
+      sessionId: unixPaths ? sessionId : null,
     });
   };
 
@@ -336,6 +373,8 @@ export function TerminalSidePanel({
     try {
       if (remote && sessionId) {
         await api.sftpRemove(sessionId, entry.path, entry.isDir);
+      } else if (wslMode && sessionId) {
+        await api.wslRemove(sessionId, entry.path, entry.isDir);
       } else {
         await api.removeLocalPath(entry.path);
       }
@@ -358,10 +397,12 @@ export function TerminalSidePanel({
       defaultValue: entry.name,
     });
     if (!name?.trim() || name.trim() === entry.name) return;
-    const next = joinPath(cwd, name.trim(), remote);
+    const next = joinPath(cwd, name.trim(), unixPaths);
     try {
       if (remote && sessionId)
         await api.sftpRename(sessionId, entry.path, next);
+      else if (wslMode && sessionId)
+        await api.wslRename(sessionId, entry.path, next);
       else await api.renameLocalPath(entry.path, next);
       await reload();
     } catch (e) {
@@ -374,11 +415,13 @@ export function TerminalSidePanel({
   };
 
   const moveToParent = async (entry: SftpEntry) => {
-    const parent = parentPath(cwd, remote);
-    const next = joinPath(parent, entry.name, remote);
+    const parent = parentPath(cwd, unixPaths);
+    const next = joinPath(parent, entry.name, unixPaths);
     try {
       if (remote && sessionId)
         await api.sftpRename(sessionId, entry.path, next);
+      else if (wslMode && sessionId)
+        await api.wslRename(sessionId, entry.path, next);
       else await api.renameLocalPath(entry.path, next);
       await reload();
     } catch (e) {
@@ -457,7 +500,7 @@ export function TerminalSidePanel({
         icon: <ExternalLink size={14} />,
         onClick: () => setCwd(entry.path),
       });
-    } else if (!remote) {
+    } else if (!remote && !wslMode) {
       items.push({
         id: "openDefault",
         label: t("context.openDefault"),
@@ -508,7 +551,7 @@ export function TerminalSidePanel({
           renameEntry(entry).catch(console.error);
         },
       },
-      ...(remote || !isWindowsOs()
+      ...(remote || wslMode || !isWindowsOs()
         ? [
             {
               id: "perms",
@@ -610,7 +653,7 @@ export function TerminalSidePanel({
       {/* —— 工具条 —— */}
       <div className="flex items-center gap-0.5 border-b border-border px-1.5 py-1">
         <PathBookmarkButton
-          scope={bookmarkScope({ kind, hostId })}
+          scope={bookmarkScope({ kind: wslMode ? "wsl" : kind, hostId, shellId })}
           path={cwd}
           onNavigate={(p) => {
             setCwd(p);
@@ -817,6 +860,8 @@ export function TerminalSidePanel({
           onApply={async (mode) => {
             if (remote && sessionId) {
               await api.sftpChmod(sessionId, permTarget.path, mode);
+            } else if (wslMode && sessionId) {
+              await api.wslChmod(sessionId, permTarget.path, mode);
             } else {
               await api.chmodLocalPath(permTarget.path, mode);
             }

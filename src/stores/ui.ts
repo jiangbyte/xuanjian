@@ -36,6 +36,7 @@ type UiState = {
   leftWidth: number;
   rightWidth: number;
   switcherOpen: boolean;
+  settingsOpen: boolean;
   tabs: TermTab[];
   activeTabId: string | null;
   hostFilter: {
@@ -51,6 +52,7 @@ type UiState = {
   setLeftWidth: (w: number, opts?: { persist?: boolean }) => void;
   setRightWidth: (w: number, opts?: { persist?: boolean }) => void;
   setSwitcherOpen: (open: boolean) => void;
+  setSettingsOpen: (open: boolean) => void;
   addTab: (tab: TermTab) => void;
   updateTab: (id: string, patch: Partial<TermTab>) => void;
   closeTab: (id: string) => void;
@@ -78,6 +80,7 @@ export const useUiStore = create<UiState>((set, get) => ({
   leftWidth: loadNum("xuanjian.leftWidth", LEFT_DEFAULT),
   rightWidth: loadNum("xuanjian.rightWidth", RIGHT_DEFAULT),
   switcherOpen: false,
+  settingsOpen: false,
   tabs: [],
   activeTabId: null,
   hostFilter: {
@@ -105,6 +108,7 @@ export const useUiStore = create<UiState>((set, get) => ({
     set({ rightWidth: next });
   },
   setSwitcherOpen: (open) => set({ switcherOpen: open }),
+  setSettingsOpen: (open) => set({ settingsOpen: open }),
   addTab: (tab) =>
     set((s) => ({
       tabs: [...s.tabs, tab],
@@ -120,7 +124,7 @@ export const useUiStore = create<UiState>((set, get) => ({
     const sessionId = closing?.sessionId ?? null;
     const logId = closing?.logId;
     // 先收尾录制（带上 sessionId/logId，避免删 tab 后找不到）
-    void import("@/lib/sessionRecorder").then(async (rec) => {
+    void import("@/lib/session/recorder").then(async (rec) => {
       if (sessionId) {
         await rec.endSessionRecording(sessionId, "closed");
       } else {

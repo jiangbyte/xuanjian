@@ -21,9 +21,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { clipboardWriteText } from "@/lib/clipboard";
-import { dialogs } from "@/lib/dialogs";
-import { killCmd, portsCmd, resolveProbeEnv } from "@/lib/probeEnv";
+import { clipboardWriteText } from "@/lib/ui/clipboard";
+import { dialogs } from "@/lib/ui/dialogs";
+import { killCmd, portsCmd, resolveProbeEnv } from "@/lib/session/probeEnv";
 import { api } from "@/lib/tauri";
 
 type PortRow = {

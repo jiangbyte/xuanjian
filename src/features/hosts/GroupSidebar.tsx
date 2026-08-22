@@ -27,7 +27,7 @@ import {
   moveGroup,
   renameGroup,
 } from "@/lib/db";
-import { dialogs } from "@/lib/dialogs";
+import { dialogs } from "@/lib/ui/dialogs";
 
 /** 主机分组侧边栏 */
 export function GroupSidebar({

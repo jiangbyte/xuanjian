@@ -24,9 +24,9 @@ import type {
   SideSnapshot,
 } from "@/features/terminal/sftp/types";
 import { HostRow, listHosts } from "@/lib/db";
-import { dialogs } from "@/lib/dialogs";
+import { dialogs } from "@/lib/ui/dialogs";
 import type { SftpEntry } from "@/lib/tauri";
-import type { ConflictCtx } from "@/lib/transferConflict";
+import type { ConflictCtx } from "@/lib/transfer/conflict";
 
 /** SFTP 双栏文件传输模态框 */
 export function SftpTransferModal({

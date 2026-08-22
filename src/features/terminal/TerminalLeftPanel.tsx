@@ -119,12 +119,18 @@ export function TerminalLeftPanel({
             sessionId={sessionId}
             kind={kind}
             hostId={hostId}
+            shellId={shellId}
           />
         )}
         {tab === "scripts" && <ScriptsPane sessionId={sessionId} />}
         {tab === "history" && <HistoryPane sessionId={sessionId} />}
         {tab === "overview" && (
-          <OverviewPane sessionId={sessionId} kind={kind} shellId={shellId} />
+          <OverviewPane
+            sessionId={sessionId}
+            kind={kind}
+            hostId={hostId}
+            shellId={shellId}
+          />
         )}
         {tab === "processes" && (
           <ProcessesPane sessionId={sessionId} kind={kind} shellId={shellId} />

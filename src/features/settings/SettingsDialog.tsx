@@ -1,7 +1,7 @@
 /**
- * @file 应用设置页
+ * @file 应用设置弹窗
  * @author Charlie
- * @description 外观、终端、编辑器、模型 / MCP / Agent、数据与关于等偏好；页面级布局。
+ * @description 外观、终端、编辑器、模型 / MCP / Agent、数据与关于等偏好。
  */
 
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -22,6 +22,10 @@ import { type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -36,6 +40,7 @@ import {
   McpSettingsSection,
   ModelsSettingsSection,
 } from "@/features/settings/AgentSettingsSections";
+import { KnownHostsSection } from "@/features/settings/KnownHostsSection";
 import {
   DEFAULT_EXPORT_ALL,
   ShareExportDialog,
@@ -51,11 +56,11 @@ import {
   APP_NAME_EN,
   APP_RELEASES_URL,
   APP_VERSION,
-} from "@/lib/appMeta";
+} from "@/lib/core/appMeta";
 import { getSetting, setSetting } from "@/lib/db";
 import { formatImportToast, importFromFile } from "@/lib/share";
+import { selectionNav } from "@/lib/core/selection";
 import { api, type DataDirInfo, LocalShellInfo } from "@/lib/tauri";
-import { cn } from "@/lib/utils";
 import {
   EDITOR_FONT_MAX,
   EDITOR_FONT_MIN,
@@ -102,8 +107,14 @@ function SettingRow({
   );
 }
 
-/** 应用设置页（主内容区全页） */
-export function SettingsPage() {
+/** 应用设置弹窗 */
+export function SettingsDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const { t } = useTranslation();
   const [section, setSection] = useState<SectionId>("appearance");
   const [shells, setShells] = useState<LocalShellInfo[]>([]);
@@ -133,6 +144,7 @@ export function SettingsPage() {
   const setMarkdownColorMode = useSettingsStore((s) => s.setMarkdownColorMode);
 
   useEffect(() => {
+    if (!open) return;
     api.listLocalShells().then(setShells).catch(console.error);
     api.getDataDirInfo().then(setDataInfo).catch(console.error);
     (async () => {
@@ -150,7 +162,7 @@ export function SettingsPage() {
         "markdown_color_mode",
       )) as EditorPreviewMode | null;
       useSettingsStore.getState().hydrate({
-        theme: themeVal || "light",
+        theme: themeVal || "system",
         locale: localeVal || "zh-CN",
         defaultLocalShell: shellVal || "",
         termFontSize: termSize ? Number(termSize) : undefined,
@@ -158,12 +170,12 @@ export function SettingsPage() {
         editorFontSize: edSize ? Number(edSize) : undefined,
         editorWordWrap:
           edWrap == null ? undefined : edWrap === "1" || edWrap === "true",
-        editorTheme: edTheme || undefined,
-        markdownColorMode: mdMode || undefined,
+        editorTheme: edTheme || "vs-dark",
+        markdownColorMode: mdMode || "follow",
       });
       if (localeVal) i18n.changeLanguage(localeVal);
     })().catch(console.error);
-  }, []);
+  }, [open]);
 
   const nav: { id: SectionId; label: string; icon: ReactNode }[] = [
     {
@@ -247,27 +259,29 @@ export function SettingsPage() {
   };
 
   return (
-    <>
-      <div className="flex h-full min-h-0 bg-background">
-        <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-muted/20">
-          <div className="border-b border-border px-4 py-3.5">
-            <h1 className="text-base font-semibold tracking-tight">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        showCloseButton
+        className="flex h-[min(720px,88vh)] max-h-[88vh] w-[min(920px,calc(100vw-2rem))] max-w-[920px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[920px] rounded-none"
+      >
+      <div className="flex min-h-0 flex-1">
+        <aside className="flex w-52 shrink-0 flex-col border-r border-border bg-muted/20">
+          <div className="border-b border-border px-4 py-3">
+            <h2 className="text-base font-semibold tracking-tight">
               {t("settings.title")}
-            </h1>
+            </h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
               {t("settings.pageHint")}
             </p>
           </div>
-          <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2.5">
+          <nav className="flex flex-1 flex-col gap-0 overflow-y-auto p-2">
             {nav.map((item) => (
               <button
                 key={item.id}
                 type="button"
-                className={cn(
-                  "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
-                  section === item.id
-                    ? "bg-accent font-medium text-accent-foreground"
-                    : "text-foreground hover:bg-muted",
+                className={selectionNav(
+                  section === item.id,
+                  "flex w-full items-center gap-2.5 px-2.5 py-2 text-sm text-foreground hover:bg-muted",
                 )}
                 onClick={() => setSection(item.id)}
               >
@@ -281,7 +295,7 @@ export function SettingsPage() {
         </aside>
 
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-3xl p-6 md:p-8">
+          <div className="mx-auto max-w-2xl p-5 md:p-6">
             {section === "appearance" && (
               <section>
                 <h3 className="mb-4 text-base font-semibold tracking-tight">
@@ -429,6 +443,7 @@ export function SettingsPage() {
                     </span>
                   </div>
                 </SettingRow>
+                <KnownHostsSection />
               </section>
             )}
 
@@ -529,7 +544,7 @@ export function SettingsPage() {
                   label={t("settings.dataDir")}
                   hint={t("settings.dataDirHint")}
                 >
-                  <div className="rounded-md border border-border bg-muted/40 px-3 py-2 font-mono text-xs break-all">
+                  <div className="border border-border bg-muted/40 px-3 py-2 font-mono text-xs break-all">
                     {dataInfo?.dataDir ?? "…"}
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -539,7 +554,7 @@ export function SettingsPage() {
                   </p>
                 </SettingRow>
                 <SettingRow label={t("settings.dbPath")}>
-                  <div className="rounded-md border border-border bg-muted/40 px-3 py-2 font-mono text-xs break-all">
+                  <div className="border border-border bg-muted/40 px-3 py-2 font-mono text-xs break-all">
                     {dataInfo?.dbPath ?? "…"}
                   </div>
                 </SettingRow>
@@ -684,6 +699,7 @@ export function SettingsPage() {
         onOpenChange={setBackupExportOpen}
         defaults={DEFAULT_EXPORT_ALL}
       />
-    </>
+      </DialogContent>
+    </Dialog>
   );
 }

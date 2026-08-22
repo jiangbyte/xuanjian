@@ -9,6 +9,7 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "@/components/AppShell";
+import { SettingsRouteRedirect } from "@/features/settings/SettingsRouteRedirect";
 
 const HostsConsole = lazy(() =>
   import("@/features/hosts/HostsConsole").then((m) => ({
@@ -45,9 +46,19 @@ const LogDetailView = lazy(() =>
     default: m.LogDetailView,
   })),
 );
-const SettingsPage = lazy(() =>
-  import("@/features/settings/SettingsPage").then((m) => ({
-    default: m.SettingsPage,
+const AuditConsole = lazy(() =>
+  import("@/features/audit/AuditConsole").then((m) => ({
+    default: m.AuditConsole,
+  })),
+);
+const BatchConsole = lazy(() =>
+  import("@/features/automation/BatchConsole").then((m) => ({
+    default: m.BatchConsole,
+  })),
+);
+const FleetDashboard = lazy(() =>
+  import("@/features/fleet/FleetDashboard").then((m) => ({
+    default: m.FleetDashboard,
   })),
 );
 
@@ -100,6 +111,22 @@ export default function App() {
             }
           />
           <Route
+            path="automation"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <BatchConsole />
+              </Suspense>
+            }
+          />
+          <Route
+            path="fleet"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <FleetDashboard />
+              </Suspense>
+            }
+          />
+          <Route
             path="notes"
             element={
               <Suspense fallback={<RouteFallback />}>
@@ -124,13 +151,14 @@ export default function App() {
             }
           />
           <Route
-            path="settings"
+            path="audit"
             element={
               <Suspense fallback={<RouteFallback />}>
-                <SettingsPage />
+                <AuditConsole />
               </Suspense>
             }
           />
+          <Route path="settings" element={<SettingsRouteRedirect />} />
           {/* 终端 UI 在 AppShell 中 keep-alive；此路由仅用于切换视图 */}
           <Route path="terminal" element={null} />
           <Route path="*" element={<Navigate to="/" replace />} />

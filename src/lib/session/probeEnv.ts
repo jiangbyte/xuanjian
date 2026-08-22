@@ -5,7 +5,7 @@
  * SSH / WSL / Git Bash 默认按 Linux 探测；本机按宿主 OS 选择。
  */
 
-import { getHostOs, type HostOs } from "@/lib/platform";
+import { getHostOs, type HostOs } from "@/lib/core/platform";
 
 /** 探测命令运行时环境 */
 export type ProbeEnv = "linux" | "darwin" | "windows";
@@ -169,6 +169,24 @@ export function portsCmd(env: ProbeEnv, _shellId?: string | null) {
   if (env === "windows") return WIN_SS_CMD;
   if (env === "darwin") return DARWIN_SS_CMD;
   return LINUX_SS_CMD;
+}
+
+export const LINUX_DISK_CMD =
+  "df -Pk 2>/dev/null | awk 'NR==1 || $1 !~ /^(tmpfs|devtmpfs|overlay|shm)$/ {print}'";
+
+export const DARWIN_DISK_CMD =
+  "df -k 2>/dev/null | awk 'NR==1 || $1 !~ /^(devfs|map)/ {print}'";
+
+export const WIN_DISK_CMD = [
+  "$ErrorActionPreference='SilentlyContinue'",
+  "Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Used -ne $null -and $_.Free -ne $null } |",
+  "ForEach-Object { Write-Output (\"{0}`t{1}`t{2}`t{3}\" -f $_.Name, [int64](($_.Used+$_.Free)/1024), [int64]($_.Used/1024), [int64]($_.Free/1024)) }",
+].join(" ");
+
+export function diskSnapshotCmd(env: ProbeEnv, shellId?: string | null) {
+  if (env === "linux") return LINUX_DISK_CMD;
+  if (env === "darwin") return DARWIN_DISK_CMD;
+  return wrapForWindowsShell(shellId, WIN_DISK_CMD);
 }
 
 export function killCmd(env: ProbeEnv, pid: string, sig: "TERM" | "KILL") {

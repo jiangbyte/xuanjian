@@ -13,7 +13,7 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { XtermView } from "@/features/terminal/XtermView";
-import { handleSessionClosed } from "@/lib/sessionConnect";
+import { handleSessionClosed } from "@/lib/session/connect";
 import { onSessionClosed } from "@/lib/tauri";
 import { useUiStore } from "@/stores/ui";
 

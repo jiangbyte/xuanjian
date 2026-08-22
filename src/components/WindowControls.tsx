@@ -9,7 +9,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Copy, Minus, Square, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { isMacOs } from "@/lib/platform";
+import { isMacOs } from "@/lib/core/platform";
 
 /**
  * 标题栏右侧窗口控制：最小化、切换最大化、关闭。

@@ -4,6 +4,8 @@
  */
 
 import { api } from "@/lib/tauri";
+import { parseLlmUsage, type LlmUsage } from "@/lib/agent/contextBudget";
+import { REACT_LIMITS } from "@/lib/agent/reactGuards";
 import type { AgentToolDef } from "@/lib/agent/tools";
 
 export type LlmMessage =
@@ -41,6 +43,7 @@ export type NormalizedLlmReply = {
   toolCalls: LlmToolCall[];
   /** Anthropic 下一轮 assistant 消息需要完整 content blocks */
   anthropicContent?: AnthropicContentBlock[];
+  usage?: LlmUsage | null;
   raw: unknown;
 };
 
@@ -51,6 +54,9 @@ type ProviderCfg = {
   model: string;
   thinkingMode?: "off" | "high" | "max";
   maxTokens?: number;
+  /** 单次请求超时（毫秒） */
+  timeoutMs?: number;
+  signal?: AbortSignal;
 };
 
 /** 将 OpenAI tools 转为 Anthropic tools。 */
@@ -68,7 +74,14 @@ export async function chatCompletion(
   messages: LlmMessage[],
   tools: AgentToolDef[],
 ): Promise<NormalizedLlmReply> {
-  const raw = await api.aiChatCompletion({
+  const timeoutMs = cfg.timeoutMs ?? REACT_LIMITS.LLM_TIMEOUT_MS;
+  const parentSignal = cfg.signal;
+
+  if (parentSignal?.aborted) {
+    throw new Error("已取消");
+  }
+
+  const invokePromise = api.aiChatCompletion({
     baseUrl: cfg.baseUrl,
     apiFormat: cfg.apiFormat,
     apiKey: cfg.apiKey,
@@ -80,24 +93,55 @@ export async function chatCompletion(
     thinkingMode: cfg.thinkingMode ?? "high",
     maxTokens: cfg.maxTokens,
   });
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`模型调用超时（${Math.round(timeoutMs / 60_000)} 分钟）`)),
+      timeoutMs,
+    );
+  });
+
+  const abortPromise =
+    parentSignal &&
+    new Promise<never>((_, reject) => {
+      const onAbort = () => reject(new Error("已取消"));
+      if (parentSignal.aborted) onAbort();
+      else parentSignal.addEventListener("abort", onAbort, { once: true });
+    });
+
+  const racers: Promise<unknown>[] = [invokePromise, timeoutPromise];
+  if (abortPromise) racers.push(abortPromise);
+
+  let raw: unknown;
+  try {
+    raw = await Promise.race(racers);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+
   return normalizeReply(cfg.apiFormat, raw, {
     stripThinking: (cfg.thinkingMode ?? "high") === "off",
+    apiFormat: cfg.apiFormat,
   });
 }
 
 export function normalizeReply(
   apiFormat: string,
   raw: unknown,
-  opts?: { stripThinking?: boolean },
+  opts?: { stripThinking?: boolean; apiFormat?: string },
 ): NormalizedLlmReply {
+  const fmt = opts?.apiFormat ?? apiFormat;
   const reply =
-    apiFormat === "anthropic"
+    fmt === "anthropic"
       ? normalizeAnthropic(raw)
       : normalizeOpenAi(raw);
+  const usage = parseLlmUsage(raw, fmt);
+  const merged = { ...reply, usage, raw };
   if (opts?.stripThinking) {
-    return { ...reply, thinking: "" };
+    return { ...merged, thinking: "" };
   }
-  return reply;
+  return merged;
 }
 
 function normalizeOpenAi(raw: unknown): NormalizedLlmReply {

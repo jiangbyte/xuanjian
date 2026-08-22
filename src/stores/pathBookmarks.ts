@@ -114,9 +114,18 @@ export const usePathBookmarks = create<BookmarkState>((set, get) => ({
  * @param opts.hostId SSH 主机主键
  */
 export function bookmarkScope(opts: {
-  kind: "local" | "ssh" | "host" | null | undefined;
+  kind: "local" | "ssh" | "host" | "wsl" | null | undefined;
   hostId?: number | null;
+  shellId?: string | null;
 }) {
+  if (
+    opts.kind === "wsl" ||
+    opts.shellId?.startsWith("local:wsl:")
+  ) {
+    const distro =
+      opts.shellId?.replace(/^local:wsl:/, "").trim() || "default";
+    return `wsl:${distro}`;
+  }
   if (opts.kind === "ssh" || opts.kind === "host") {
     return opts.hostId != null ? `ssh:${opts.hostId}` : "ssh:unknown";
   }

@@ -10,7 +10,7 @@ import App from "@/App";
 import { ContextMenuProvider } from "@/components/ContextMenu";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { DialogHost } from "@/lib/dialogs";
+import { DialogHost } from "@/lib/ui/dialogs";
 import "@/i18n";
 import "@/styles/index.css";
 

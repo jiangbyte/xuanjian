@@ -15,10 +15,10 @@ import {
   openContextMenu,
   useContextMenu,
 } from "@/components/ContextMenu";
-import { clipboardReadText, clipboardWriteText } from "@/lib/clipboard";
-import { dialogs } from "@/lib/dialogs";
-import { modKeyLabel } from "@/lib/platform";
-import { canReconnect, reconnectTermTab } from "@/lib/sessionConnect";
+import { clipboardReadText, clipboardWriteText } from "@/lib/ui/clipboard";
+import { dialogs } from "@/lib/ui/dialogs";
+import { modKeyLabel } from "@/lib/core/platform";
+import { canReconnect, reconnectTermTab } from "@/lib/session/connect";
 import { api, onSessionClosed, onSessionOutput } from "@/lib/tauri";
 import { useSettingsStore } from "@/stores/settings";
 import type { TermTab } from "@/stores/ui";

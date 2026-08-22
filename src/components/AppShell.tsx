@@ -11,9 +11,12 @@ import { Outlet, useLocation } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
 import { TitleBar } from "@/components/TitleBar";
 import { TerminalWorkspace } from "@/features/terminal/TerminalWorkspace";
+import { initSchedulerListener } from "@/lib/automation/schedulerListener";
+import { importCmdHistoryFromLocalStorage } from "@/lib/db/cmdHistory";
 import { getSetting } from "@/lib/db/settings";
-import { hydrateHostOs } from "@/lib/platform";
-import { initSessionRecorder } from "@/lib/sessionRecorder";
+import { hydrateCmdHistory } from "@/stores/cmdHistory";
+import { hydrateHostOs } from "@/lib/core/platform";
+import { initSessionRecorder } from "@/lib/session/recorder";
 import { api } from "@/lib/tauri";
 import { type ThemeMode, useSettingsStore } from "@/stores/settings";
 import { initTransferProgressListener } from "@/stores/transfer";
@@ -25,14 +28,27 @@ const QuickSwitcher = lazy(() =>
   })),
 );
 
-/** 快速切换独立订阅，避免打开弹层时重渲染整棵外壳 */
+const SettingsDialog = lazy(() =>
+  import("@/features/settings/SettingsDialog").then((m) => ({
+    default: m.SettingsDialog,
+  })),
+);
+
+/** 快速切换、设置等全局浮层 */
 function ShellOverlays() {
   const switcherOpen = useUiStore((s) => s.switcherOpen);
+  const settingsOpen = useUiStore((s) => s.settingsOpen);
+  const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
   return (
     <>
       {switcherOpen ? (
         <Suspense fallback={null}>
           <QuickSwitcher />
+        </Suspense>
+      ) : null}
+      {settingsOpen ? (
+        <Suspense fallback={null}>
+          <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
         </Suspense>
       ) : null}
     </>
@@ -46,16 +62,24 @@ const MemoSidebar = memo(Sidebar);
  * 顶层布局壳：非终端路由显示侧栏与 Outlet；终端区始终挂载，离页时隐藏。
  */
 export function AppShell() {
-  const { pathname } = useLocation();
-  const onTerminal = pathname === "/terminal";
+  const onTerminal = useLocation().pathname === "/terminal";
   const setSwitcherOpen = useUiStore((s) => s.setSwitcherOpen);
+  const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
 
   useEffect(() => {
     const stop = initSessionRecorder();
     return () => stop();
   }, []);
 
+  useEffect(() => {
+    void importCmdHistoryFromLocalStorage()
+      .then(() => hydrateCmdHistory())
+      .catch(console.error);
+  }, []);
+
   useEffect(() => initTransferProgressListener(), []);
+
+  useEffect(() => initSchedulerListener(), []);
 
   useEffect(() => {
     api
@@ -64,11 +88,11 @@ export function AppShell() {
       .catch(() => undefined);
   }, []);
 
-  /** 启动时从 DB 同步主题（默认明亮） */
+  /** 启动时从 DB 同步主题（默认跟随系统） */
   useEffect(() => {
     getSetting("theme")
       .then((v) => {
-        const theme = (v as ThemeMode | null) || "light";
+        const theme = (v as ThemeMode | null) || "system";
         useSettingsStore.getState().hydrate({ theme });
       })
       .catch(console.error);
@@ -79,11 +103,16 @@ export function AppShell() {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "j") {
         e.preventDefault();
         setSwitcherOpen(true);
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === ",") {
+        e.preventDefault();
+        setSettingsOpen(true);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [setSwitcherOpen]);
+  }, [setSwitcherOpen, setSettingsOpen]);
 
   return (
     <div className="flex h-full flex-col">

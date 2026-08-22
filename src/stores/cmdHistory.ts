@@ -1,11 +1,16 @@
 /**
  * @file 命令历史 Store
  * @author Charlie
- * @description 终端命令历史的内存态与 localStorage 持久化。
- * 按命令去重、最多保留 500 条；不写 SQLite。
+ * @description 终端命令历史的内存态；持久化到 SQLite，启动时从 DB 加载。
  */
 
 import { create } from "zustand";
+import {
+  clearCmdHistory,
+  insertCmdHistory,
+  listCmdHistory,
+  type CmdHistoryRow,
+} from "@/lib/db/cmdHistory";
 
 /** 单条命令历史记录 */
 export type CmdHistoryItem = {
@@ -22,34 +27,45 @@ type HistState = {
   clear: () => void;
 };
 
-const KEY = "xuanjian.cmdHistory";
 const MAX = 500;
 
-function load(): CmdHistoryItem[] {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+function rowToItem(row: CmdHistoryRow): CmdHistoryItem {
+  return {
+    id: String(row.id),
+    cmd: row.cmd,
+    at: new Date(row.created_at).getTime(),
+    sessionId: row.session_id,
+    label: row.label ?? undefined,
+  };
 }
 
-function save(items: CmdHistoryItem[]) {
-  localStorage.setItem(KEY, JSON.stringify(items.slice(0, MAX)));
+/**
+ * 从 SQLite 加载命令历史到 store。
+ */
+export async function hydrateCmdHistory(): Promise<void> {
+  try {
+    const rows = await listCmdHistory({ limit: MAX });
+    useCmdHistory.setState({ items: rows.map(rowToItem) });
+  } catch (err) {
+    console.error(err);
+  }
 }
 
 /**
  * 命令历史 Zustand store。
- * @副作用 `push` / `clear` 会读写 localStorage
+ * @副作用 `push` 写入 SQLite；`clear` 清空 DB
  */
 export const useCmdHistory = create<HistState>((set, get) => ({
-  items: load(),
+  items: [],
   /** 追加一条命令；同内容去重置顶，超过 MAX 截断 */
   push: (item) => {
     const cmd = item.cmd.trim();
     if (!cmd) return;
+    void insertCmdHistory({
+      cmd,
+      sessionId: item.sessionId,
+      label: item.label ?? null,
+    }).catch(console.error);
     const next: CmdHistoryItem = {
       id: crypto.randomUUID(),
       cmd,
@@ -61,12 +77,11 @@ export const useCmdHistory = create<HistState>((set, get) => ({
       0,
       MAX,
     );
-    save(items);
     set({ items });
   },
-  /** 清空历史并删除持久化键 */
+  /** 清空历史并删除 DB 记录 */
   clear: () => {
-    localStorage.removeItem(KEY);
+    void clearCmdHistory().catch(console.error);
     set({ items: [] });
   },
 }));

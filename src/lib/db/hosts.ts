@@ -30,6 +30,9 @@ export type HostRow = {
   startup_cmd?: string | null;
   remote_path?: string | null;
   jump_host_id?: number | null;
+  proxy_type?: string | null;
+  proxy_host?: string | null;
+  proxy_port?: number | null;
   group_name?: string | null;
   tags?: string;
 };
@@ -210,6 +213,9 @@ export type HostInput = {
   startup_cmd?: string | null;
   remote_path?: string | null;
   jump_host_id?: number | null;
+  proxy_type?: string | null;
+  proxy_host?: string | null;
+  proxy_port?: number | null;
 };
 
 /**
@@ -222,8 +228,8 @@ export async function createHost(input: HostInput): Promise<number> {
     `INSERT INTO hosts (
       name, host, port, username, auth_type, password_enc, private_key_path, passphrase_enc,
       group_id, remark, color, connect_timeout, keepalive_interval, terminal_type,
-      startup_cmd, remote_path, jump_host_id
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+      startup_cmd, remote_path, jump_host_id, proxy_type, proxy_host, proxy_port
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
     [
       input.name,
       input.host,
@@ -242,6 +248,9 @@ export async function createHost(input: HostInput): Promise<number> {
       input.startup_cmd ?? null,
       input.remote_path ?? null,
       input.jump_host_id ?? null,
+      input.proxy_type ?? null,
+      input.proxy_host ?? null,
+      input.proxy_port ?? null,
     ],
   );
   const id = result.lastInsertId as number;
@@ -259,8 +268,9 @@ export async function updateHost(id: number, input: HostInput) {
       name=$1, host=$2, port=$3, username=$4, auth_type=$5,
       password_enc=$6, private_key_path=$7, passphrase_enc=$8, group_id=$9,
       remark=$10, color=$11, connect_timeout=$12, keepalive_interval=$13,
-      terminal_type=$14, startup_cmd=$15, remote_path=$16, jump_host_id=$17
-     WHERE id=$18`,
+      terminal_type=$14, startup_cmd=$15, remote_path=$16, jump_host_id=$17,
+      proxy_type=$18, proxy_host=$19, proxy_port=$20
+     WHERE id=$21`,
     [
       input.name,
       input.host,
@@ -279,6 +289,9 @@ export async function updateHost(id: number, input: HostInput) {
       input.startup_cmd ?? null,
       input.remote_path ?? null,
       input.jump_host_id ?? null,
+      input.proxy_type ?? null,
+      input.proxy_host ?? null,
+      input.proxy_port ?? null,
       id,
     ],
   );

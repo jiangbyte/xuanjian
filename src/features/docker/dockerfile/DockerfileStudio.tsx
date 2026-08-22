@@ -34,7 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { clipboardWriteText } from "@/lib/clipboard";
+import { clipboardWriteText } from "@/lib/ui/clipboard";
 import { cn } from "@/lib/utils";
 import { resolveMonacoTheme, useSettingsStore } from "@/stores/settings";
 import type { DockerfilesMap } from "../model/composeTypes";

@@ -20,8 +20,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { clipboardWriteText } from "@/lib/clipboard";
-import { dialogs } from "@/lib/dialogs";
+import { clipboardWriteText } from "@/lib/ui/clipboard";
+import { dialogs } from "@/lib/ui/dialogs";
 import { api } from "@/lib/tauri";
 import { useCmdHistory } from "@/stores/cmdHistory";
 

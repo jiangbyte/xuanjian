@@ -3,7 +3,9 @@
 //! Author: Charlie
 
 use super::{emit_closed, emit_output};
-use anyhow::{anyhow, Context, Result};
+use crate::crypto;
+use crate::services::ssh::{self as ssh_service, HostRecord, ProxyConfig};
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use russh::client::{self, Handle, Msg};
 use russh::ChannelMsg;
@@ -12,7 +14,11 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Arc;
 use tauri::AppHandle;
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{mpsc, Mutex};
+
+pub const ERR_HOST_KEY_UNKNOWN: &str = "SSH_HOST_KEY_UNKNOWN";
+pub const ERR_HOST_KEY_MISMATCH: &str = "SSH_HOST_KEY_MISMATCH";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,19 +34,56 @@ pub struct SshConnectParams {
     pub cols: Option<u16>,
     pub rows: Option<u16>,
     pub terminal_type: Option<String>,
+    pub proxy_type: Option<String>,
+    pub proxy_host: Option<String>,
+    pub proxy_port: Option<u16>,
+    pub jump_host_id: Option<i64>,
 }
 
-pub struct ClientHandler;
+#[derive(Debug, thiserror::Error)]
+pub enum SshClientError {
+    #[error(transparent)]
+    Russh(#[from] russh::Error),
+    #[error("{code}:{host}:{port}:{detail}")]
+    HostKey {
+        code: &'static str,
+        host: String,
+        port: u16,
+        detail: String,
+    },
+    #[error("{0}")]
+    Other(#[from] anyhow::Error),
+}
+
+pub struct ClientHandler {
+    host: String,
+    port: u16,
+}
 
 #[async_trait]
 impl client::Handler for ClientHandler {
-    type Error = russh::Error;
+    type Error = SshClientError;
 
     async fn check_server_key(
         &mut self,
-        _server_public_key: &key::PublicKey,
+        server_public_key: &key::PublicKey,
     ) -> Result<bool, Self::Error> {
-        Ok(true)
+        let fingerprint = server_public_key.fingerprint();
+        match ssh_service::lookup_fingerprint(&self.host, self.port).map_err(SshClientError::Other)? {
+            Some(stored) if stored == fingerprint => Ok(true),
+            Some(stored) => Err(SshClientError::HostKey {
+                code: ERR_HOST_KEY_MISMATCH,
+                host: self.host.clone(),
+                port: self.port,
+                detail: format!("expected={stored};actual={fingerprint}"),
+            }),
+            None => Err(SshClientError::HostKey {
+                code: ERR_HOST_KEY_UNKNOWN,
+                host: self.host.clone(),
+                port: self.port,
+                detail: fingerprint,
+            }),
+        }
     }
 }
 
@@ -82,45 +125,193 @@ impl SshSession {
     }
 }
 
-pub async fn connect(app: AppHandle, params: SshConnectParams) -> Result<SshSession> {
-    let config = Arc::new(client::Config::default());
-    let mut handle = client::connect(config, (params.host.as_str(), params.port), ClientHandler)
-        .await
-        .context("ssh connect")?;
+#[derive(Clone)]
+struct AuthParams {
+    username: String,
+    auth_type: String,
+    password: Option<String>,
+    private_key_path: Option<String>,
+    passphrase: Option<String>,
+}
 
-    let auth_ok = match params.auth_type.as_str() {
+fn proxy_from_params(params: &SshConnectParams) -> Option<ProxyConfig> {
+    let proxy_type = params.proxy_type.as_ref()?.trim();
+    if proxy_type.is_empty() {
+        return None;
+    }
+    let proxy_host = params.proxy_host.as_ref()?.trim();
+    if proxy_host.is_empty() {
+        return None;
+    }
+    Some(ProxyConfig {
+        proxy_type: proxy_type.to_string(),
+        proxy_host: proxy_host.to_string(),
+        proxy_port: params.proxy_port.unwrap_or(1080),
+    })
+}
+
+fn auth_from_params(params: &SshConnectParams) -> AuthParams {
+    AuthParams {
+        username: params.username.clone(),
+        auth_type: params.auth_type.clone(),
+        password: params.password.clone(),
+        private_key_path: params.private_key_path.clone(),
+        passphrase: params.passphrase.clone(),
+    }
+}
+
+fn resolve_secret(value: Option<String>) -> Option<String> {
+    value.map(|v| crypto::decrypt_password(&v).unwrap_or(v))
+}
+
+fn auth_from_host(host: &HostRecord) -> AuthParams {
+    AuthParams {
+        username: host.username.clone(),
+        auth_type: host.auth_type.clone(),
+        password: resolve_secret(host.password_enc.clone()),
+        private_key_path: host.private_key_path.clone(),
+        passphrase: resolve_secret(host.passphrase_enc.clone()),
+    }
+}
+
+fn proxy_from_host(host: &HostRecord) -> Option<ProxyConfig> {
+    let proxy_type = host.proxy_type.as_ref()?.trim();
+    if proxy_type.is_empty() {
+        return None;
+    }
+    let proxy_host = host.proxy_host.as_ref()?.trim();
+    if proxy_host.is_empty() {
+        return None;
+    }
+    Some(ProxyConfig {
+        proxy_type: proxy_type.to_string(),
+        proxy_host: proxy_host.to_string(),
+        proxy_port: host.proxy_port.unwrap_or(1080),
+    })
+}
+
+async fn authenticate(
+    handle: &mut Handle<ClientHandler>,
+    auth: &AuthParams,
+) -> Result<bool, SshClientError> {
+    let auth_ok = match auth.auth_type.as_str() {
         "password" => {
-            let password = params
+            let password = auth
                 .password
                 .clone()
-                .ok_or_else(|| anyhow!("password required"))?;
+                .ok_or_else(|| SshClientError::Other(anyhow!("password required")))?;
             handle
-                .authenticate_password(&params.username, password)
+                .authenticate_password(&auth.username, password)
                 .await?
         }
         "privateKey" | "private_key" | "key" => {
-            let key_path = params
+            let key_path = auth
                 .private_key_path
                 .clone()
-                .ok_or_else(|| anyhow!("private key path required"))?;
+                .ok_or_else(|| SshClientError::Other(anyhow!("private key path required")))?;
             if !Path::new(&key_path).exists() {
-                return Err(anyhow!("private key not found: {key_path}"));
+                return Err(SshClientError::Other(anyhow!(
+                    "private key not found: {key_path}"
+                )));
             }
-            let passphrase = params.passphrase.as_deref();
-            let key_pair =
-                russh_keys::load_secret_key(&key_path, passphrase).context("load private key")?;
+            let passphrase = auth.passphrase.as_deref();
+            let key_pair = russh_keys::load_secret_key(&key_path, passphrase)
+                .map_err(|e| SshClientError::Other(anyhow!("load private key: {e}")))?;
             handle
-                .authenticate_publickey(&params.username, Arc::new(key_pair))
+                .authenticate_publickey(&auth.username, Arc::new(key_pair))
                 .await?
         }
-        other => return Err(anyhow!("unsupported auth type: {other}")),
+        other => {
+            return Err(SshClientError::Other(anyhow!(
+                "unsupported auth type: {other}"
+            )))
+        }
+    };
+    Ok(auth_ok)
+}
+
+async fn connect_handle_over_stream<R>(
+    stream: R,
+    host: &str,
+    port: u16,
+    auth: &AuthParams,
+) -> Result<Handle<ClientHandler>, SshClientError>
+where
+    R: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    let config = Arc::new(client::Config::default());
+    let handler = ClientHandler {
+        host: host.to_string(),
+        port,
+    };
+    let mut handle = client::connect_stream(config, stream, handler).await?;
+    if !authenticate(&mut handle, auth).await? {
+        return Err(SshClientError::Other(anyhow!("SSH authentication failed")));
+    }
+    Ok(handle)
+}
+
+async fn connect_handle_direct(
+    host: &str,
+    port: u16,
+    auth: &AuthParams,
+    proxy: Option<&ProxyConfig>,
+) -> Result<Handle<ClientHandler>, SshClientError> {
+    let stream = ssh_service::open_tcp(host, port, proxy)
+        .await
+        .map_err(SshClientError::Other)?;
+    connect_handle_over_stream(stream, host, port, auth).await
+}
+
+async fn connect_via_jump(
+    jump: &HostRecord,
+    target_host: &str,
+    target_port: u16,
+    target_auth: &AuthParams,
+    proxy: Option<&ProxyConfig>,
+) -> Result<Handle<ClientHandler>, SshClientError> {
+    let jump_auth = auth_from_host(jump);
+    let jump_proxy_cfg = proxy_from_host(jump);
+    let jump_proxy = proxy.or(jump_proxy_cfg.as_ref());
+    let jump_handle = connect_handle_direct(&jump.host, jump.port, &jump_auth, jump_proxy).await?;
+
+    let channel = jump_handle
+        .channel_open_direct_tcpip(target_host, u32::from(target_port), "127.0.0.1", 0)
+        .await
+        .map_err(SshClientError::Russh)?;
+    let stream = channel.into_stream();
+    connect_handle_over_stream(stream, target_host, target_port, target_auth).await
+}
+
+pub async fn connect(app: AppHandle, params: SshConnectParams) -> Result<SshSession> {
+    let auth = auth_from_params(&params);
+    let proxy = proxy_from_params(&params);
+
+    let handle = if let Some(jump_id) = params.jump_host_id {
+        let jump = ssh_service::load_host(jump_id)
+            .map_err(SshClientError::Other)?
+            .ok_or_else(|| SshClientError::Other(anyhow!("jump host #{jump_id} not found")))?;
+        connect_via_jump(
+            &jump,
+            &params.host,
+            params.port,
+            &auth,
+            proxy.as_ref(),
+        )
+        .await?
+    } else {
+        connect_handle_direct(
+            &params.host,
+            params.port,
+            &auth,
+            proxy.as_ref(),
+        )
+        .await?
     };
 
-    if !auth_ok {
-        return Err(anyhow!("SSH authentication failed"));
-    }
-
-    let mut channel = handle.channel_open_session().await?;
+    let mut channel = handle.channel_open_session().await.map_err(|e| {
+        SshClientError::Russh(e)
+    })?;
     let cols = params.cols.unwrap_or(120);
     let rows = params.rows.unwrap_or(30);
     let term = params
@@ -130,8 +321,12 @@ pub async fn connect(app: AppHandle, params: SshConnectParams) -> Result<SshSess
         .unwrap_or("xterm-256color");
     channel
         .request_pty(false, term, cols as u32, rows as u32, 0, 0, &[])
-        .await?;
-    channel.request_shell(false).await?;
+        .await
+        .map_err(SshClientError::Russh)?;
+    channel
+        .request_shell(false)
+        .await
+        .map_err(SshClientError::Russh)?;
 
     let id = uuid::Uuid::new_v4().to_string();
     let title = params
@@ -246,7 +441,6 @@ pub async fn exec_stream(
             Ok(Some(ChannelMsg::Data { ref data }))
             | Ok(Some(ChannelMsg::ExtendedData { ref data, .. })) => {
                 pending.push_str(&String::from_utf8_lossy(data));
-                // 尽量按行推送，尾巴留在 pending
                 while let Some(pos) = pending.find('\n') {
                     let mut line = pending[..pos + 1].to_string();
                     pending = pending[pos + 1..].to_string();
@@ -258,7 +452,7 @@ pub async fn exec_stream(
             }
             Ok(Some(ChannelMsg::Eof)) | Ok(None) => break,
             Ok(Some(_)) => {}
-            Err(_) => continue, // timeout — 继续检查 cancel
+            Err(_) => continue,
         }
     }
     if !pending.is_empty() {

@@ -5,7 +5,7 @@
  */
 
 import type { HostRow } from "@/lib/db";
-import { getHostOs } from "@/lib/platform";
+import { getHostOs } from "@/lib/core/platform";
 
 /** 判断是否为 Windows 风格路径 */
 export function isWindowsPath(path: string) {

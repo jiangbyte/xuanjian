@@ -5,12 +5,14 @@
  */
 
 import {
+  Activity,
+  ClipboardCheck,
   Container,
   Network,
   NotebookPen,
   ScrollText,
   Server,
-  Settings,
+  Timer,
   Zap,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -23,14 +25,16 @@ const navLinkClass =
 export function Sidebar() {
   const { t } = useTranslation();
 
-  const items = [
+  const mainItems = [
     { to: "/", end: true, icon: Server, label: t("nav.hosts") },
     { to: "/network", icon: Network, label: t("nav.network") },
     { to: "/docker", icon: Container, label: t("nav.docker") },
     { to: "/scripts", icon: Zap, label: t("nav.scripts") },
+    { to: "/automation", icon: Timer, label: t("nav.automation") },
+    { to: "/fleet", icon: Activity, label: t("nav.fleet") },
     { to: "/notes", icon: NotebookPen, label: t("nav.notes") },
     { to: "/logs", icon: ScrollText, label: t("nav.logs") },
-    { to: "/settings", icon: Settings, label: t("nav.settings") },
+    { to: "/audit", icon: ClipboardCheck, label: t("nav.audit") },
   ] as const;
 
   return (
@@ -47,8 +51,8 @@ export function Sidebar() {
           {t("brand")}
         </span>
       </div>
-      <nav className="flex flex-1 flex-col gap-0.5 p-2.5">
-        {items.map((item) => {
+      <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2.5">
+        {mainItems.map((item) => {
           const Icon = item.icon;
           return (
             <RouterNavLink

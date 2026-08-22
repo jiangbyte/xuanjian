@@ -5,18 +5,104 @@
  * 以及处理后端 session-closed 事件时的标签状态更新。
  */
 
-import { getHost, touchHostConnected } from "@/lib/db";
+import { addKnownHost, getHost, HostRow, touchHostConnected } from "@/lib/db";
+import { dialogs } from "@/lib/ui/dialogs";
 import {
   endSessionRecording,
   startRecordingForOpenTab,
-} from "@/lib/sessionRecorder";
-import { api } from "@/lib/tauri";
+} from "@/lib/session/recorder";
+import { api, type SshConnectParams } from "@/lib/tauri";
 import { type TermTab, useUiStore } from "@/stores/ui";
+
+export const SSH_HOST_KEY_UNKNOWN = "SSH_HOST_KEY_UNKNOWN";
+export const SSH_HOST_KEY_MISMATCH = "SSH_HOST_KEY_MISMATCH";
 
 /** 判断标签是否具备重连所需信息（SSH 需有 hostId） */
 export function canReconnect(tab: TermTab): boolean {
   if (tab.kind === "ssh") return tab.hostId != null;
   return true;
+}
+
+function buildSshConnectParams(
+  host: HostRow,
+  opts?: { cols?: number; rows?: number },
+): SshConnectParams {
+  return {
+    host: host.host,
+    port: host.port,
+    username: host.username,
+    authType: host.auth_type === "private_key" ? "privateKey" : host.auth_type,
+    password: host.password_enc,
+    privateKeyPath: host.private_key_path,
+    passphrase: host.passphrase_enc,
+    title: host.name,
+    terminalType: host.terminal_type,
+    cols: opts?.cols,
+    rows: opts?.rows,
+    proxyType: host.proxy_type ?? null,
+    proxyHost: host.proxy_host ?? null,
+    proxyPort: host.proxy_port ?? null,
+    jumpHostId: host.jump_host_id ?? null,
+  };
+}
+
+function parseHostKeyError(message: string):
+  | { kind: "unknown"; host: string; port: number; fingerprint: string }
+  | { kind: "mismatch"; host: string; port: number; detail: string }
+  | null {
+  if (message.includes(`${SSH_HOST_KEY_UNKNOWN}:`)) {
+    const idx = message.indexOf(`${SSH_HOST_KEY_UNKNOWN}:`);
+    const rest = message.slice(idx + SSH_HOST_KEY_UNKNOWN.length + 1);
+    const [host, portRaw, ...fpParts] = rest.split(":");
+    const port = Number(portRaw);
+    const fingerprint = fpParts.join(":");
+    if (!host || !Number.isFinite(port) || !fingerprint) return null;
+    return { kind: "unknown", host, port, fingerprint };
+  }
+  if (message.includes(`${SSH_HOST_KEY_MISMATCH}:`)) {
+    const idx = message.indexOf(`${SSH_HOST_KEY_MISMATCH}:`);
+    const rest = message.slice(idx + SSH_HOST_KEY_MISMATCH.length + 1);
+    const [host, portRaw, ...detailParts] = rest.split(":");
+    const port = Number(portRaw);
+    const detail = detailParts.join(":");
+    if (!host || !Number.isFinite(port)) return null;
+    return { kind: "mismatch", host, port, detail };
+  }
+  return null;
+}
+
+async function sshConnectWithHostKeyTrust(
+  host: HostRow,
+  opts?: { cols?: number; rows?: number },
+) {
+  const params = buildSshConnectParams(host, opts);
+  try {
+    return await api.sshConnect(params);
+  } catch (e) {
+    const msg = String(e);
+    const parsed = parseHostKeyError(msg);
+    if (parsed?.kind === "mismatch") {
+      throw new Error(
+        `SSH host key mismatch for ${parsed.host}:${parsed.port} (${parsed.detail})`,
+      );
+    }
+    if (parsed?.kind === "unknown") {
+      const ok = await dialogs.confirm(
+        `Trust SSH host key for ${parsed.host}:${parsed.port}?\n\nSHA256:${parsed.fingerprint}`,
+        { title: "Unknown SSH host key" },
+      );
+      if (!ok) throw e;
+      await addKnownHost(parsed.host, parsed.port, parsed.fingerprint);
+      return api.sshConnect(params);
+    }
+    throw e;
+  }
+}
+
+async function writePostConnectCommands(sessionId: string, host: HostRow) {
+  if (host.remote_path?.trim()) {
+    await api.sessionWrite(sessionId, `cd ${host.remote_path.trim()}\n`);
+  }
 }
 
 async function resolveShellId(tab: TermTab): Promise<string> {
@@ -31,7 +117,7 @@ async function resolveShellId(tab: TermTab): Promise<string> {
 
 /**
  * 按主机记录建立 SSH 会话。
- * 默认会在连接后写入 startup_cmd（可用 runStartup: false 跳过）。
+ * 默认会在连接后 cd 到 remote_path 并写入 startup_cmd（可用 runStartup: false 跳过）。
  */
 export async function connectSshHost(
   hostId: number,
@@ -39,20 +125,9 @@ export async function connectSshHost(
 ) {
   const host = await getHost(hostId);
   if (!host) throw new Error(`Host #${hostId} not found`);
-  const session = await api.sshConnect({
-    host: host.host,
-    port: host.port,
-    username: host.username,
-    authType: host.auth_type === "private_key" ? "privateKey" : host.auth_type,
-    password: host.password_enc,
-    privateKeyPath: host.private_key_path,
-    passphrase: host.passphrase_enc,
-    title: host.name,
-    terminalType: host.terminal_type,
-    cols: opts?.cols,
-    rows: opts?.rows,
-  });
+  const session = await sshConnectWithHostKeyTrust(host, opts);
   await touchHostConnected(host.id);
+  await writePostConnectCommands(session.id, host);
   if (opts?.runStartup !== false && host.startup_cmd?.trim()) {
     await api.sessionWrite(session.id, `${host.startup_cmd.trim()}\n`);
   }

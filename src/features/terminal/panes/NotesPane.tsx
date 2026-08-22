@@ -50,7 +50,7 @@ import {
   NoteRow,
   updateNote,
 } from "@/lib/db";
-import { dialogs } from "@/lib/dialogs";
+import { dialogs } from "@/lib/ui/dialogs";
 import { cn } from "@/lib/utils";
 
 const listRowClass =

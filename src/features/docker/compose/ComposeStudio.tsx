@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   Copy,
   Download,
+  Play,
   Plus,
   Terminal,
   Trash2,
@@ -23,8 +24,10 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
-import { clipboardWriteText } from "@/lib/clipboard";
+import { clipboardWriteText } from "@/lib/ui/clipboard";
+import { api } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
+import { useUiStore } from "@/stores/ui";
 import { resolveMonacoTheme, useSettingsStore } from "@/stores/settings";
 import type { ComposeDoc, DockerfilesMap } from "../model/composeTypes";
 import { emptyService } from "../model/composeTypes";
@@ -74,6 +77,10 @@ export function ComposeStudio({
   const monacoTheme = useSettingsStore((s) =>
     resolveMonacoTheme(s.editorTheme),
   );
+  const activeSessionId = useUiStore((s) => {
+    const tab = s.tabs.find((t) => t.id === s.activeTabId);
+    return tab?.sessionId ?? null;
+  });
   const [kind, setKind] = useState<ResourceKind>("service");
   const [selection, setSelection] = useState<ComposeSelection>(() =>
     firstSelection(doc),
@@ -269,6 +276,20 @@ export function ComposeStudio({
   const copyUpCmd = async () => {
     await clipboardWriteText("docker compose up -d");
     toast.success(t("docker.copied"));
+  };
+
+  const execComposeUp = async () => {
+    if (!activeSessionId) {
+      toast.error(t("docker.composeUpNeedSession"));
+      return;
+    }
+    try {
+      const out = await api.sessionExec(activeSessionId, "docker compose up -d");
+      toast.success(t("docker.composeUpDone"));
+      if (out.trim()) toast.message(out.slice(0, 400));
+    } catch (e) {
+      toast.error(String(e));
+    }
   };
 
   const importFile = () => {
@@ -472,10 +493,21 @@ export function ComposeStudio({
                 </Button>
                 <Button
                   type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="h-7 gap-1 px-2 text-xs"
+                  title={t("docker.composeUpExecute")}
+                  onClick={() => execComposeUp().catch(console.error)}
+                >
+                  <Play size={12} />
+                  {t("docker.composeUpExecute")}
+                </Button>
+                <Button
+                  type="button"
                   size="icon-sm"
                   variant="ghost"
-                  title="docker compose up"
-                  aria-label="docker compose up"
+                  title={t("docker.copyUp")}
+                  aria-label={t("docker.copyUp")}
                   onClick={copyUpCmd}
                 >
                   <Terminal size={14} />

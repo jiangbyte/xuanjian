@@ -272,6 +272,19 @@ export async function deleteSessionLog(id: number): Promise<void> {
   await db.execute("DELETE FROM session_logs WHERE id = $1", [id]);
 }
 
+/** 搜索会话日志元数据（标题/远端主机/用户） */
+export async function searchSessionLogs(
+  query: string,
+  opts?: { kind?: "ssh" | "local" | null; limit?: number },
+): Promise<SessionLogRow[]> {
+  const lim = Math.min(Math.max(opts?.limit ?? 30, 1), 80);
+  const rows = await listSessionLogs({
+    kind: opts?.kind ?? null,
+    search: query,
+  });
+  return rows.slice(0, lim);
+}
+
 /**
  * 清理旧日志：至少保留 `keep` 条最近的非置顶记录；置顶永不删。
  * @param keep 默认 1000

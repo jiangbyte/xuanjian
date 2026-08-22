@@ -6,7 +6,7 @@
 
 import { Handle, type Node, type NodeProps, Position } from "@xyflow/react";
 import { memo } from "react";
-import type { SubnetFlowNodeData } from "@/lib/ipcalc";
+import type { SubnetFlowNodeData } from "@/lib/network/ipcalc";
 
 export type SubnetFlowNode = Node<SubnetFlowNodeData, "subnet">;
 

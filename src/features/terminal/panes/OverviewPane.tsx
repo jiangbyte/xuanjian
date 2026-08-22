@@ -30,7 +30,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { metricsCmd, resolveProbeEnv } from "@/lib/probeEnv";
+import { checkAlertRules } from "@/lib/automation/alerts";
+import { insertMetricSnapshot } from "@/lib/db/metrics";
+import { metricsCmd, resolveProbeEnv } from "@/lib/session/probeEnv";
 import { api } from "@/lib/tauri";
 
 type Sample = {
@@ -290,10 +292,12 @@ function Bar({ value, color }: { value: number; color: string }) {
 export function OverviewPane({
   sessionId,
   kind,
+  hostId,
   shellId,
 }: {
   sessionId: string | null;
   kind: "local" | "ssh" | null;
+  hostId?: number | null;
   shellId?: string | null;
 }) {
   const { t } = useTranslation();
@@ -346,13 +350,41 @@ export function OverviewPane({
           },
         ].slice(-30),
       );
+      void insertMetricSnapshot(sessionId, hostId ?? null, {
+        session_id: sessionId,
+        host_id: hostId ?? null,
+        cpuPct: parsed.metrics.cpuPct,
+        memPct,
+        diskPct,
+        memUsed: parsed.metrics.memUsed,
+        memTotal: parsed.metrics.memTotal,
+        diskUsed: parsed.metrics.diskUsed,
+        diskTotal: parsed.metrics.diskTotal,
+        netRx: parsed.metrics.netRx,
+        netTx: parsed.metrics.netTx,
+        host: parsed.metrics.host,
+      }).then((id) => {
+        if (id != null) {
+          void checkAlertRules({
+            session_id: sessionId,
+            host_id: hostId ?? null,
+            cpuPct: parsed.metrics.cpuPct,
+            memPct,
+            diskPct,
+            memUsed: parsed.metrics.memUsed,
+            memTotal: parsed.metrics.memTotal,
+            diskUsed: parsed.metrics.diskUsed,
+            diskTotal: parsed.metrics.diskTotal,
+          });
+        }
+      });
       setError(null);
     } catch (e) {
       setError(String(e));
     } finally {
       setLoading(false);
     }
-  }, [sessionId, t, env, shellId]);
+  }, [sessionId, hostId, t, env, shellId]);
 
   useEffect(() => {
     const tick = () => {

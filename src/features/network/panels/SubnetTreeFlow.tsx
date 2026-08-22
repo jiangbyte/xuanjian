@@ -20,7 +20,7 @@ import {
 } from "@xyflow/react";
 import { useEffect, useMemo } from "react";
 import "@xyflow/react/dist/style.css";
-import { type SubnetTreeNode, treeToFlow } from "@/lib/ipcalc";
+import { type SubnetTreeNode, treeToFlow } from "@/lib/network/ipcalc";
 import { type SubnetFlowNode, SubnetNode } from "./SubnetNode";
 
 const NODE_W = 168;

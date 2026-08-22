@@ -11,8 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { deleteHost, HostRow } from "@/lib/db";
-import { dialogs } from "@/lib/dialogs";
-import { selectionCheckboxClass, selectionRow } from "@/lib/selection";
+import { dialogs } from "@/lib/ui/dialogs";
+import { selectionCheckboxClass, selectionRow } from "@/lib/core/selection";
 import { cn } from "@/lib/utils";
 
 /** 单个主机列表行 */

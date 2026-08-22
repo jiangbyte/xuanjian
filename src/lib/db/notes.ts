@@ -160,6 +160,27 @@ export async function deleteNote(id: number) {
   await db.execute("DELETE FROM notes WHERE id = $1", [id]);
 }
 
+/** 按标题/正文关键词搜索笔记 */
+export async function searchNotes(
+  query: string,
+  limit = 20,
+): Promise<NoteRow[]> {
+  const q = query.trim();
+  if (!q) return listNotes();
+  const db = await getDb();
+  const like = `%${q}%`;
+  const lim = Math.min(Math.max(limit, 1), 60);
+  return db.select<NoteRow[]>(
+    `SELECT n.*, c.name as category_name
+     FROM notes n
+     LEFT JOIN note_categories c ON c.id = n.category_id
+     WHERE n.title LIKE $1 OR n.body LIKE $1
+     ORDER BY n.pinned DESC, n.updated_at DESC, n.id DESC
+     LIMIT ${lim}`,
+    [like],
+  );
+}
+
 /** 仅刷新笔记 updated_at（如预览打开时） */
 export async function touchNote(id: number) {
   const db = await getDb();

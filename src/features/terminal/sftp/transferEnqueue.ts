@@ -7,7 +7,7 @@
 import { joinPath, parentPath } from "@/features/terminal/sftp/pathUtils";
 import type { SideEndpoint } from "@/features/terminal/sftp/types";
 import type { HostRow } from "@/lib/db";
-import type { DialogApi } from "@/lib/dialogs";
+import type { DialogApi } from "@/lib/ui/dialogs";
 import { api } from "@/lib/tauri";
 import {
   askOverwrite,
@@ -15,7 +15,7 @@ import {
   type DestEndpoint,
   findDestEntry,
   prepareOverwrite,
-} from "@/lib/transferConflict";
+} from "@/lib/transfer/conflict";
 import {
   enqueueDownload,
   enqueueRemoteCopy,

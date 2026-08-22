@@ -67,12 +67,12 @@ import {
   renameNoteCategory,
   updateNote,
 } from "@/lib/db";
-import { dialogs } from "@/lib/dialogs";
+import { dialogs } from "@/lib/ui/dialogs";
 import {
   selectionCheckboxClass,
   selectionNavClass,
   selectionRow,
-} from "@/lib/selection";
+} from "@/lib/core/selection";
 import { exportToFile, formatImportToast, importFromFile } from "@/lib/share";
 import { cn } from "@/lib/utils";
 

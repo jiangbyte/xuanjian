@@ -4,7 +4,7 @@
  */
 
 export const EXPORT_FORMAT = "xuanjian-export" as const;
-export const EXPORT_VERSION = 1 as const;
+export const EXPORT_VERSION = 2 as const;
 
 export type ExportHostGroup = {
   name: string;
@@ -69,10 +69,41 @@ export type ExportDockerProject = {
   layout?: unknown;
 };
 
+export type ExportWorkspaceItem = {
+  name: string;
+  local_root: string;
+  host_name: string;
+  remote_root?: string;
+  exclude_patterns?: string | null;
+  deploy_recipe?: string | null;
+};
+
+export type ExportAlertRule = {
+  name: string;
+  metric_type: string;
+  threshold: number;
+  comparison?: string;
+  host_name?: string | null;
+  webhook_url?: string | null;
+  enabled?: boolean;
+};
+
+export type ExportAuditSummary = {
+  total: number;
+  byAction: Record<string, number>;
+  recent: Array<{
+    action: string;
+    target: string | null;
+    created_at: string;
+  }>;
+};
+
 export type XuanjianExport = {
   format: typeof EXPORT_FORMAT;
   version: typeof EXPORT_VERSION;
   exportedAt: string;
+  /** 整包 AES 加密（encrypt_secret）；同机导入可解密 */
+  encryptedPayload?: string;
   hosts?: {
     groups?: ExportHostGroup[];
     items?: ExportHostItem[];
@@ -86,6 +117,9 @@ export type XuanjianExport = {
     items?: ExportNoteItem[];
   };
   dockerProjects?: ExportDockerProject[];
+  workspaces?: ExportWorkspaceItem[];
+  alertRules?: ExportAlertRule[];
+  auditSummary?: ExportAuditSummary;
 };
 
 export type ImportResult = {

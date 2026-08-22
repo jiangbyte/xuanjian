@@ -4,6 +4,10 @@
  */
 
 import {
+  createAlertRule,
+  listAlertRules,
+} from "@/lib/db/automation";
+import {
   createDockerProject,
   listDockerProjects,
 } from "@/lib/db/dockerProjects";
@@ -20,6 +24,7 @@ import {
   listScriptPackages,
   listScripts,
 } from "@/lib/db/scripts";
+import { createWorkspace, listWorkspaces } from "@/lib/db/workspaces";
 import {
   EXPORT_FORMAT,
   type ImportResult,
@@ -39,16 +44,24 @@ function mergeResult(a: ImportResult, b: ImportResult): ImportResult {
   };
 }
 
-/** 解析并校验导出文件 */
-export function parseExport(raw: string): XuanjianExport {
-  const data = JSON.parse(raw) as XuanjianExport;
-  if (!data || data.format !== EXPORT_FORMAT) {
+/** 解析并校验导出文件；支持 encrypt_secret 加密包 */
+export async function parseExport(raw: string): Promise<XuanjianExport> {
+  const outer = JSON.parse(raw) as XuanjianExport;
+  if (!outer || outer.format !== EXPORT_FORMAT) {
     throw new Error("invalid export format");
   }
-  if (typeof data.version !== "number" || data.version < 1) {
+  if (typeof outer.version !== "number" || outer.version < 1) {
     throw new Error("unsupported export version");
   }
-  return data;
+  if (outer.encryptedPayload) {
+    const plain = await api.decryptSecret(outer.encryptedPayload);
+    const data = JSON.parse(plain) as XuanjianExport;
+    if (!data || data.format !== EXPORT_FORMAT) {
+      throw new Error("invalid encrypted export payload");
+    }
+    return data;
+  }
+  return outer;
 }
 
 async function importHosts(doc: XuanjianExport): Promise<ImportResult> {
@@ -317,6 +330,84 @@ async function importDocker(doc: XuanjianExport): Promise<ImportResult> {
   return result;
 }
 
+async function importWorkspaces(doc: XuanjianExport): Promise<ImportResult> {
+  const result = emptyResult();
+  if (!doc.workspaces?.length) return result;
+  const existing = await listWorkspaces();
+  const nameSet = new Set(existing.map((w) => w.name));
+  const hosts = await listHosts();
+  const hostByName = new Map(hosts.map((h) => [h.name, h.id]));
+  for (const item of doc.workspaces) {
+    const name = item.name?.trim();
+    if (!name) {
+      result.errors.push("workspace missing name");
+      continue;
+    }
+    if (nameSet.has(name)) {
+      result.skipped += 1;
+      continue;
+    }
+    const hostName = item.host_name?.trim();
+    const host_id = hostName ? hostByName.get(hostName) : undefined;
+    if (!host_id) {
+      result.errors.push(`workspace ${name}: host not found`);
+      continue;
+    }
+    try {
+      await createWorkspace({
+        name,
+        local_root: item.local_root,
+        host_id,
+        remote_root: item.remote_root,
+        exclude_patterns: item.exclude_patterns ?? null,
+        deploy_recipe: item.deploy_recipe ?? null,
+      });
+      nameSet.add(name);
+      result.created += 1;
+    } catch (e) {
+      result.errors.push(`workspace ${name}: ${String(e)}`);
+    }
+  }
+  return result;
+}
+
+async function importAlertRules(doc: XuanjianExport): Promise<ImportResult> {
+  const result = emptyResult();
+  if (!doc.alertRules?.length) return result;
+  const existing = await listAlertRules();
+  const nameSet = new Set(existing.map((r) => r.name));
+  const hosts = await listHosts();
+  const hostByName = new Map(hosts.map((h) => [h.name, h.id]));
+  for (const item of doc.alertRules) {
+    const name = item.name?.trim();
+    if (!name) {
+      result.errors.push("alert rule missing name");
+      continue;
+    }
+    if (nameSet.has(name)) {
+      result.skipped += 1;
+      continue;
+    }
+    const hostName = item.host_name?.trim();
+    try {
+      await createAlertRule({
+        name,
+        metric_type: item.metric_type,
+        threshold: item.threshold,
+        comparison: item.comparison,
+        host_id: hostName ? (hostByName.get(hostName) ?? null) : null,
+        webhook_url: item.webhook_url ?? null,
+        enabled: item.enabled !== false,
+      });
+      nameSet.add(name);
+      result.created += 1;
+    } catch (e) {
+      result.errors.push(`alert ${name}: ${String(e)}`);
+    }
+  }
+  return result;
+}
+
 /** 导入整份或分段导出；同名跳过 */
 export async function applyImport(doc: XuanjianExport): Promise<ImportResult> {
   let result = emptyResult();
@@ -324,5 +415,7 @@ export async function applyImport(doc: XuanjianExport): Promise<ImportResult> {
   result = mergeResult(result, await importScripts(doc));
   result = mergeResult(result, await importNotes(doc));
   result = mergeResult(result, await importDocker(doc));
+  result = mergeResult(result, await importWorkspaces(doc));
+  result = mergeResult(result, await importAlertRules(doc));
   return result;
 }

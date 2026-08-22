@@ -39,7 +39,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { clipboardWriteText } from "@/lib/clipboard";
+import { clipboardWriteText } from "@/lib/ui/clipboard";
 import {
   buildRootNode,
   calcCidr,
@@ -49,7 +49,7 @@ import {
   leafNodes,
   type SubnetTreeNode,
   splitNode,
-} from "@/lib/ipcalc";
+} from "@/lib/network/ipcalc";
 import { cn } from "@/lib/utils";
 import { SubnetTreeFlow } from "./SubnetTreeFlow";
 

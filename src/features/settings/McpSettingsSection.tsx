@@ -1,14 +1,16 @@
 /**
  * @file 设置 · MCP 服务器
  * @author Charlie
- * @description 内置本地工具一览 + 远程 MCP 条目的增删。
+ * @description 内置本地工具一览 + 远程 MCP 条目的增删与连接测试。
  */
 
-import { Cable, Trash2 } from "lucide-react";
+import { Cable, Loader2, PlugZap, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { testMcpConnection } from "@/lib/agent/mcp/client";
 import { BUILTIN_MCP_SERVER } from "@/lib/agent/mcpBuiltin";
 import {
   createMcpServer,
@@ -23,11 +25,30 @@ export function McpSettingsSection() {
   const [rows, setRows] = useState<McpServerRow[]>([]);
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
+  const [testingId, setTestingId] = useState<number | null>(null);
 
   const reload = () => listMcpServers().then(setRows).catch(console.error);
   useEffect(() => {
     reload();
   }, []);
+
+  const runTest = async (row: McpServerRow) => {
+    setTestingId(row.id);
+    try {
+      const result = await testMcpConnection(row);
+      if (result.ok) {
+        toast.success(
+          t("settings.mcpTestOk", { count: result.tools.length }),
+        );
+      } else {
+        toast.error(result.error ?? t("settings.mcpTestFail"));
+      }
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setTestingId(null);
+    }
+  };
 
   return (
     <section className="space-y-3">
@@ -48,25 +69,41 @@ export function McpSettingsSection() {
       {rows.map((r) => (
         <div
           key={r.id}
-          className="flex items-center justify-between rounded-md border border-border px-2 py-1.5 text-xs"
+          className="flex items-center justify-between gap-2 rounded-md border border-border px-2 py-1.5 text-xs"
         >
-          <div>
+          <div className="min-w-0 flex-1">
             <div className="font-medium">{r.name}</div>
-            <div className="text-muted-foreground">
+            <div className="truncate text-muted-foreground">
               {r.transport} · {r.url || r.command || "—"}
             </div>
           </div>
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            onClick={async () => {
-              await deleteMcpServer(r.id);
-              reload();
-            }}
-          >
-            <Trash2 size={12} />
-          </Button>
+          <div className="flex shrink-0 gap-1">
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              title={t("settings.mcpTest")}
+              disabled={testingId === r.id}
+              onClick={() => void runTest(r)}
+            >
+              {testingId === r.id ? (
+                <Loader2 size={12} className="animate-spin" />
+              ) : (
+                <PlugZap size={12} />
+              )}
+            </Button>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              onClick={async () => {
+                await deleteMcpServer(r.id);
+                reload();
+              }}
+            >
+              <Trash2 size={12} />
+            </Button>
+          </div>
         </div>
       ))}
       <div className="flex gap-1">

@@ -22,19 +22,18 @@ import {
   listHosts,
   listTags,
   TagRow,
-  touchHostConnected,
   updateHost,
 } from "@/lib/db";
-import { dialogs } from "@/lib/dialogs";
-import { startRecordingForOpenTab } from "@/lib/sessionRecorder";
+import { dialogs } from "@/lib/ui/dialogs";
+import { startRecordingForOpenTab } from "@/lib/session/recorder";
+import { connectSshHost } from "@/lib/session/connect";
 import { exportToFile, formatImportToast, importFromFile } from "@/lib/share";
 import {
   findHostByTarget,
   hostMatchesQuery,
   parseSshTarget,
   type SshTarget,
-} from "@/lib/sshTarget";
-import { api } from "@/lib/tauri";
+} from "@/lib/session/sshTarget";
 import { useUiStore } from "@/stores/ui";
 
 /** 主机管理控制台主组件 */
@@ -128,19 +127,7 @@ export function HostsConsole() {
     });
     navigate("/terminal");
     try {
-      const session = await api.sshConnect({
-        host: host.host,
-        port: host.port,
-        username: host.username,
-        authType:
-          host.auth_type === "private_key" ? "privateKey" : host.auth_type,
-        password: host.password_enc,
-        privateKeyPath: host.private_key_path,
-        passphrase: host.passphrase_enc,
-        title: host.name,
-        terminalType: host.terminal_type,
-      });
-      await touchHostConnected(host.id);
+      const { session } = await connectSshHost(host.id);
       const recording = startRecordingForOpenTab(tabId, session.id);
       updateTab(tabId, {
         sessionId: session.id,
@@ -148,9 +135,6 @@ export function HostsConsole() {
         title: session.title,
       });
       await recording;
-      if (host.startup_cmd?.trim()) {
-        await api.sessionWrite(session.id, `${host.startup_cmd.trim()}\n`);
-      }
       await reload();
     } catch (e) {
       updateTab(tabId, { status: "error" });

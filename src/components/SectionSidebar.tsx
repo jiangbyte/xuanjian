@@ -5,7 +5,7 @@
 
 import type { MouseEvent, ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
-import { selectionNavClass } from "@/lib/selection";
+import { selectionNavClass } from "@/lib/core/selection";
 import { cn } from "@/lib/utils";
 
 export const sectionAsideClass =

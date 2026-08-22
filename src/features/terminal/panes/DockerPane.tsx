@@ -34,8 +34,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { clipboardWriteText } from "@/lib/clipboard";
-import { dialogs } from "@/lib/dialogs";
+import { clipboardWriteText } from "@/lib/ui/clipboard";
+import { dialogs } from "@/lib/ui/dialogs";
 import { api, onSessionExecOutput } from "@/lib/tauri";
 
 const LOG_MAX_LINES = 1000;

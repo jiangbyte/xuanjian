@@ -13,12 +13,12 @@
   <img src="https://img.shields.io/badge/SQLite-Local-003B57?logo=sqlite&logoColor=white" alt="SQLite" />
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platform" />
   <img src="https://img.shields.io/badge/License-MIT-yellow" alt="License" />
-  <img src="https://img.shields.io/badge/version-0.1.1-orange" alt="Version" />
+  <img src="https://img.shields.io/badge/version-1.0.0-orange" alt="Version" />
 </p>
 
 **玄鉴（Xuanjian）** 是一款面向运维与现场排查的 **AI 桌面运维工作台**：主机清单、本地 / SSH / WSL 终端、SFTP、脚本与笔记、会话录制回放、本机网络工具与 Docker 编排，并内置 **玄鉴 Agent**——可在可见终端执行命令、查阅脚本库与历史命令，按 ReAct 编排完成排查与运维任务。基于 **Tauri 2 + React + TypeScript + Rust**，数据本地 SQLite 持久化，跨 Windows / macOS / Linux。
 
-> 当前版本：`0.1.1` · 协议：[MIT License](LICENSE) · 应用标识：`io.github.jiangbyte.xuanjian` · 仓库：[jiangbyte/xuanjian](https://github.com/jiangbyte/xuanjian)
+> 当前版本：`1.0.0` · 协议：[MIT License](LICENSE) · 应用标识：`io.github.jiangbyte.xuanjian` · 仓库：[jiangbyte/xuanjian](https://github.com/jiangbyte/xuanjian)
 
 ## 目录
 
@@ -142,6 +142,17 @@
 
 ## 功能特性
 
+### v1.0 新增
+
+- **MCP 运行时**：HTTP / stdio 外部 MCP 接入；设置页测试连接；Agent 动态合并 MCP 工具
+- **审计控制台**：本地 `audit_events` 筛选浏览（Agent / SSH / 批量 / 部署 / 告警）
+- **增强导出**：工作空间、告警规则、审计摘要；可选 AES 加密整包（同机解密）
+- **工作空间与部署**：本地↔远程同步、deploy 配方、Agent deploy SubAgent
+- **自动化与告警**：主机组批量脚本、Cron 定时任务、指标阈值告警（通知 / Webhook）
+- **可观测 UI**：网络探测历史、机群概览、指标快照趋势
+
+### 核心能力
+
 - **主机操作台**：分组 / 标签 / 排序；口令 AES 加密入库；一键连接 SSH 或粘贴 `user@host` 目标
 - **终端工作区**：本地 Shell（Windows：PowerShell / CMD / WSL；macOS / Linux：zsh / bash / fish 等）+ SSH（xterm）；标签 keep-alive；快速切换（`Ctrl/⌘+J`）；左侧栏（文件、脚本、历史、概览、进程、端口、Docker）与右侧 **Agent / 笔记**
 - **玄鉴 Agent**：本地 Orchestrator + SubAgent（巡检 / 终端执行 / 分析）；ReAct 轨迹可视化；权限模式（计划 / 确认执行 / 完全执行）；可读脚本库与命令历史，`run_script` / `terminal_run` 写入可见终端；会话可恢复
@@ -251,6 +262,7 @@ GitHub Actions：push / PR 到 `main` 时执行 `.github/workflows/ci.yml`。
 
 | 文档 | 说明 |
 | --- | --- |
+| [`docs/release-notes/v1.0.0.md`](docs/release-notes/v1.0.0.md) | v1.0.0 发行说明 |
 | [`docs/工程规范.md`](docs/工程规范.md) | 目录约定、`@/` 别名、注释规范、模块边界与 CI |
 | [`src-tauri/tauri.conf.json`](src-tauri/tauri.conf.json) | 窗口、打包与 SQLite 预加载配置 |
 | [Tauri 2 文档](https://v2.tauri.app/) | 官方桌面端文档 |

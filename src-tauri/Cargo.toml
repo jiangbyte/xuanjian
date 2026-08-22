@@ -1,6 +1,6 @@
 [package]
 name = "xuanjian"
-version = "0.1.1"
+version = "1.0.0"
 description = "玄鉴 / Xuanjian - Agent O&M tool"
 authors = ["Charlie"]
 license = "MIT"
@@ -36,6 +36,7 @@ aes-gcm = "0.10"
 rand = "0.8"
 dirs = "6"
 chrono = { version = "0.4", features = ["serde"] }
+cron = "0.13"
 if-addrs = "0.13"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "blocking", "stream"] }
 bytes = "1"
@@ -44,6 +45,7 @@ tower = "0.5"
 http-body-util = "0.1"
 which = "7"
 regex = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
 tauri-plugin-clipboard-manager = "2.3.2"
 
 [target.'cfg(windows)'.dependencies]

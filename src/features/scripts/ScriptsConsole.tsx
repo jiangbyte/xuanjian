@@ -66,9 +66,9 @@ import {
   ScriptRow,
   updateScript,
 } from "@/lib/db";
-import { dialogs } from "@/lib/dialogs";
-import { previewScriptBody } from "@/lib/scriptVars";
-import { selectionCheckboxClass, selectionRow } from "@/lib/selection";
+import { dialogs } from "@/lib/ui/dialogs";
+import { previewScriptBody } from "@/lib/session/scriptVars";
+import { selectionCheckboxClass, selectionRow } from "@/lib/core/selection";
 import { exportToFile, formatImportToast, importFromFile } from "@/lib/share";
 import { cn } from "@/lib/utils";
 import { resolveMonacoTheme, useSettingsStore } from "@/stores/settings";

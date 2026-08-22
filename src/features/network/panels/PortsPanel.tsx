@@ -19,9 +19,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { clipboardWriteText } from "@/lib/clipboard";
+import { clipboardWriteText } from "@/lib/ui/clipboard";
 import { addNetworkHistory } from "@/lib/db";
-import { COMMON_PORTS } from "@/lib/ipcalc";
+import { COMMON_PORTS } from "@/lib/network/ipcalc";
 import { api, type TcpProbeResult } from "@/lib/tauri";
 
 /** 解析 `22,80,443` 或 `8000-8010` 等形式，最多 500 个端口 */

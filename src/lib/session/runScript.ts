@@ -6,7 +6,7 @@
  */
 
 import type { ScriptRow } from "@/lib/db";
-import { applyScriptVars, extractScriptVars } from "@/lib/scriptVars";
+import { applyScriptVars, extractScriptVars } from "@/lib/session/scriptVars";
 import { api } from "@/lib/tauri";
 
 function sleep(ms: number) {

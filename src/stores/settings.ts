@@ -147,25 +147,25 @@ export const TERM_FONT_FAMILIES = [
  * 设置 Zustand store；setter 多数会同步 localStorage。
  */
 export const useSettingsStore = create<SettingsState>((set) => ({
-  theme: (localStorage.getItem("xuanjian.theme") as ThemeMode) || "light",
+  theme: (localStorage.getItem("xuanjian.theme") as ThemeMode) || "system",
   locale: localStorage.getItem("xuanjian.locale") || "zh-CN",
   defaultLocalShell: "",
   termFontSize: clamp(
-    readNum("xuanjian.termFontSize", 13),
+    readNum("xuanjian.termFontSize", 14),
     TERM_FONT_MIN,
     TERM_FONT_MAX,
   ),
   termFontFamily:
     localStorage.getItem("xuanjian.termFontFamily") || TERM_FONT_FAMILIES[0].id,
   editorFontSize: clamp(
-    readNum("xuanjian.editorFontSize", 13),
+    readNum("xuanjian.editorFontSize", 12),
     EDITOR_FONT_MIN,
     EDITOR_FONT_MAX,
   ),
   editorWordWrap: readBool("xuanjian.editorWordWrap", true),
   editorTheme:
     (localStorage.getItem("xuanjian.editorTheme") as EditorThemeMode) ||
-    "follow",
+    "vs-dark",
   markdownColorMode:
     (localStorage.getItem("xuanjian.markdownColorMode") as EditorPreviewMode) ||
     "follow",
@@ -222,6 +222,6 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   },
 }));
 
-applyTheme((localStorage.getItem("xuanjian.theme") as ThemeMode) || "light");
+applyTheme((localStorage.getItem("xuanjian.theme") as ThemeMode) || "system");
 
 export { EDITOR_FONT_MAX, EDITOR_FONT_MIN, TERM_FONT_MAX, TERM_FONT_MIN };

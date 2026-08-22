@@ -6,17 +6,23 @@
 //! Author: Charlie
 
 pub mod data_dir;
+pub mod known_hosts;
 pub mod local_fs;
 pub mod local_shell;
+pub mod mcp;
 pub mod platform;
 pub mod secrets;
 pub mod session;
 pub mod sftp;
+pub mod wsl_fs;
 
 pub use data_dir::*;
+pub use known_hosts::*;
 pub use local_fs::*;
 pub use local_shell::*;
+pub use mcp::*;
 pub use platform::*;
 pub use secrets::*;
 pub use session::*;
 pub use sftp::*;
+pub use wsl_fs::*;

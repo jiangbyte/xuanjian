@@ -10,6 +10,8 @@ mod crypto;
 mod data_dir;
 mod db;
 mod network;
+mod scheduler;
+mod services;
 mod session;
 mod win_process;
 
@@ -74,6 +76,10 @@ pub fn run() {
         .manage(state)
         .manage(network_state)
         .manage(ai_state)
+        .setup(|app| {
+            scheduler::start(app.handle().clone());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             list_local_shells,
             host_platform,
@@ -106,6 +112,14 @@ pub fn run() {
             rename_local_path,
             chmod_local_path,
             remove_local_path,
+            wsl_home_dir,
+            wsl_list_dir,
+            wsl_read_file,
+            wsl_write_file,
+            wsl_mkdir,
+            wsl_rename,
+            wsl_chmod,
+            wsl_remove,
             get_data_dir_info,
             get_db_url,
             set_data_dir,
@@ -125,6 +139,11 @@ pub fn run() {
             ai::proxy::ai_chat_completion,
             ai::proxy::ai_chat_stream,
             ai::proxy::ai_chat_cancel,
+            list_known_hosts_cmd,
+            add_known_host_cmd,
+            remove_known_host_cmd,
+            mcp_stdio_discover,
+            mcp_stdio_call,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

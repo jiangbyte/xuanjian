@@ -57,6 +57,8 @@ function languageFromPath(path: string): string {
 export type FileEditorTarget = {
   path: string;
   remote: boolean;
+  /** WSL 内文件（走 wsl_* 而非 SFTP） */
+  wsl?: boolean;
   sessionId: string | null;
 };
 
@@ -96,9 +98,11 @@ export function FileEditorModal({
       setError(null);
       try {
         const text =
-          target.remote && target.sessionId
-            ? await api.sftpRead(target.sessionId, target.path)
-            : await api.readLocalFile(target.path);
+          target.wsl && target.sessionId
+            ? await api.wslReadFile(target.sessionId, target.path)
+            : target.remote && target.sessionId
+              ? await api.sftpRead(target.sessionId, target.path)
+              : await api.readLocalFile(target.path);
         if (cancelled) return;
         setContent(text);
         setOriginal(text);
@@ -117,7 +121,9 @@ export function FileEditorModal({
     setSaving(true);
     setError(null);
     try {
-      if (target.remote && target.sessionId) {
+      if (target.wsl && target.sessionId) {
+        await api.wslWriteFile(target.sessionId, target.path, content);
+      } else if (target.remote && target.sessionId) {
         await api.sftpWrite(target.sessionId, target.path, content);
       } else {
         await api.writeLocalFile(target.path, content);

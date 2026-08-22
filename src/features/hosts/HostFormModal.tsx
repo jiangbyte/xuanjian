@@ -79,6 +79,9 @@ export function HostFormModal({
   const [jumpHostId, setJumpHostId] = useState<number | "">(
     initial?.jump_host_id ?? "",
   );
+  const [proxyType, setProxyType] = useState(initial?.proxy_type || NONE);
+  const [proxyHost, setProxyHost] = useState(initial?.proxy_host || "");
+  const [proxyPort, setProxyPort] = useState(initial?.proxy_port ?? 1080);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
 
@@ -131,6 +134,10 @@ export function HostFormModal({
         passphrase: authType === "privateKey" ? passphraseValue : null,
         title: name || host,
         terminalType,
+        proxyType: proxyType === NONE ? null : proxyType,
+        proxyHost: proxyType === NONE ? null : proxyHost.trim() || null,
+        proxyPort: proxyType === NONE ? null : proxyPort,
+        jumpHostId: jumpHostId === "" ? null : jumpHostId,
       });
       await api.sessionClose(session.id);
       toast.success(t("hosts.testConnectOk"));
@@ -353,6 +360,38 @@ export function HostFormModal({
                   </SelectContent>
                 </Select>
               </Field>
+              <Field label={t("hosts.proxyType")}>
+                <Select value={proxyType} onValueChange={setProxyType}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>{t("hosts.proxyNone")}</SelectItem>
+                    <SelectItem value="socks5">SOCKS5</SelectItem>
+                    <SelectItem value="http">HTTP CONNECT</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label={t("hosts.proxyHost")}>
+                <Input
+                  value={proxyHost}
+                  disabled={proxyType === NONE}
+                  onChange={(e) => setProxyHost(e.currentTarget.value)}
+                  placeholder="127.0.0.1"
+                />
+              </Field>
+              <Field label={t("hosts.proxyPort")}>
+                <Input
+                  type="number"
+                  min={1}
+                  max={65535}
+                  disabled={proxyType === NONE}
+                  value={proxyPort}
+                  onChange={(e) =>
+                    setProxyPort(toNumber(e.currentTarget.value, 1080))
+                  }
+                />
+              </Field>
             </div>
           </Section>
 
@@ -433,6 +472,10 @@ export function HostFormModal({
                     startup_cmd: startupCmd || null,
                     remote_path: remotePath || null,
                     jump_host_id: jumpHostId === "" ? null : jumpHostId,
+                    proxy_type: proxyType === NONE ? null : proxyType,
+                    proxy_host:
+                      proxyType === NONE ? null : proxyHost.trim() || null,
+                    proxy_port: proxyType === NONE ? null : proxyPort,
                   });
                 } finally {
                   setSaving(false);

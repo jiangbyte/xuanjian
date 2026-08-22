@@ -23,9 +23,11 @@ import {
   toolsForSubAgent,
   type SubAgentKind,
 } from "@/lib/agent/subagents";
+import { buildOrchestratorSystemWithContext, buildSubAgentSystemWithContext } from "@/lib/agent/prompts";
 import {
   executeLocalTool,
   isWriteTool,
+  refreshAllTools,
   type AgentToolDef,
 } from "@/lib/agent/tools";
 import type {
@@ -33,8 +35,13 @@ import type {
   RunAgentInput,
   RuntimeEvent,
 } from "@/lib/agent/types";
+import {
+  ReactLoopGuard,
+  REACT_LIMITS,
+} from "@/lib/agent/reactGuards";
+import type { NormalizedLlmReply } from "@/lib/agent/llm";
 
-const ORCH_MAX_ROUNDS = 12;
+const ORCH_MAX_ROUNDS = REACT_LIMITS.ORCH_MAX_ROUNDS;
 
 type ProviderBundle = Awaited<ReturnType<typeof resolveProvider>>;
 
@@ -51,32 +58,11 @@ type LoopOpts = {
   /** 子循环不落库，只返回 parts + 文本摘要 */
   persist: boolean;
   depth: number;
+  guard: ReactLoopGuard;
 };
 
 function checkAbort(signal?: AbortSignal) {
   if (signal?.aborted) throw new Error("已取消");
-}
-
-function orchestratorSystem(mode: RunAgentInput["permissionMode"]): string {
-  const modeLine =
-    mode === "plan"
-      ? "【权限=计划】禁止写操作与 terminal SubAgent 执行命令；可用 inspector 只读收集后给出分步计划。"
-      : mode === "confirm"
-        ? "【权限=确认执行】写操作与 terminal SubAgent 的命令会要求用户确认。"
-        : "【权限=完全执行】可直接派发执行；危险命令仍会二次确认。";
-
-  return [
-    "你是玄鉴 Orchestrator（编排 Agent）。",
-    "复杂任务请拆解并用 run_subagent 派发给专职 SubAgent，而不是自己一把梭：",
-    "- inspector：只读巡检（主机/会话/指标/读终端/脚本库/历史命令）",
-    "- terminal：在可见终端执行命令，或 run_script 复用脚本库",
-    "- analyst：归纳结论与建议",
-    "本地能力：list_scripts / get_script 查阅脚本库；list_cmd_history 查阅历史命令；合适时优先复用而非手写。",
-    "简单一问一答可直接用本地工具，不必强行派发。",
-    "遵循 ReAct：Thought → Action → Observation；禁止编造 Observation。",
-    "优先中文。",
-    modeLine,
-  ].join("\n");
 }
 
 async function resolveProvider(modelRef: string | null | undefined) {
@@ -146,13 +132,14 @@ function emitActivity(
  */
 export async function runLocalReAct(input: RunAgentInput): Promise<void> {
   const provider = await resolveProvider(input.modelRef);
+  await refreshAllTools();
   const emit = (e: RuntimeEvent) => input.onEvent(e);
-  emitActivity(emit, "planning", "编排器准备中…");
+  emitActivity(emit, "planning", "处理中…");
 
   const parts = await runReActLoop({
     input,
     provider,
-    system: orchestratorSystem(input.permissionMode),
+    system: await buildOrchestratorSystemWithContext(input.permissionMode),
     tools: toolsForOrchestrator(input.permissionMode),
     userText: input.userText,
     history: input.history.map((h) => ({
@@ -164,6 +151,7 @@ export async function runLocalReAct(input: RunAgentInput): Promise<void> {
     agentLabel: "编排器",
     persist: true,
     depth: 0,
+    guard: new ReactLoopGuard(REACT_LIMITS.ORCH_MAX_TOOL_CALLS),
   });
 
   await appendAgentMessage({
@@ -175,8 +163,132 @@ export async function runLocalReAct(input: RunAgentInput): Promise<void> {
   emit({ type: "done" });
 }
 
+function isEmptyReply(reply: NormalizedLlmReply): boolean {
+  return (
+    !reply.thinking.trim() &&
+    !reply.text.trim() &&
+    reply.toolCalls.length === 0
+  );
+}
+
+function userFacingError(e: unknown): string {
+  const msg = String(e);
+  if (msg.includes("超时")) {
+    return "这次响应时间较长，已中断。你可以重试，或把问题拆小一点。";
+  }
+  return msg;
+}
+
+function hasUserFacingText(parts: MessagePart[]): boolean {
+  return parts.some(
+    (p) =>
+      p.type === "text" &&
+      p.text.trim() &&
+      p.text !== "(无回复)",
+  );
+}
+
+function buildObservationsForSummary(parts: MessagePart[]): string {
+  const chunks: string[] = [];
+  for (const p of parts) {
+    if (p.type === "tool_result") {
+      chunks.push(`[${p.name}] ${p.result.slice(0, 800)}`);
+    } else if (p.type === "subagent" && p.summary) {
+      chunks.push(`[${p.label}] ${p.summary.slice(0, 1500)}`);
+    }
+  }
+  return chunks.join("\n").slice(0, 8000);
+}
+
+/** 护栏触发或步数用尽：静默收尾，只给用户自然语言结论 */
+async function finishGracefully(
+  opts: LoopOpts,
+  provider: ProviderBundle,
+  assistantParts: MessagePart[],
+  emit: (e: RuntimeEvent) => void,
+): Promise<void> {
+  if (hasUserFacingText(assistantParts)) return;
+
+  const summary = await tryEarlyStopSummary(opts, provider, assistantParts);
+  if (summary) {
+    assistantParts.push({
+      type: "text",
+      text: summary,
+      agent: opts.agentTag,
+    });
+    emit({ type: "text", text: summary, agent: opts.agentTag });
+    return;
+  }
+
+  const fromSub = assistantParts
+    .filter(
+      (p): p is Extract<MessagePart, { type: "subagent" }> =>
+        p.type === "subagent",
+    )
+    .map((p) => p.summary?.trim())
+    .filter(Boolean)
+    .join("\n\n");
+  if (fromSub) {
+    assistantParts.push({
+      type: "text",
+      text: fromSub,
+      agent: opts.agentTag,
+    });
+    emit({ type: "text", text: fromSub, agent: opts.agentTag });
+    return;
+  }
+
+  const fallback =
+    "根据目前掌握的信息，我还无法给出完整结论。你可以补充一下目标环境，或告诉我希望优先排查哪一块。";
+  assistantParts.push({ type: "text", text: fallback, agent: opts.agentTag });
+  emit({ type: "text", text: fallback, agent: opts.agentTag });
+}
+
+/** 步数用尽时尝试无工具收尾 */
+async function tryEarlyStopSummary(
+  opts: LoopOpts,
+  provider: ProviderBundle,
+  assistantParts: MessagePart[],
+): Promise<string | null> {
+  if (hasUserFacingText(assistantParts)) return null;
+
+  const observations = buildObservationsForSummary(assistantParts);
+  if (!observations.trim()) return null;
+
+  try {
+    emitActivity((e) => opts.input.onEvent(e), "summarizing", "整理回复…");
+    const reply = await chatCompletion(
+      {
+        baseUrl: provider.provider.base_url,
+        apiFormat: provider.provider.api_format,
+        apiKey: provider.apiKey,
+        model: provider.modelId,
+        thinkingMode: "off",
+        maxTokens: provider.maxTokens,
+        signal: opts.input.signal,
+      },
+      [
+        {
+          role: "system",
+          content:
+            "你是运维助手。根据已有执行结果，用自然、专业的中文直接回答用户。不要提及步数、循环、工具上限或任何内部机制。若信息不完整，说明已确认的内容，并简要建议下一步。",
+        },
+        {
+          role: "user",
+          content: `用户问题：${opts.userText}\n\n已收集的信息：\n${observations}\n\n请直接回答用户。`,
+        },
+      ],
+      [],
+    );
+    const text = reply.text.trim() || reply.thinking.trim();
+    return text || null;
+  } catch {
+    return null;
+  }
+}
+
 async function runReActLoop(opts: LoopOpts): Promise<MessagePart[]> {
-  const { input, provider } = opts;
+  const { input, provider, guard } = opts;
   const emit = (e: RuntimeEvent) => opts.input.onEvent(e);
   const assistantParts: MessagePart[] = [];
   const messages: LlmMessage[] = [
@@ -186,42 +298,72 @@ async function runReActLoop(opts: LoopOpts): Promise<MessagePart[]> {
   ];
 
   let rounds = 0;
-  let lastText = "";
+  let emptyRounds = 0;
+  let finished = false;
 
   while (rounds < opts.maxRounds) {
     checkAbort(input.signal);
+
+    const wallHit = guard.checkWallClock();
+    if (wallHit) break;
+
     rounds += 1;
-    emit({
-      type: "status",
-      text: `${opts.agentLabel} · ReAct #${rounds}`,
-    });
     emitActivity(
       emit,
       "calling_model",
-      (input.thinkingMode ?? "high") === "off"
-        ? `${opts.agentLabel} 正在调用模型…`
-        : `${opts.agentLabel} 正在思考…`,
-      `#${rounds}`,
+      (input.thinkingMode ?? "high") === "off" ? "处理中…" : "思考中…",
     );
 
-    const reply = await chatCompletion(
-      {
-        baseUrl: provider.provider.base_url,
-        apiFormat: provider.provider.api_format,
-        apiKey: provider.apiKey,
-        model: provider.modelId,
-        thinkingMode: input.thinkingMode ?? "high",
-        maxTokens: provider.maxTokens,
-      },
-      messages,
-      opts.tools,
-    );
+    let reply: NormalizedLlmReply;
+    try {
+      reply = await chatCompletion(
+        {
+          baseUrl: provider.provider.base_url,
+          apiFormat: provider.provider.api_format,
+          apiKey: provider.apiKey,
+          model: provider.modelId,
+          thinkingMode: input.thinkingMode ?? "high",
+          maxTokens: provider.maxTokens,
+          signal: input.signal,
+        },
+        messages,
+        opts.tools,
+      );
+    } catch (e) {
+      const msg = userFacingError(e);
+      emit({ type: "error", text: msg });
+      assistantParts.push({ type: "text", text: msg });
+      break;
+    }
+
+    if (reply.usage) {
+      emit({
+        type: "usage",
+        usage: reply.usage,
+        agent: opts.agentTag,
+      });
+    }
 
     checkAbort(input.signal);
 
+    if (isEmptyReply(reply)) {
+      emptyRounds += 1;
+      if (emptyRounds >= REACT_LIMITS.MAX_EMPTY_ROUNDS) {
+        guard.markWrapUp("empty_replies");
+        break;
+      }
+      messages.push({ role: "assistant", content: "(空回复)" });
+      messages.push({
+        role: "user",
+        content:
+          "（系统）你上一轮没有有效输出。请直接回答用户，或调用工具并说明原因；不要留空。",
+      });
+      continue;
+    }
+    emptyRounds = 0;
+
     const thinkingEnabled = (input.thinkingMode ?? "high") !== "off";
     let thinking = thinkingEnabled ? reply.thinking.trim() : "";
-    // 仅在开启思考时，把「带 tool call 的前置正文」视为 Thought；关闭时不当作思考
     if (
       thinkingEnabled &&
       !thinking &&
@@ -231,7 +373,7 @@ async function runReActLoop(opts: LoopOpts): Promise<MessagePart[]> {
       thinking = reply.text.trim();
     }
     if (thinking) {
-      emitActivity(emit, "thinking", `${opts.agentLabel} · Thought`);
+      emitActivity(emit, "thinking", "思考中…");
       assistantParts.push({
         type: "thinking",
         text: thinking,
@@ -250,7 +392,6 @@ async function runReActLoop(opts: LoopOpts): Promise<MessagePart[]> {
           ? ""
           : reply.text.trim();
       if (text) {
-        lastText = text;
         assistantParts.push({
           type: "text",
           text,
@@ -265,27 +406,25 @@ async function runReActLoop(opts: LoopOpts): Promise<MessagePart[]> {
           }
         }
       } else if (!thinking) {
-        lastText = "(无回复)";
-        assistantParts.push({ type: "text", text: lastText });
-        emit({ type: "text", text: lastText });
-      } else {
-        lastText = thinking;
+        const fallback = "(无回复)";
+        assistantParts.push({ type: "text", text: fallback });
+        emit({ type: "text", text: fallback, agent: opts.agentTag });
       }
+      finished = true;
       break;
     }
 
-    // 有 tool call：关闭思考时，前置正文按普通文本展示，不进 Thought
     if (
       reply.text.trim() &&
       !(thinking && reply.text.trim() === thinking)
     ) {
-      lastText = reply.text.trim();
+      const t = reply.text.trim();
       assistantParts.push({
         type: "text",
-        text: lastText,
+        text: t,
         agent: opts.agentTag,
       });
-      emit({ type: "text", text: lastText, agent: opts.agentTag });
+      emit({ type: "text", text: t, agent: opts.agentTag });
     }
 
     messages.push({
@@ -295,13 +434,31 @@ async function runReActLoop(opts: LoopOpts): Promise<MessagePart[]> {
       anthropic_content: reply.anthropicContent,
     });
 
+    let blockedByGuard = false;
     for (const tc of reply.toolCalls) {
       checkAbort(input.signal);
-      await runOneAction(tc, opts, assistantParts, messages, emit);
+      const blocked = await runOneAction(
+        tc,
+        opts,
+        assistantParts,
+        messages,
+        emit,
+      );
+      if (blocked === "stop") {
+        blockedByGuard = true;
+        break;
+      }
     }
+    if (blockedByGuard) break;
   }
 
-  void lastText;
+  if (!finished) {
+    if (!guard.lastStopReason) {
+      guard.markWrapUp("max_rounds");
+    }
+    await finishGracefully(opts, provider, assistantParts, emit);
+  }
+
   return assistantParts;
 }
 
@@ -311,14 +468,36 @@ async function runOneAction(
   assistantParts: MessagePart[],
   messages: LlmMessage[],
   emit: (e: RuntimeEvent) => void,
-) {
+): Promise<"ok" | "stop"> {
   const args = parseArgs(tc.function.arguments);
   const name = tc.function.name;
   const { input } = opts;
 
+  const guardBlock = opts.guard.beforeToolCall(name, args);
+  if (guardBlock) {
+    pushResult(
+      assistantParts,
+      messages,
+      emit,
+      tc,
+      name,
+      guardBlock,
+      opts.agentTag,
+    );
+    if (opts.guard.shouldWrapUp) return "stop";
+    return "ok";
+  }
+
   if (name === "run_subagent") {
-    await runSubAgentAction(tc, args, opts, assistantParts, messages, emit);
-    return;
+    const stop = await runSubAgentAction(
+      tc,
+      args,
+      opts,
+      assistantParts,
+      messages,
+      emit,
+    );
+    return stop ? "stop" : "ok";
   }
 
   assistantParts.push({
@@ -343,13 +522,13 @@ async function runOneAction(
       reason: "计划模式禁止写操作",
     });
     pushResult(assistantParts, messages, emit, tc, name, result, opts.agentTag);
-    return;
+    return "ok";
   }
 
   emitActivity(
     emit,
     "running_tool",
-    `${opts.agentLabel} 执行 ${name}`,
+    "执行中…",
     typeof args.command === "string" ? String(args.command) : undefined,
   );
 
@@ -377,6 +556,7 @@ async function runOneAction(
 
   const result = stripAnsi(resultRaw);
   pushResult(assistantParts, messages, emit, tc, name, result, opts.agentTag);
+  return "ok";
 }
 
 function pushResult(
@@ -411,13 +591,13 @@ async function runSubAgentAction(
   assistantParts: MessagePart[],
   messages: LlmMessage[],
   emit: (e: RuntimeEvent) => void,
-) {
+): Promise<boolean> {
   const kindRaw = args.agent;
   const task = String(args.task ?? "").trim();
   if (!isSubAgentKind(kindRaw) || !task) {
     const result = JSON.stringify({
       ok: false,
-      error: "run_subagent 需要 agent(terminal|inspector|analyst) 与 task",
+      error: "run_subagent 需要 agent(terminal|inspector|analyst|network|docker|deploy) 与 task",
     });
     pushResult(
       assistantParts,
@@ -428,7 +608,7 @@ async function runSubAgentAction(
       result,
       opts.agentTag,
     );
-    return;
+    return false;
   }
 
   if (opts.depth >= 2) {
@@ -445,7 +625,7 @@ async function runSubAgentAction(
       result,
       opts.agentTag,
     );
-    return;
+    return false;
   }
 
   const kind = kindRaw as SubAgentKind;
@@ -467,7 +647,7 @@ async function runSubAgentAction(
       result,
       opts.agentTag,
     );
-    return;
+    return false;
   }
 
   const subId = tc.id;
@@ -478,7 +658,7 @@ async function runSubAgentAction(
     label: def.label,
     task,
   });
-  emitActivity(emit, "subagent", `SubAgent · ${def.label}`, task.slice(0, 80));
+  emitActivity(emit, "subagent", def.label, task.slice(0, 80));
 
   assistantParts.push({
     type: "subagent",
@@ -495,7 +675,7 @@ async function runSubAgentAction(
     const childParts = await runReActLoop({
       input: opts.input,
       provider: opts.provider,
-      system: [
+      system: await buildSubAgentSystemWithContext(
         def.systemExtra,
         `父任务上下文由编排器下达。你的任务：${task}`,
         opts.input.permissionMode === "confirm"
@@ -503,7 +683,7 @@ async function runSubAgentAction(
           : opts.input.permissionMode === "full"
             ? "可执行写操作；危险命令仍确认。"
             : "只读。",
-      ].join("\n"),
+      ),
       tools: toolsForSubAgent(kind),
       userText: task,
       history: [],
@@ -512,6 +692,7 @@ async function runSubAgentAction(
       agentLabel: def.label,
       persist: false,
       depth: opts.depth + 1,
+      guard: new ReactLoopGuard(def.maxRounds * 3),
     });
 
     summary = childParts
@@ -567,7 +748,7 @@ async function runSubAgentAction(
         summary: summary.slice(0, 8000),
       }),
     });
-    return;
+    return false;
   } catch (e) {
     ok = false;
     summary = String(e);
@@ -606,4 +787,5 @@ async function runSubAgentAction(
       summary: summary.slice(0, 8000),
     }),
   });
+  return false;
 }

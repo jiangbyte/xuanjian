@@ -334,6 +334,35 @@ export async function deleteMcpServer(id: number) {
   await db.execute("DELETE FROM mcp_servers WHERE id = $1", [id]);
 }
 
+export async function findAgentSessionByTabId(
+  tabId: string,
+): Promise<AgentSessionRow | null> {
+  const db = await getDb();
+  const rows = await db.select<AgentSessionRow[]>(
+    "SELECT * FROM agent_sessions WHERE tab_id = $1 ORDER BY datetime(updated_at) DESC, id DESC LIMIT 1",
+    [tabId],
+  );
+  return rows[0] ?? null;
+}
+
+export async function clearAgentSessionTabBinding(
+  tabId: string,
+  keepSessionId?: number,
+) {
+  const db = await getDb();
+  if (keepSessionId != null) {
+    await db.execute(
+      "UPDATE agent_sessions SET tab_id = NULL WHERE tab_id = $1 AND id != $2",
+      [tabId, keepSessionId],
+    );
+  } else {
+    await db.execute(
+      "UPDATE agent_sessions SET tab_id = NULL WHERE tab_id = $1",
+      [tabId],
+    );
+  }
+}
+
 export async function listAgentSessions(): Promise<AgentSessionRow[]> {
   const db = await getDb();
   return db.select<AgentSessionRow[]>(

@@ -25,8 +25,8 @@ import {
   formatBytes,
   formatLogTimeRange,
 } from "@/features/logs/logExport";
-import { clipboardWriteText } from "@/lib/clipboard";
-import { modKeyLabel } from "@/lib/platform";
+import { clipboardWriteText } from "@/lib/ui/clipboard";
+import { modKeyLabel } from "@/lib/core/platform";
 import {
   getSessionLog,
   listSessionLogChunks,
@@ -34,7 +34,7 @@ import {
   SessionLogRow,
   setSessionLogPinned,
 } from "@/lib/db";
-import { dialogs } from "@/lib/dialogs";
+import { dialogs } from "@/lib/ui/dialogs";
 import { api } from "@/lib/tauri";
 import { useSettingsStore } from "@/stores/settings";
 

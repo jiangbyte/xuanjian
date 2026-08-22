@@ -47,6 +47,17 @@ export type SshConnectParams = {
   cols?: number;
   rows?: number;
   terminalType?: string | null;
+  proxyType?: string | null;
+  proxyHost?: string | null;
+  proxyPort?: number | null;
+  jumpHostId?: number | null;
+};
+
+export type KnownHostInfo = {
+  id: number;
+  host: string;
+  port: number;
+  fingerprint: string;
 };
 
 /** 面向前端的 Tauri 命令集合 */
@@ -57,6 +68,10 @@ export const api = {
     invoke<SessionInfo>("local_shell_open", { shellId, cols, rows }),
   sshConnect: (params: SshConnectParams) =>
     invoke<SessionInfo>("ssh_connect", { params }),
+  listKnownHosts: () => invoke<KnownHostInfo[]>("list_known_hosts_cmd"),
+  addKnownHost: (host: string, port: number, fingerprint: string) =>
+    invoke<number>("add_known_host_cmd", { host, port, fingerprint }),
+  removeKnownHost: (id: number) => invoke("remove_known_host_cmd", { id }),
   sessionWrite: (sessionId: string, data: string) =>
     invoke("session_write", { sessionId, data }),
   sessionResize: (sessionId: string, cols: number, rows: number) =>
@@ -135,6 +150,22 @@ export const api = {
   chmodLocalPath: (path: string, mode: number) =>
     invoke("chmod_local_path", { path, mode }),
   removeLocalPath: (path: string) => invoke("remove_local_path", { path }),
+  wslHomeDir: (sessionId: string) =>
+    invoke<string>("wsl_home_dir", { sessionId }),
+  wslListDir: (sessionId: string, path: string) =>
+    invoke<SftpEntry[]>("wsl_list_dir", { sessionId, path }),
+  wslReadFile: (sessionId: string, path: string) =>
+    invoke<string>("wsl_read_file", { sessionId, path }),
+  wslWriteFile: (sessionId: string, path: string, content: string) =>
+    invoke("wsl_write_file", { sessionId, path, content }),
+  wslMkdir: (sessionId: string, path: string) =>
+    invoke("wsl_mkdir", { sessionId, path }),
+  wslRename: (sessionId: string, oldPath: string, newPath: string) =>
+    invoke("wsl_rename", { sessionId, oldPath, newPath }),
+  wslChmod: (sessionId: string, path: string, mode: number) =>
+    invoke("wsl_chmod", { sessionId, path, mode }),
+  wslRemove: (sessionId: string, path: string, isDir: boolean) =>
+    invoke("wsl_remove", { sessionId, path, isDir }),
 
   // —— 网络工具 ——
   networkListInterfaces: () =>
@@ -198,6 +229,21 @@ export const api = {
   aiChatStream: (params: AiChatProxyParams) =>
     invoke<string>("ai_chat_stream", { params }),
   aiChatCancel: (jobId: string) => invoke("ai_chat_cancel", { jobId }),
+
+  mcpStdioDiscover: (command: string, args: string[]) =>
+    invoke<McpDiscoverResult>("mcp_stdio_discover", { command, args }),
+  mcpStdioCall: (
+    command: string,
+    args: string[],
+    toolName: string,
+    toolArgs: Record<string, unknown>,
+  ) =>
+    invoke<McpCallResult>("mcp_stdio_call", {
+      command,
+      args,
+      toolName,
+      arguments: toolArgs,
+    }),
 };
 
 export type AiChatProxyParams = {
@@ -211,6 +257,24 @@ export type AiChatProxyParams = {
   /** off | high | max */
   thinkingMode?: string;
   maxTokens?: number;
+};
+
+export type McpToolDto = {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+};
+
+export type McpDiscoverResult = {
+  ok: boolean;
+  tools: McpToolDto[];
+  error?: string | null;
+};
+
+export type McpCallResult = {
+  ok: boolean;
+  content: string;
+  error?: string | null;
 };
 
 export type AiChatChunk = {

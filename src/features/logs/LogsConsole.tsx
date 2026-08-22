@@ -23,7 +23,7 @@ import {
   SessionLogRow,
   setSessionLogPinned,
 } from "@/lib/db";
-import { dialogs } from "@/lib/dialogs";
+import { dialogs } from "@/lib/ui/dialogs";
 
 type KindFilter = "all" | "ssh" | "local";
 
@@ -37,7 +37,7 @@ export function LogsConsole() {
   const [kind, setKind] = useState<KindFilter>("all");
 
   const reload = useCallback(async () => {
-    const { reconcileOrphanOpenLogs } = await import("@/lib/sessionRecorder");
+    const { reconcileOrphanOpenLogs } = await import("@/lib/session/recorder");
     await reconcileOrphanOpenLogs();
     const list = await listSessionLogs({
       kind: kind === "all" ? null : kind,

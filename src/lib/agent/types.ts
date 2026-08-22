@@ -3,7 +3,7 @@
  * @author Charlie
  */
 
-import type { ThinkingMode } from "@/lib/agent/contextBudget";
+import type { LlmUsage, ThinkingMode } from "@/lib/agent/contextBudget";
 import { getSetting, type AgentPermissionMode } from "@/lib/db";
 
 /** 侧栏活动条阶段：让用户感知是否仍在执行 */
@@ -67,6 +67,7 @@ export type RuntimeEvent =
       children?: import("@/lib/db").MessagePart[];
     }
   | { type: "error"; text: string }
+  | { type: "usage"; usage: LlmUsage; agent?: string }
   | { type: "done" };
 
 export type ConfirmToolRequest = {

@@ -21,9 +21,9 @@ import {
 import { Input } from "@/components/ui/input";
 import type { ScriptRow } from "@/lib/db";
 import { HostRow, listHosts, touchHostConnected } from "@/lib/db";
-import { dialogs } from "@/lib/dialogs";
-import { runScriptOnSession } from "@/lib/runScript";
-import { startRecordingForOpenTab } from "@/lib/sessionRecorder";
+import { dialogs } from "@/lib/ui/dialogs";
+import { runScriptOnSession } from "@/lib/session/runScript";
+import { startRecordingForOpenTab } from "@/lib/session/recorder";
 import { api, LocalShellInfo } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import { type TermTab, useUiStore } from "@/stores/ui";

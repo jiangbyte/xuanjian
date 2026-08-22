@@ -40,23 +40,29 @@ import {
 import {
   estimateContextBudget,
   formatTokenCount,
-  loadLastAgentSessionId,
+  historyTextFromUiMessages,
+  inTurnPartsEstimate,
   loadThinkingMode,
+  mergeUsage,
   parseContextWindow,
   saveLastAgentSessionId,
   saveThinkingMode,
+  type LlmUsage,
   type ThinkingMode,
 } from "@/lib/agent/contextBudget";
-import { LOCAL_TOOLS } from "@/lib/agent/tools";
+import { buildOrchestratorSystemPrompt } from "@/lib/agent/prompts";
+import { toolsForOrchestrator } from "@/lib/agent/subagents";
 import { runAgentTurn } from "@/lib/agent/runtime";
 import type { AgentActivityPhase } from "@/lib/agent/types";
 import { discoverRemoteAgents } from "@/lib/agent/remoteClient";
 import { BUILTIN_MCP_SERVER } from "@/lib/agent/mcpBuiltin";
 import {
   appendAgentMessage,
+  clearAgentSessionTabBinding,
   createAgentSession,
   deleteAgentSession,
   encodeModelRef,
+  findAgentSessionByTabId,
   listAgentMessages,
   listAgentSessions,
   listAiModels,
@@ -75,6 +81,7 @@ import {
   type RemoteAgentRow,
 } from "@/lib/db";
 import { cn } from "@/lib/utils";
+import { WorkspaceSwitcher } from "@/features/workspace/WorkspaceSwitcher";
 import { useUiStore } from "@/stores/ui";
 
 type LiveMsg = {
@@ -116,6 +123,10 @@ export function AiChatPanel() {
   const [thinkingMode, setThinkingMode] = useState<ThinkingMode>(() =>
     loadThinkingMode(),
   );
+  /** 最近一次模型调用的 API usage（含 cache） */
+  const [lastUsage, setLastUsage] = useState<LlmUsage | null>(null);
+  /** 当前会话累计 usage（本轮 busy 内多次 ReAct） */
+  const [sessionUsage, setSessionUsage] = useState<LlmUsage | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -185,6 +196,8 @@ export function AiChatPanel() {
   const loadSession = useCallback(async (id: number) => {
     setSessionId(id);
     saveLastAgentSessionId(id);
+    setLastUsage(null);
+    setSessionUsage(null);
     const rows = await listAgentMessages(id);
     setMessages(
       rows.map((r: AgentMessageRow) => ({
@@ -207,53 +220,89 @@ export function AiChatPanel() {
       saveLastAgentSessionId(sessionId);
       return sessionId;
     }
+    if (!activeTabId) {
+      throw new Error("no active terminal tab");
+    }
     const id = await createAgentSession({
-      title: t("terminal.aiNewChat"),
+      title: activeTab?.title?.trim() || t("terminal.aiNewChat"),
       runtime,
       remote_agent_id: remoteAgentId || null,
       model_ref: modelRef || null,
       permission_mode: permissionMode,
       host_id: activeTab?.hostId ?? null,
-      tab_id: activeTab?.id ?? null,
+      tab_id: activeTabId,
     });
+    await clearAgentSessionTabBinding(activeTabId, id);
     await reloadMeta();
     setSessionId(id);
     saveLastAgentSessionId(id);
     return id;
   }, [
     sessionId,
+    activeTabId,
+    activeTab,
     runtime,
     remoteAgentId,
     modelRef,
     permissionMode,
-    activeTab,
     reloadMeta,
     t,
   ]);
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      await reloadMeta();
-      if (cancelled) return;
-      // 仅在空态时恢复上次会话（避免覆盖用户已点「新建」）
-      if (sessionId != null) return;
-      const last = loadLastAgentSessionId();
-      if (last == null) return;
-      const list = await listAgentSessions();
-      if (cancelled) return;
-      if (list.some((s) => s.id === last)) {
-        await loadSession(last);
-      } else {
-        saveLastAgentSessionId(null);
+  const bindTabSession = useCallback(
+    async (tabId: string | null) => {
+      if (!tabId) {
+        setSessionId(null);
+        setMessages([]);
+        setLastUsage(null);
+        setSessionUsage(null);
+        return;
       }
-    })().catch(console.error);
-    return () => {
-      cancelled = true;
-    };
-    // 仅挂载时恢复一次
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+      const tab = tabs.find((t) => t.id === tabId);
+      const existing = await findAgentSessionByTabId(tabId);
+      if (existing) {
+        await loadSession(existing.id);
+        return;
+      }
+      const id = await createAgentSession({
+        title: tab?.title?.trim() || t("terminal.aiNewChat"),
+        runtime,
+        remote_agent_id: remoteAgentId || null,
+        model_ref: modelRef || null,
+        permission_mode: permissionMode,
+        host_id: tab?.hostId ?? null,
+        tab_id: tabId,
+      });
+      await reloadMeta();
+      setSessionId(id);
+      setMessages([]);
+      setLastUsage(null);
+      setSessionUsage(null);
+      saveLastAgentSessionId(id);
+    },
+    [
+      tabs,
+      runtime,
+      remoteAgentId,
+      modelRef,
+      permissionMode,
+      loadSession,
+      reloadMeta,
+      t,
+    ],
+  );
+
+  useEffect(() => {
+    void reloadMeta().catch(console.error);
+  }, [reloadMeta]);
+
+  const lastBoundTabRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (activeTabId === lastBoundTabRef.current) return;
+    lastBoundTabRef.current = activeTabId;
+    void bindTabSession(activeTabId).catch(console.error);
+  }, [activeTabId, bindTabSession]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -270,6 +319,8 @@ export function AiChatPanel() {
     if (!content || busy) return;
     setText("");
     setBusy(true);
+    setLastUsage(null);
+    setSessionUsage(null);
     setActivity({ phase: "planning", label: t("terminal.aiActivityStarting") });
     const ac = new AbortController();
     abortRef.current = ac;
@@ -328,6 +379,11 @@ export function AiChatPanel() {
             confirmWaiters.current.set(req.id, resolve);
           }),
         onEvent: (e) => {
+          if (e.type === "usage") {
+            setLastUsage(e.usage);
+            setSessionUsage((prev) => mergeUsage(prev, e.usage));
+            return;
+          }
           if (e.type === "activity") {
             setActivity({
               phase: e.phase,
@@ -554,26 +610,26 @@ export function AiChatPanel() {
   }, [modelRef, models]);
 
   const contextBudget = useMemo(() => {
-    const histMsgs = messages.flatMap((m) =>
-      m.parts
-        .filter(
-          (p): p is Extract<MessagePart, { type: "text" }> => p.type === "text",
-        )
-        .map((p) => ({
-          role: m.role as "user" | "assistant",
-          content: p.text,
-        })),
-    );
+    const hist = historyTextFromUiMessages(messages);
+    const inTurn = inTurnPartsEstimate(messages);
     return estimateContextBudget({
-      systemPrompt:
-        "你是玄鉴 Orchestrator（编排 Agent）。".repeat(1) +
-        "复杂任务请拆解并用 run_subagent…".repeat(3),
-      messages: histMsgs,
-      tools: LOCAL_TOOLS,
+      systemPrompt: buildOrchestratorSystemPrompt(permissionMode),
+      history: hist,
+      inTurnExtra: inTurn,
+      tools: toolsForOrchestrator(permissionMode),
       draft: text,
       contextLimit,
+      lastUsage,
+      sessionUsage,
     });
-  }, [messages, text, contextLimit]);
+  }, [
+    messages,
+    text,
+    contextLimit,
+    permissionMode,
+    lastUsage,
+    sessionUsage,
+  ]);
 
   const agentShort =
     runtime === "local"
@@ -583,119 +639,152 @@ export function AiChatPanel() {
 
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground">
-      {/* 顶栏：标题 + 会话上下文挤一行 */}
-      <div className="flex shrink-0 items-center gap-1.5 border-b border-border px-2.5 py-2">
-        <Sparkles size={14} className="shrink-0 text-primary" />
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium leading-tight">
-            {t("terminal.aiTitle")}
-          </div>
-          {activeTab ? (
-            <div className="truncate text-[10px] leading-tight text-muted-foreground">
-              {activeTab.title}
-              {activeTab.hostId != null ? ` · #${activeTab.hostId}` : ""}
+      {/* 顶栏 */}
+      <div className="shrink-0 border-b border-border">
+        <div className="flex items-center gap-2 px-2.5 py-2">
+          <Sparkles size={14} className="shrink-0 text-primary" />
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium leading-tight">
+              {t("terminal.aiTitle")}
             </div>
-          ) : null}
+            {activeTab ? (
+              <div className="truncate text-[11px] leading-tight text-muted-foreground">
+                {activeTab.title}
+                {activeTab.hostId != null ? ` · #${activeTab.hostId}` : ""}
+              </div>
+            ) : null}
+          </div>
+          <div className="flex shrink-0 items-center gap-0.5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="ghost"
+                  className="size-7"
+                  onClick={async () => {
+                    if (!activeTabId) {
+                      setSessionId(null);
+                      setMessages([]);
+                      setLastUsage(null);
+                      setSessionUsage(null);
+                      saveLastAgentSessionId(null);
+                      return;
+                    }
+                    const id = await createAgentSession({
+                      title: activeTab?.title?.trim() || t("terminal.aiNewChat"),
+                      runtime,
+                      remote_agent_id: remoteAgentId || null,
+                      model_ref: modelRef || null,
+                      permission_mode: permissionMode,
+                      host_id: activeTab?.hostId ?? null,
+                      tab_id: activeTabId,
+                    });
+                    await clearAgentSessionTabBinding(activeTabId, id);
+                    await reloadMeta();
+                    setSessionId(id);
+                    setMessages([]);
+                    setLastUsage(null);
+                    setSessionUsage(null);
+                    saveLastAgentSessionId(id);
+                  }}
+                  aria-label={t("terminal.aiNewChat")}
+                >
+                  <Plus size={14} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="left">{t("terminal.aiNewChat")}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant={historyOpen ? "secondary" : "ghost"}
+                  className="size-7"
+                  onClick={() => setHistoryOpen((v) => !v)}
+                  aria-label={t("terminal.aiHistory")}
+                >
+                  <History size={14} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="left">{t("terminal.aiHistory")}</TooltipContent>
+            </Tooltip>
+          </div>
         </div>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="ghost"
-              className="size-7"
-              onClick={() => {
-                setSessionId(null);
-                setMessages([]);
-                saveLastAgentSessionId(null);
-              }}
-              aria-label={t("terminal.aiNewChat")}
-            >
-              <Plus size={14} />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="left">{t("terminal.aiNewChat")}</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              size="icon-sm"
-              variant={historyOpen ? "secondary" : "ghost"}
-              className="size-7"
-              onClick={() => setHistoryOpen((v) => !v)}
-              aria-label={t("terminal.aiHistory")}
-            >
-              <History size={14} />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="left">{t("terminal.aiHistory")}</TooltipContent>
-        </Tooltip>
+        <WorkspaceSwitcher />
       </div>
 
-      {/* 历史：从顶栏下方铺满，不挡输入时可滚动 */}
-      {historyOpen ? (
-        <div className="absolute inset-x-0 top-[45px] bottom-0 z-20 flex flex-col bg-sidebar">
-          <div className="flex items-center gap-2 border-b border-border px-2 py-1.5">
-            <input
-              className="h-7 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
-              placeholder={t("terminal.aiSearchHistory")}
-              value={histQ}
-              onChange={(e) => setHistQ(e.currentTarget.value)}
-            />
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-7 px-2 text-xs"
-              onClick={() => setHistoryOpen(false)}
-            >
-              {t("terminal.aiClose")}
-            </Button>
-          </div>
-          <div className="min-h-0 flex-1 overflow-auto p-1.5">
-            {filteredSessions.length === 0 ? (
-              <p className="px-2 py-6 text-center text-xs text-muted-foreground">
-                {t("terminal.aiNoHistory")}
-              </p>
-            ) : (
-              filteredSessions.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  className={cn(
-                    "mb-0.5 flex w-full flex-col rounded-md px-2.5 py-2 text-left text-xs transition-colors hover:bg-sidebar-accent",
-                    sessionId === s.id && "bg-sidebar-accent",
-                  )}
-                  onClick={() => {
-                    void loadSession(s.id);
-                    setHistoryOpen(false);
-                  }}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    if (window.confirm(t("terminal.aiDeleteChat"))) {
-                      void deleteAgentSession(s.id).then(reloadMeta);
-                      if (sessionId === s.id) {
-                        setSessionId(null);
-                        setMessages([]);
-                        saveLastAgentSessionId(null);
-                      }
-                    }
-                  }}
-                >
-                  <span className="truncate font-medium">{s.title}</span>
-                  <span className="text-[10px] text-muted-foreground">
-                    {s.updated_at || s.created_at}
-                  </span>
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-      ) : null}
-
       {/* 消息区 */}
-      <div className="min-h-0 flex-1 overflow-auto px-2.5 py-2">
+      <div className="relative min-h-0 flex-1">
+        {historyOpen ? (
+          <div className="absolute inset-0 z-20 flex flex-col bg-sidebar">
+            <div className="flex items-center gap-2 border-b border-border px-2 py-1.5">
+              <input
+                className="h-7 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
+                placeholder={t("terminal.aiSearchHistory")}
+                value={histQ}
+                onChange={(e) => setHistQ(e.currentTarget.value)}
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs"
+                onClick={() => setHistoryOpen(false)}
+              >
+                {t("terminal.aiClose")}
+              </Button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto p-1.5">
+              {filteredSessions.length === 0 ? (
+                <p className="px-2 py-6 text-center text-xs text-muted-foreground">
+                  {t("terminal.aiNoHistory")}
+                </p>
+              ) : (
+                filteredSessions.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className={cn(
+                      "mb-0.5 flex w-full flex-col rounded-md px-2.5 py-2 text-left text-xs transition-colors hover:bg-sidebar-accent",
+                      sessionId === s.id && "bg-sidebar-accent",
+                    )}
+                    onClick={() => {
+                      void (async () => {
+                        await loadSession(s.id);
+                        if (activeTabId) {
+                          await updateAgentSession(s.id, { tab_id: activeTabId });
+                          await clearAgentSessionTabBinding(activeTabId, s.id);
+                          await reloadMeta();
+                        }
+                        setHistoryOpen(false);
+                      })();
+                    }}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      if (window.confirm(t("terminal.aiDeleteChat"))) {
+                        void deleteAgentSession(s.id).then(reloadMeta);
+                        if (sessionId === s.id) {
+                          setSessionId(null);
+                          setMessages([]);
+                          saveLastAgentSessionId(null);
+                        }
+                      }
+                    }}
+                  >
+                    <span className="truncate font-medium">{s.title}</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {s.updated_at || s.created_at}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="h-full overflow-auto px-2.5 py-2">
         {messages.length === 0 && !busy ? (
           <div className="flex h-full min-h-[120px] flex-col items-center justify-center gap-1 px-3 text-center">
             <Sparkles size={18} className="text-muted-foreground/50" />
@@ -727,6 +816,7 @@ export function AiChatPanel() {
             <div ref={bottomRef} />
           </div>
         )}
+        </div>
       </div>
 
       {/* 底栏：单卡工具条 + 输入，压缩占位；ReAct 状态仍在消息区展示 */}
@@ -921,9 +1011,11 @@ export function AiChatPanel() {
                   />
                 </div>
                 <span className="shrink-0 tabular-nums text-[10px] text-muted-foreground">
-                  {contextBudget.percent}% · ~
-                  {formatTokenCount(contextBudget.total)}/
-                  {formatTokenCount(contextBudget.limit)}
+                  {contextBudget.percent}% ·{" "}
+                  {contextBudget.lastApiPrompt != null
+                    ? formatTokenCount(contextBudget.lastApiPrompt)
+                    : `~${formatTokenCount(contextBudget.total)}`}
+                  /{formatTokenCount(contextBudget.limit)}
                 </span>
               </button>
             </PopoverTrigger>
@@ -945,10 +1037,63 @@ export function AiChatPanel() {
                 label={t("terminal.aiContextMessages")}
                 value={contextBudget.messages}
               />
+              {contextBudget.inTurn > 0 ? (
+                <BudgetRow
+                  label={t("terminal.aiContextInTurn")}
+                  value={contextBudget.inTurn}
+                />
+              ) : null}
               <BudgetRow
                 label={t("terminal.aiContextDraft")}
                 value={contextBudget.draft}
               />
+              {contextBudget.lastApiPrompt != null ? (
+                <>
+                  <div className="border-t border-border pt-1.5 font-medium">
+                    {t("terminal.aiContextLastApi")}
+                  </div>
+                  <BudgetRow
+                    label={t("terminal.aiContextApiInput")}
+                    value={contextBudget.lastApiPrompt}
+                  />
+                  {contextBudget.lastApiOutput != null ? (
+                    <BudgetRow
+                      label={t("terminal.aiContextApiOutput")}
+                      value={contextBudget.lastApiOutput}
+                    />
+                  ) : null}
+                  {(contextBudget.cacheRead ?? 0) > 0 ? (
+                    <BudgetRow
+                      label={t("terminal.aiContextCacheRead")}
+                      value={contextBudget.cacheRead ?? 0}
+                    />
+                  ) : null}
+                  {(contextBudget.cacheWrite ?? 0) > 0 ? (
+                    <BudgetRow
+                      label={t("terminal.aiContextCacheWrite")}
+                      value={contextBudget.cacheWrite ?? 0}
+                    />
+                  ) : null}
+                </>
+              ) : null}
+              {contextBudget.sessionInput != null &&
+              contextBudget.sessionInput > 0 ? (
+                <>
+                  <div className="border-t border-border pt-1.5 font-medium">
+                    {t("terminal.aiContextSession")}
+                  </div>
+                  <BudgetRow
+                    label={t("terminal.aiContextApiInput")}
+                    value={contextBudget.sessionInput}
+                  />
+                  {contextBudget.sessionOutput != null ? (
+                    <BudgetRow
+                      label={t("terminal.aiContextApiOutput")}
+                      value={contextBudget.sessionOutput}
+                    />
+                  ) : null}
+                </>
+              ) : null}
               <div className="border-t border-border pt-1.5 text-[10px] text-muted-foreground">
                 {t("terminal.aiContextHint")}
               </div>
@@ -1058,10 +1203,33 @@ function toolLabel(name: string, args: unknown): string {
     host_info: "主机信息",
     list_hosts: "主机列表",
     host_metrics: "指标探测",
+    run_batch: "批量执行脚本",
+    create_inspection_report: "生成巡检报告",
+    docker_compose_up: "Compose up",
     list_scripts: "脚本库列表",
     get_script: "读取脚本",
     list_cmd_history: "历史命令",
     run_script: "执行脚本",
+    list_files: "列出文件",
+    read_file: "读取文件",
+    file_info: "文件信息",
+    ping: "Ping",
+    dns_lookup: "DNS 查询",
+    tcp_probe: "TCP 探测",
+    tls_cert: "TLS 证书",
+    docker_ps: "Docker 列表",
+    docker_logs: "Docker 日志",
+    docker_inspect: "Docker Inspect",
+    search_notes: "搜索笔记",
+    search_session_logs: "搜索录制",
+    search_cmd_history: "搜索历史命令",
+    port_snapshot: "端口快照",
+    disk_snapshot: "磁盘快照",
+    upload_file: "上传文件",
+    upload_tree: "上传目录树",
+    sync_to_remote: "同步到远程",
+    write_remote_file: "写远程文件",
+    deploy: "部署",
   };
   return labels[name] ?? name;
 }

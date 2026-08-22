@@ -9,6 +9,7 @@ import {
   Calculator,
   Gauge,
   Globe2,
+  History,
   Network,
   Radar,
   ScanSearch,
@@ -42,8 +43,13 @@ const SpeedTestPanel = lazy(() =>
     default: m.SpeedTestPanel,
   })),
 );
+const NetworkHistoryPanel = lazy(() =>
+  import("@/features/network/NetworkHistoryPanel").then((m) => ({
+    default: m.NetworkHistoryPanel,
+  })),
+);
 
-type TabId = "connectivity" | "ipCalc" | "ports" | "http" | "speedTest";
+type TabId = "connectivity" | "ipCalc" | "ports" | "http" | "speedTest" | "history";
 
 const TABS: { id: TabId; icon: typeof Network; labelKey: string }[] = [
   { id: "connectivity", icon: Radar, labelKey: "network.connectivity" },
@@ -51,6 +57,7 @@ const TABS: { id: TabId; icon: typeof Network; labelKey: string }[] = [
   { id: "ports", icon: ScanSearch, labelKey: "network.ports" },
   { id: "http", icon: Globe2, labelKey: "network.http" },
   { id: "speedTest", icon: Gauge, labelKey: "network.speedTest" },
+  { id: "history", icon: History, labelKey: "networkHistory.title" },
 ];
 
 function PanelFallback() {
@@ -105,6 +112,7 @@ export function NetworkConsole() {
           {tab === "ports" && <PortsPanel />}
           {tab === "http" && <HttpPanel />}
           {tab === "speedTest" && <SpeedTestPanel />}
+          {tab === "history" && <NetworkHistoryPanel />}
         </Suspense>
       </main>
     </div>

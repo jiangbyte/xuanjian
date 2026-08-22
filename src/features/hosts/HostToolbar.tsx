@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { HostRow, TagRow } from "@/lib/db";
-import type { SshTarget } from "@/lib/sshTarget";
+import type { SshTarget } from "@/lib/session/sshTarget";
 
 const ALL_TAGS = "__all__";
 

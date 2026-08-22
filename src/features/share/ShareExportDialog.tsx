@@ -18,7 +18,14 @@ import {
 } from "@/components/ui/dialog";
 import { exportToFile } from "@/lib/share";
 
-export type ShareSectionKey = "hosts" | "scripts" | "notes" | "dockerProjects";
+export type ShareSectionKey =
+  | "hosts"
+  | "scripts"
+  | "notes"
+  | "dockerProjects"
+  | "workspaces"
+  | "alertRules"
+  | "auditSummary";
 
 export type ShareSections = Record<ShareSectionKey, boolean>;
 
@@ -27,6 +34,9 @@ const ALL_OFF: ShareSections = {
   scripts: false,
   notes: false,
   dockerProjects: false,
+  workspaces: false,
+  alertRules: false,
+  auditSummary: false,
 };
 
 /** 分段多选导出；确认后写出 JSON */
@@ -43,19 +53,17 @@ export function ShareExportDialog({
   const { t } = useTranslation();
   const [sections, setSections] = useState<ShareSections>({ ...ALL_OFF });
   const [includeSecrets, setIncludeSecrets] = useState(false);
+  const [encryptPackage, setEncryptPackage] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setSections({ ...ALL_OFF, ...defaults });
     setIncludeSecrets(false);
+    setEncryptPackage(false);
   }, [open]); // 仅在打开时套用 defaults，避免勾选被重置
 
-  const anySelected =
-    sections.hosts ||
-    sections.scripts ||
-    sections.notes ||
-    sections.dockerProjects;
+  const anySelected = Object.values(sections).some(Boolean);
 
   const toggle = (key: ShareSectionKey, checked: boolean) => {
     setSections((prev) => ({ ...prev, [key]: checked }));
@@ -69,11 +77,15 @@ export function ShareExportDialog({
       const ok = await exportToFile(
         {
           includeHostSecrets: sections.hosts && includeSecrets,
+          encryptPackage,
           sections: {
             hosts: sections.hosts,
             scripts: sections.scripts,
             notes: sections.notes,
             dockerProjects: sections.dockerProjects,
+            workspaces: sections.workspaces,
+            alertRules: sections.alertRules,
+            auditSummary: sections.auditSummary,
           },
         },
         "xuanjian-export.json",
@@ -94,6 +106,9 @@ export function ShareExportDialog({
     { key: "scripts", label: t("share.sectionScripts") },
     { key: "notes", label: t("share.sectionNotes") },
     { key: "dockerProjects", label: t("share.sectionDocker") },
+    { key: "workspaces", label: t("share.sectionWorkspaces") },
+    { key: "alertRules", label: t("share.sectionAlertRules") },
+    { key: "auditSummary", label: t("share.sectionAudit") },
   ];
 
   return (
@@ -131,6 +146,19 @@ export function ShareExportDialog({
               </span>
             </label>
           ) : null}
+          <label className="mt-1 flex cursor-pointer items-start gap-2.5 border-t border-border pt-3 text-sm">
+            <Checkbox
+              className="mt-0.5"
+              checked={encryptPackage}
+              onCheckedChange={(v) => setEncryptPackage(v === true)}
+            />
+            <span>
+              <span className="font-medium">{t("share.encryptPackage")}</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                {t("share.encryptPackageHint")}
+              </span>
+            </span>
+          </label>
         </div>
         <DialogFooter>
           <Button
@@ -171,4 +199,7 @@ export const DEFAULT_EXPORT_ALL: ShareSections = {
   scripts: true,
   notes: true,
   dockerProjects: true,
+  workspaces: true,
+  alertRules: true,
+  auditSummary: true,
 };

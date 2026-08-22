@@ -350,5 +350,160 @@ ALTER TABLE ai_models ADD COLUMN max_output_tokens INTEGER NOT NULL DEFAULT 0;
 "#,
             kind: MigrationKind::Up,
         },
+        // —— 迁移 v14：命令历史 + 审计 ——
+        Migration {
+            version: 14,
+            description: "cmd_history_audit_events",
+            sql: r#"
+CREATE TABLE IF NOT EXISTS cmd_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  cmd TEXT NOT NULL,
+  session_id TEXT,
+  host_id INTEGER,
+  label TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_cmd_history_session ON cmd_history(session_id);
+CREATE INDEX IF NOT EXISTS idx_cmd_history_created ON cmd_history(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS audit_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  action TEXT NOT NULL,
+  actor TEXT NOT NULL DEFAULT 'user',
+  target TEXT,
+  detail_json TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_events(action);
+"#,
+            kind: MigrationKind::Up,
+        },
+        // —— 迁移 v15：工作空间 + 部署 + 指标快照 ——
+        Migration {
+            version: 15,
+            description: "workspaces_deploy_metrics",
+            sql: r#"
+CREATE TABLE IF NOT EXISTS workspaces (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  local_root TEXT NOT NULL,
+  host_id INTEGER NOT NULL,
+  remote_root TEXT NOT NULL DEFAULT '/',
+  exclude_patterns TEXT,
+  deploy_recipe TEXT,
+  tab_id TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS deploy_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workspace_id INTEGER NOT NULL,
+  dry_run INTEGER NOT NULL DEFAULT 0,
+  manifest_json TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS metric_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL,
+  host_id INTEGER,
+  payload_json TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_metric_snapshots_session ON metric_snapshots(session_id, created_at DESC);
+"#,
+            kind: MigrationKind::Up,
+        },
+        // —— 迁移 v16：定时任务 + 告警 ——
+        Migration {
+            version: 16,
+            description: "automation_alerts",
+            sql: r#"
+CREATE TABLE IF NOT EXISTS scheduled_jobs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  cron_expr TEXT NOT NULL,
+  job_type TEXT NOT NULL DEFAULT 'script',
+  script_id INTEGER,
+  host_group_id INTEGER,
+  host_ids_json TEXT,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  last_run_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS job_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id INTEGER,
+  job_type TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'running',
+  result_json TEXT,
+  started_at TEXT NOT NULL DEFAULT (datetime('now')),
+  finished_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS alert_rules (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  metric_type TEXT NOT NULL,
+  threshold REAL NOT NULL,
+  comparison TEXT NOT NULL DEFAULT 'gt',
+  host_id INTEGER,
+  host_group_id INTEGER,
+  session_id TEXT,
+  webhook_url TEXT,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS alert_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  rule_id INTEGER NOT NULL,
+  message TEXT NOT NULL,
+  payload_json TEXT,
+  read_flag INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (rule_id) REFERENCES alert_rules(id) ON DELETE CASCADE
+);
+"#,
+            kind: MigrationKind::Up,
+        },
+        // —— 迁移 v17：主机 SSH 代理字段 ——
+        Migration {
+            version: 17,
+            description: "hosts_proxy_fields",
+            sql: r#"
+ALTER TABLE hosts ADD COLUMN proxy_type TEXT;
+ALTER TABLE hosts ADD COLUMN proxy_host TEXT;
+ALTER TABLE hosts ADD COLUMN proxy_port INTEGER;
+"#,
+            kind: MigrationKind::Up,
+        },
+        // —— 迁移 v18：字体默认值 + 深色主题 ——
+        Migration {
+            version: 18,
+            description: "settings_defaults_dark",
+            sql: r#"
+INSERT OR IGNORE INTO app_settings (key, value) VALUES ('term_font_size', '14');
+INSERT OR IGNORE INTO app_settings (key, value) VALUES ('editor_font_size', '12');
+UPDATE app_settings SET value = 'dark' WHERE key = 'theme' AND value = 'light';
+"#,
+            kind: MigrationKind::Up,
+        },
+        // —— 迁移 v19：外观跟随系统、编辑器暗色、笔记随系统 ——
+        Migration {
+            version: 19,
+            description: "settings_theme_system_editor_dark",
+            sql: r#"
+INSERT OR IGNORE INTO app_settings (key, value) VALUES ('editor_theme', 'vs-dark');
+INSERT OR IGNORE INTO app_settings (key, value) VALUES ('markdown_color_mode', 'follow');
+UPDATE app_settings SET value = 'system' WHERE key = 'theme';
+"#,
+            kind: MigrationKind::Up,
+        },
     ]
 }

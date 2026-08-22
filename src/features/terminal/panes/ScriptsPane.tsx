@@ -23,9 +23,9 @@ import {
   ScriptPackageRow,
   ScriptRow,
 } from "@/lib/db";
-import { dialogs } from "@/lib/dialogs";
-import { runScriptOnSession } from "@/lib/runScript";
-import { previewScriptBody } from "@/lib/scriptVars";
+import { dialogs } from "@/lib/ui/dialogs";
+import { runScriptOnSession } from "@/lib/session/runScript";
+import { previewScriptBody } from "@/lib/session/scriptVars";
 import { cn } from "@/lib/utils";
 
 const listRowClass =

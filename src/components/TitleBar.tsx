@@ -24,9 +24,9 @@ import {
 } from "@/components/ui/popover";
 import { WindowControls } from "@/components/WindowControls";
 import { TransferPanel } from "@/features/terminal/TransferPanel";
-import { dialogs } from "@/lib/dialogs";
-import { isMacOs } from "@/lib/platform";
-import { canReconnect, reconnectTermTab } from "@/lib/sessionConnect";
+import { dialogs } from "@/lib/ui/dialogs";
+import { isMacOs } from "@/lib/core/platform";
+import { canReconnect, reconnectTermTab } from "@/lib/session/connect";
 import { cn } from "@/lib/utils";
 import { useTransferStore } from "@/stores/transfer";
 import type { TermTab } from "@/stores/ui";
@@ -65,6 +65,7 @@ export function TitleBar() {
   const toggleLeft = useUiStore((s) => s.toggleLeft);
   const toggleRight = useUiStore((s) => s.toggleRight);
   const setTransferOpen = useUiStore((s) => s.setTransferOpen);
+  const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
   const activeTransfers = useTransferStore(
     (s) =>
       s.jobs.filter(
@@ -297,10 +298,9 @@ export function TitleBar() {
           type="button"
           variant="ghost"
           size="icon-sm"
-          onClick={() => navigate("/settings")}
+          onClick={() => setSettingsOpen(true)}
           title={t("nav.settings")}
           aria-label={t("nav.settings")}
-          aria-current={location.pathname === "/settings" ? "page" : undefined}
         >
           <Settings size={14} />
         </Button>

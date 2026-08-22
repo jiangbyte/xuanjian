@@ -39,9 +39,9 @@ import { PermissionsModal } from "@/features/terminal/PermissionsModal";
 import { joinPath, parentPath } from "@/features/terminal/sftp/pathUtils";
 import { connectHost } from "@/features/terminal/sftp/transferEnqueue";
 import type { PaneTab, SideSnapshot } from "@/features/terminal/sftp/types";
-import { clipboardWriteText } from "@/lib/clipboard";
+import { clipboardWriteText } from "@/lib/ui/clipboard";
 import type { HostRow } from "@/lib/db";
-import { dialogs } from "@/lib/dialogs";
+import { dialogs } from "@/lib/ui/dialogs";
 import { api, type SftpEntry } from "@/lib/tauri";
 import {
   askOverwrite,
@@ -49,7 +49,7 @@ import {
   type DestEndpoint,
   findDestEntry,
   prepareOverwrite,
-} from "@/lib/transferConflict";
+} from "@/lib/transfer/conflict";
 import { bookmarkScope } from "@/stores/pathBookmarks";
 import { enqueueDownload, enqueueUpload } from "@/stores/transfer";
 import { useUiStore } from "@/stores/ui";

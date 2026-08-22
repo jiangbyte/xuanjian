@@ -3,10 +3,13 @@
  * @author Charlie
  */
 
+import { summarizeAuditEvents } from "@/lib/db/audit";
+import { listAlertRules } from "@/lib/db/automation";
 import { listDockerProjects } from "@/lib/db/dockerProjects";
 import { listGroups, listHosts } from "@/lib/db/hosts";
 import { listNoteCategories, listNotes } from "@/lib/db/notes";
 import { listScriptPackages, listScripts } from "@/lib/db/scripts";
+import { listWorkspaces } from "@/lib/db/workspaces";
 import {
   EXPORT_FORMAT,
   EXPORT_VERSION,
@@ -24,12 +27,17 @@ export type BuildExportOptions = {
     scripts?: boolean;
     notes?: boolean;
     dockerProjects?: boolean;
+    workspaces?: boolean;
+    alertRules?: boolean;
+    auditSummary?: boolean;
   };
   /** 仅导出这些 id（缺省 = 该段全部） */
   hostIds?: number[];
   scriptIds?: number[];
   noteIds?: number[];
   dockerProjectIds?: number[];
+  /** 使用 encrypt_secret 加密整包 JSON（同机可解密导入） */
+  encryptPackage?: boolean;
 };
 
 function idSet(ids?: number[]): Set<number> | null {
@@ -46,6 +54,9 @@ export async function buildExport(
     scripts: true,
     notes: true,
     dockerProjects: true,
+    workspaces: true,
+    alertRules: true,
+    auditSummary: true,
   };
   const doc: XuanjianExport = {
     format: EXPORT_FORMAT,
@@ -198,6 +209,50 @@ export async function buildExport(
       };
     });
     doc.dockerProjects = dockerProjects;
+  }
+
+  if (sections.workspaces !== false) {
+    const workspaces = await listWorkspaces();
+    const hosts = await listHosts();
+    const hostById = new Map(hosts.map((h) => [h.id, h.name]));
+    doc.workspaces = workspaces.map((w) => ({
+      name: w.name,
+      local_root: w.local_root,
+      host_name: hostById.get(w.host_id) ?? String(w.host_id),
+      remote_root: w.remote_root,
+      exclude_patterns: w.exclude_patterns,
+      deploy_recipe: w.deploy_recipe,
+    }));
+  }
+
+  if (sections.alertRules !== false) {
+    const rules = await listAlertRules();
+    const hosts = await listHosts();
+    const hostById = new Map(hosts.map((h) => [h.id, h.name]));
+    doc.alertRules = rules.map((r) => ({
+      name: r.name,
+      metric_type: r.metric_type,
+      threshold: r.threshold,
+      comparison: r.comparison,
+      host_name: r.host_id != null ? (hostById.get(r.host_id) ?? null) : null,
+      webhook_url: r.webhook_url,
+      enabled: !!r.enabled,
+    }));
+  }
+
+  if (sections.auditSummary !== false) {
+    doc.auditSummary = await summarizeAuditEvents(30);
+  }
+
+  if (options.encryptPackage) {
+    const plain = JSON.stringify(doc);
+    const encryptedPayload = await api.encryptSecret(plain);
+    return {
+      format: EXPORT_FORMAT,
+      version: EXPORT_VERSION,
+      exportedAt: new Date().toISOString(),
+      encryptedPayload,
+    };
   }
 
   return doc;

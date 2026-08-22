@@ -21,8 +21,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { dialogs } from "@/lib/dialogs";
-import { killCmd, processesCmd, resolveProbeEnv } from "@/lib/probeEnv";
+import { dialogs } from "@/lib/ui/dialogs";
+import { killCmd, processesCmd, resolveProbeEnv } from "@/lib/session/probeEnv";
 import { api } from "@/lib/tauri";
 
 type Proc = {
