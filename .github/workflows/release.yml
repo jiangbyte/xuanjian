@@ -108,27 +108,31 @@ jobs:
             ## Highlights
 
             - 定位为 **AI 桌面运维工作台**：主机、终端、脚本、网络、Docker 与内置 Agent 一体
-            - **玄鉴 Agent**：本地 ReAct 编排 + SubAgent；可读脚本库 / 历史命令，并在可见终端执行
-            - **模型协议**：OpenAI 兼容与 Anthropic Messages 按标准拼接 Base URL（无供应商特例改写）
-            - **会话**：侧栏切换 / 离页保持；记住最近 Agent 会话
-            - **设置**：独立设置页（外观 / 终端 / 模型 / MCP / Agent / 数据）
+            - **玄鉴 Agent**：本地 ReAct 编排 + SubAgent（巡检 / 终端执行 / 分析）
+              - 可读脚本库与历史命令，并在可见终端执行（`run_script` / `terminal_run`）
+              - 权限模式：计划 / 确认执行 / 完全执行；待确认操作固定展示在输入区上方
+            - **模型与协议**
+              - 自定义供应商与模型（上下文窗口、最大输出 Token、思考强度）
+              - OpenAI 兼容 → `{base}/v1/chat/completions`；Anthropic Messages → `{base}/v1/messages`
+              - 按文档填写 Base URL，不做供应商路径特例改写
+            - **体验**：独立设置页；Agent 会话可恢复；计划 Markdown 正确渲染
 
             ## 安装包
 
             | 平台 | 产物 |
             | --- | --- |
             | Windows x64 | `*_x64-setup.exe`（NSIS，推荐）、`*_x64_en-US.msi` |
-            | macOS Apple Silicon | `*_aarch64.app.tar.gz` / `.dmg`（视构建产物） |
-            | macOS Intel | `*_x64.app.tar.gz` / `.dmg`（视构建产物） |
+            | macOS Apple Silicon | `aarch64` 的 `.dmg` / `.app` 包 |
+            | macOS Intel | `x64` 的 `.dmg` / `.app` 包 |
             | Linux x64 | `.deb`、`.AppImage`、`.rpm` |
 
             安装包不含本机用户数据；首次运行会在本机创建空库。
 
-            Windows 便携运行需已安装 [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。
+            Windows 需已安装 [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)（系统通常已自带）。
 
-            ## 说明
+            ## 反馈
 
-            完整变更见对应 tag 的 commit 历史。问题反馈：[Issues](https://github.com/jiangbyte/xuanjian/issues)。
+            问题与建议：[Issues](https://github.com/jiangbyte/xuanjian/issues)
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
