@@ -1,0 +1,117 @@
+# 玄鉴 Release：Windows / macOS (arm64 + x64) / Linux 多平台打包并上传 GitHub Release
+#
+# Author: Charlie
+#
+# 触发：推送 v* tag，或手动 workflow_dispatch（指定 tag）
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "已存在的 git tag（如 v0.1.1）"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: ${{ matrix.name }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64
+            platform: macos-latest
+            args: --target aarch64-apple-darwin
+            rust_targets: aarch64-apple-darwin
+          - name: macOS x64
+            platform: macos-latest
+            args: --target x86_64-apple-darwin
+            rust_targets: x86_64-apple-darwin
+          - name: Linux x64
+            platform: ubuntu-22.04
+            args: ""
+            rust_targets: ""
+          - name: Windows x64
+            platform: windows-latest
+            args: ""
+            rust_targets: ""
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          shared-key: release-${{ matrix.platform }}-${{ matrix.rust_targets || 'host' }}
+
+      - name: Install Linux deps
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev \
+            libssl-dev
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and upload to Release
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ inputs.tag || github.ref_name }}
+          releaseName: Xuanjian ${{ inputs.tag || github.ref_name }}
+          releaseBody: |
+            ## 玄鉴 / Xuanjian ${{ inputs.tag || github.ref_name }}
+
+            **AI 桌面运维工作台**：主机、终端 / SFTP、网络工具、Docker 编排、脚本、笔记、会话日志，以及内置玄鉴 Agent。
+
+            ### 下载说明
+            - **Windows x64**：NSIS（`-setup.exe`）或 MSI
+            - **macOS**：Apple Silicon（`aarch64`）与 Intel（`x64`）分别有 `.dmg` / `.app` 包
+            - **Linux x64**：`.deb` / `.AppImage`（视构建产物而定）
+
+            安装包不含本机用户数据；首次运行会在本机创建空库。
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
