@@ -98,6 +98,8 @@ jobs:
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS runner 上 Vite/tsc 偶发 OOM
+          NODE_OPTIONS: --max-old-space-size=8192
         with:
           tagName: ${{ inputs.tag || github.ref_name }}
           releaseName: Xuanjian ${{ inputs.tag || github.ref_name }}
