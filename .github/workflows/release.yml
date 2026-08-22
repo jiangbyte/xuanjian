@@ -1,4 +1,4 @@
-# 玄鉴 Release：Windows / macOS (arm64 + x64) / Linux 多平台打包并上传 GitHub Release
+# Release：标题仅用 tag（如 v0.1.1），正文见 RELEASE_NOTES.md
 #
 # Author: Charlie
 #
@@ -101,19 +101,34 @@ jobs:
           # macOS runner 上 Vite/tsc 偶发 OOM
           NODE_OPTIONS: --max-old-space-size=8192
         with:
+          # 标题与 tag 一致：v0.1.1（不带品牌名前缀）
           tagName: ${{ inputs.tag || github.ref_name }}
-          releaseName: Xuanjian ${{ inputs.tag || github.ref_name }}
+          releaseName: ${{ inputs.tag || github.ref_name }}
           releaseBody: |
-            ## 玄鉴 / Xuanjian ${{ inputs.tag || github.ref_name }}
+            ## Highlights
 
-            **AI 桌面运维工作台**：主机、终端 / SFTP、网络工具、Docker 编排、脚本、笔记、会话日志，以及内置玄鉴 Agent。
+            - 定位为 **AI 桌面运维工作台**：主机、终端、脚本、网络、Docker 与内置 Agent 一体
+            - **玄鉴 Agent**：本地 ReAct 编排 + SubAgent；可读脚本库 / 历史命令，并在可见终端执行
+            - **模型协议**：OpenAI 兼容与 Anthropic Messages 按标准拼接 Base URL（无供应商特例改写）
+            - **会话**：侧栏切换 / 离页保持；记住最近 Agent 会话
+            - **设置**：独立设置页（外观 / 终端 / 模型 / MCP / Agent / 数据）
 
-            ### 下载说明
-            - **Windows x64**：NSIS（`-setup.exe`）或 MSI
-            - **macOS**：Apple Silicon（`aarch64`）与 Intel（`x64`）分别有 `.dmg` / `.app` 包
-            - **Linux x64**：`.deb` / `.AppImage`（视构建产物而定）
+            ## 安装包
+
+            | 平台 | 产物 |
+            | --- | --- |
+            | Windows x64 | `*_x64-setup.exe`（NSIS，推荐）、`*_x64_en-US.msi` |
+            | macOS Apple Silicon | `*_aarch64.app.tar.gz` / `.dmg`（视构建产物） |
+            | macOS Intel | `*_x64.app.tar.gz` / `.dmg`（视构建产物） |
+            | Linux x64 | `.deb`、`.AppImage`、`.rpm` |
 
             安装包不含本机用户数据；首次运行会在本机创建空库。
+
+            Windows 便携运行需已安装 [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。
+
+            ## 说明
+
+            完整变更见对应 tag 的 commit 历史。问题反馈：[Issues](https://github.com/jiangbyte/xuanjian/issues)。
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
