@@ -7,6 +7,7 @@
 
 import { create } from "zustand";
 import { api } from "@/lib/tauri";
+import { setBlockingUi } from "@/lib/ui/blockingUi";
 import { useUiStore } from "@/stores/ui";
 
 export type TransferKind = "upload" | "download" | "copy";
@@ -467,6 +468,76 @@ export function enqueueUpload(
     name: basename(localPath),
     bytesTotal: size,
   });
+}
+
+export type TransferWaitResult = {
+  completed: number;
+  failed: number;
+  pending: number;
+  errors: string[];
+};
+
+/** 等待一批传输任务结束（用于 Agent 同步后确认结果） */
+export async function waitForTransferJobs(
+  jobIds: string[],
+  timeoutMs = 10 * 60_000,
+): Promise<TransferWaitResult> {
+  if (!jobIds.length) {
+    return { completed: 0, failed: 0, pending: 0, errors: [] };
+  }
+  setBlockingUi(true, "transfer");
+  try {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const jobs = useTransferStore.getState().jobs.filter((j) =>
+        jobIds.includes(j.id),
+      );
+      const pending = jobs.filter(
+        (j) =>
+          j.status === "queued" ||
+          j.status === "running" ||
+          j.status === "paused",
+      );
+      const done = jobs.length - pending.length;
+      setBlockingUi(
+        true,
+        "transfer",
+        pending.length ? `${done}/${jobs.length}` : undefined,
+      );
+      if (!pending.length) {
+        const failed = jobs.filter((j) => j.status === "failed");
+        return {
+          completed: jobs.filter((j) => j.status === "completed").length,
+          failed: failed.length,
+          pending: jobs.filter(
+            (j) => j.status === "queued" || j.status === "running",
+          ).length,
+          errors: failed.map(
+            (j) => `${j.remotePath || j.name}: ${j.error ?? "unknown"}`,
+          ),
+        };
+      }
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    const jobs = useTransferStore.getState().jobs.filter((j) =>
+      jobIds.includes(j.id),
+    );
+    const still = jobs.filter(
+      (j) => j.status === "queued" || j.status === "running",
+    );
+    return {
+      completed: jobs.filter((j) => j.status === "completed").length,
+      failed: jobs.filter((j) => j.status === "failed").length,
+      pending: still.length,
+      errors: still.length
+        ? [`${still.length} 个传输任务超时未完成`]
+        : jobs
+            .filter((j) => j.status === "failed")
+            .map((j) => `${j.remotePath || j.name}: ${j.error ?? "unknown"}`),
+    };
+  } finally {
+    setBlockingUi(false);
+  }
 }
 
 /**

@@ -1,9 +1,9 @@
 /**
- * @file 按需打开本地 Shell / SSH 标签（Agent 用，无需用户预先打开 WSL 等）
+ * @file 解析已有终端标签并就地重连（禁止自动新建标签）
  * @author Charlie
  */
 
-import { getHost, type HostRow } from "@/lib/db";
+import { getHost } from "@/lib/db";
 import { connectSshHost } from "@/lib/session/connect";
 import { startRecordingForOpenTab } from "@/lib/session/recorder";
 import { api, type LocalShellInfo } from "@/lib/tauri";
@@ -12,7 +12,7 @@ import { type TermTab, useUiStore } from "@/stores/ui";
 
 export type EnsureTabResult = {
   tab: TermTab;
-  /** 本次调用是否新建或重连了会话 */
+  /** 保留字段；始终为 false（不再自动新建标签） */
   provisioned: boolean;
 };
 
@@ -34,6 +34,14 @@ export function findOpenLocalShellTab(shellId: string): TermTab | null {
   );
 }
 
+/** 查找任意本地 Shell 标签（含已断开） */
+export function findLocalShellTab(shellId: string): TermTab | null {
+  const { tabs } = useUiStore.getState();
+  return (
+    tabs.find((t) => t.kind === "local" && t.shellId === shellId) ?? null
+  );
+}
+
 /** 查找已就绪的 SSH 标签 */
 export function findOpenSshTab(hostId: number): TermTab | null {
   const { tabs } = useUiStore.getState();
@@ -48,38 +56,41 @@ export function findOpenSshTab(hostId: number): TermTab | null {
   );
 }
 
-async function openLocalShellTab(
-  shell: LocalShellInfo,
-  opts?: { activate?: boolean },
-): Promise<EnsureTabResult> {
-  const { tabs, addTab, updateTab, setActiveTab } = useUiStore.getState();
-
-  const stale = tabs.find(
-    (t) => t.kind === "local" && t.shellId === shell.id,
+/** 查找任意 SSH 标签（含已断开） */
+export function findSshTab(hostId: number): TermTab | null {
+  const { tabs } = useUiStore.getState();
+  return (
+    tabs.find((t) => t.kind === "ssh" && t.hostId === hostId) ?? null
   );
-  if (stale?.status === "open" && stale.sessionId) {
-    if (opts?.activate) setActiveTab(stale.id);
-    return { tab: stale, provisioned: false };
-  }
+}
 
-  const tabId = stale?.id ?? crypto.randomUUID();
-  if (!stale) {
-    addTab({
-      id: tabId,
-      title: shell.name,
-      kind: "local",
-      sessionId: null,
-      shellId: shell.id,
-      status: "connecting",
-    });
-  } else {
-    updateTab(tabId, { status: "connecting", sessionId: null });
-  }
-  if (opts?.activate) setActiveTab(tabId);
+function tabNotOpenError(shell: LocalShellInfo): string {
+  return `请先在终端中手动打开 Shell 标签：${shell.name}（${shell.id}）`;
+}
 
+function sshTabNotOpenError(hostId: number, label: string): string {
+  return `请先在终端中手动打开 SSH 标签：${label}（host_id=${hostId}）`;
+}
+
+/** 在当前标签内重连本地 Shell（含 WSL），绝不新建或切换标签 */
+export async function reconnectLocalShellTabInPlace(
+  tab: TermTab,
+): Promise<EnsureTabResult> {
+  if (tab.kind !== "local" || !tab.shellId) {
+    throw new Error("Not a local shell tab");
+  }
+  if (tab.sessionId && tab.status === "open") {
+    return { tab, provisioned: false };
+  }
+  const shells = await api.listLocalShells();
+  const shell = shells.find((s) => s.id === tab.shellId);
+  if (!shell) throw new Error(`Shell not found: ${tab.shellId}`);
+
+  const { updateTab } = useUiStore.getState();
+  updateTab(tab.id, { status: "connecting", sessionId: null });
   const session = await api.localShellOpen(shell.id);
-  const recording = startRecordingForOpenTab(tabId, session.id);
-  updateTab(tabId, {
+  const recording = startRecordingForOpenTab(tab.id, session.id);
+  updateTab(tab.id, {
     sessionId: session.id,
     status: "open",
     title: session.title || shell.name,
@@ -87,83 +98,77 @@ async function openLocalShellTab(
   });
   await recording;
 
-  const tab = freshTab(tabId);
-  if (!tab) throw new Error("Failed to open local shell tab");
-  return { tab, provisioned: true };
+  const fresh = freshTab(tab.id);
+  if (!fresh) throw new Error("Failed to reconnect local shell tab");
+  return { tab: fresh, provisioned: false };
 }
 
-async function openSshTab(
-  host: HostRow,
-  opts?: { activate?: boolean },
+/** 在当前标签内重连 SSH，绝不新建或切换标签 */
+export async function reconnectSshTabInPlace(
+  tab: TermTab,
 ): Promise<EnsureTabResult> {
-  const { tabs, addTab, updateTab, setActiveTab } = useUiStore.getState();
-
-  const stale = tabs.find(
-    (t) => t.kind === "ssh" && t.hostId === host.id,
-  );
-  if (stale?.status === "open" && stale.sessionId) {
-    if (opts?.activate) setActiveTab(stale.id);
-    return { tab: stale, provisioned: false };
+  if (tab.kind !== "ssh" || tab.hostId == null) {
+    throw new Error("Not an SSH tab");
   }
-
-  const tabId = stale?.id ?? crypto.randomUUID();
-  if (!stale) {
-    addTab({
-      id: tabId,
-      title: host.name || host.host,
-      kind: "ssh",
-      sessionId: null,
-      hostId: host.id,
-      status: "connecting",
-    });
-  } else {
-    updateTab(tabId, { status: "connecting", sessionId: null });
+  if (tab.sessionId && tab.status === "open") {
+    return { tab, provisioned: false };
   }
-  if (opts?.activate) setActiveTab(tabId);
+  const host = await getHost(tab.hostId);
+  if (!host) throw new Error(`Host #${tab.hostId} not found`);
 
+  const { updateTab } = useUiStore.getState();
+  updateTab(tab.id, { status: "connecting", sessionId: null });
   const { session } = await connectSshHost(host.id);
-  const recording = startRecordingForOpenTab(tabId, session.id);
-  updateTab(tabId, {
+  const recording = startRecordingForOpenTab(tab.id, session.id);
+  updateTab(tab.id, {
     sessionId: session.id,
     status: "open",
     title: session.title || host.name || host.host,
   });
   await recording;
 
-  const tab = freshTab(tabId);
-  if (!tab) throw new Error("Failed to open SSH tab");
-  return { tab, provisioned: true };
+  const fresh = freshTab(tab.id);
+  if (!fresh) throw new Error("Failed to reconnect SSH tab");
+  return { tab: fresh, provisioned: false };
 }
 
-/** 确保本地 Shell（含 WSL）标签已连接；无标签时后台自动创建 */
+/**
+ * 使用已有本地 Shell / WSL 标签；无标签时抛错，禁止自动新建。
+ */
 export async function ensureLocalShellTab(
   shellId: string,
-  opts?: { activate?: boolean },
+  _opts?: { activate?: boolean },
 ): Promise<EnsureTabResult> {
-  const hit = findOpenLocalShellTab(shellId);
-  if (hit) {
-    if (opts?.activate) useUiStore.getState().setActiveTab(hit.id);
-    return { tab: hit, provisioned: false };
-  }
+  const open = findOpenLocalShellTab(shellId);
+  if (open) return { tab: open, provisioned: false };
+
+  const stale = findLocalShellTab(shellId);
+  if (stale) return reconnectLocalShellTabInPlace(stale);
+
   const shells = await api.listLocalShells();
   const shell = shells.find((s) => s.id === shellId);
   if (!shell) throw new Error(`Shell not found: ${shellId}`);
-  return openLocalShellTab(shell, opts);
+  throw new Error(tabNotOpenError(shell));
 }
 
-/** 确保 SSH 标签已连接 */
+/**
+ * 使用已有 SSH 标签；无标签时抛错，禁止自动新建。
+ */
 export async function ensureSshTab(
   hostId: number,
-  opts?: { activate?: boolean },
+  _opts?: { activate?: boolean },
 ): Promise<EnsureTabResult> {
-  const hit = findOpenSshTab(hostId);
-  if (hit) {
-    if (opts?.activate) useUiStore.getState().setActiveTab(hit.id);
-    return { tab: hit, provisioned: false };
-  }
+  const open = findOpenSshTab(hostId);
+  if (open) return { tab: open, provisioned: false };
+
+  const stale = findSshTab(hostId);
+  if (stale) return reconnectSshTabInPlace(stale);
+
   const host = await getHost(hostId);
   if (!host) throw new Error(`Host #${hostId} not found`);
-  return openSshTab(host, opts);
+  throw new Error(
+    sshTabNotOpenError(hostId, host.name || host.host),
+  );
 }
 
 /** 解析默认 WSL shell_id */

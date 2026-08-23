@@ -4,6 +4,7 @@
  */
 
 import { stripAnsi } from "@/lib/agent/ansi";
+import { waitForTerminalOutput } from "@/lib/agent/tools/terminalWait";
 import { runDeployToolHandler } from "@/lib/agent/tools/handlers/deploy";
 import { runPipelineToolHandler } from "@/lib/agent/tools/handlers/pipeline";
 import { runReadToolHandler } from "@/lib/agent/tools/handlers/read";
@@ -31,7 +32,7 @@ import {
   resolveTabForExecution,
   tabIdFromArgs,
 } from "@/lib/agent/tools/helpers";
-import { asNum, sleep } from "@/lib/agent/tools/types";
+import { asNum } from "@/lib/agent/tools/types";
 import { useCmdHistory } from "@/stores/cmdHistory";
 
 function parseProbeMetrics(raw: string) {
@@ -100,10 +101,35 @@ export async function runToolHandler(
     case "terminal_tail": {
       const target = await activeSessionIdAsync(args);
       if (!target) return formatResolveError(args, "No active terminal session");
-      const max =
-        typeof args.max_chars === "number" ? args.max_chars : 8000;
-      const text = stripAnsi(await getTranscriptTail(target.sessionId, max));
-      return text || "(empty transcript)";
+      const maxChars =
+        typeof args.max_chars === "number"
+          ? Math.min(Math.max(args.max_chars, 256), 32_000)
+          : 12_000;
+      const waitMs =
+        typeof args.wait_ms === "number"
+          ? Math.min(Math.max(args.wait_ms, 0), 600_000)
+          : 0;
+      const stableMs =
+        typeof args.stable_ms === "number"
+          ? Math.min(Math.max(args.stable_ms, 500), 30_000)
+          : 1500;
+
+      const waited = await waitForTerminalOutput({
+        sessionId: target.sessionId,
+        maxChars,
+        waitMs,
+        stableMs,
+      });
+
+      return JSON.stringify({
+        ok: true,
+        tab_id: target.tab.id,
+        waited_ms: waited.waited_ms,
+        finish_reason: waited.finish_reason,
+        likely_finished: waited.likely_finished,
+        chars: waited.output.length,
+        output: waited.output || "(empty transcript)",
+      });
     }
     case "host_info": {
       let hostId =
@@ -247,10 +273,15 @@ export async function runToolHandler(
       useCmdHistory.getState().push({ cmd, sessionId: sid });
       const wait =
         typeof args.wait_ms === "number"
-          ? Math.min(Math.max(args.wait_ms, 200), 8000)
+          ? Math.min(Math.max(args.wait_ms, 200), 600_000)
           : 900;
-      await sleep(wait);
-      const after = await getTranscriptTail(sid, 12_000);
+      const waited = await waitForTerminalOutput({
+        sessionId: sid,
+        maxChars: 12_000,
+        waitMs: wait,
+        stableMs: 1200,
+      });
+      const after = waited.output;
       let delta = after;
       if (before && after.startsWith(before)) delta = after.slice(before.length);
       return JSON.stringify({
@@ -260,6 +291,9 @@ export async function runToolHandler(
         plane: describePlane(tab),
         auto_opened: provisioned,
         command: cmd,
+        waited_ms: waited.waited_ms,
+        finish_reason: waited.finish_reason,
+        likely_finished: waited.likely_finished,
         output: stripAnsi((delta || after).slice(0, 16_000)),
       });
     }
@@ -296,16 +330,23 @@ export async function runToolHandler(
       });
       const wait =
         typeof args.wait_ms === "number"
-          ? Math.min(Math.max(args.wait_ms, 200), 8000)
-          : 1200;
-      await sleep(wait);
-      const after = await getTranscriptTail(sid, 12_000);
+          ? Math.min(Math.max(args.wait_ms, 200), 600_000)
+          : 3000;
+      const waited = await waitForTerminalOutput({
+        sessionId: sid,
+        maxChars: 12_000,
+        waitMs: wait,
+        stableMs: 1200,
+      });
+      const after = waited.output;
       let delta = after;
       if (before && after.startsWith(before)) delta = after.slice(before.length);
       return JSON.stringify({
         ok: true,
         script_id: script.id,
         script_name: script.name,
+        waited_ms: waited.waited_ms,
+        likely_finished: waited.likely_finished,
         output: stripAnsi((delta || after).slice(0, 16_000)),
       });
     }

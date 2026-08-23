@@ -23,10 +23,33 @@ import {
   buildSyncManifest,
 } from "@/lib/workspace/syncEngine";
 import { resolveWorkspaceFsEndpoint } from "@/lib/workspace/context";
+import { ensureRemoteParentDir } from "@/lib/workspace/remoteDirs";
 import { fsWriteFile } from "@/lib/fs";
 import { api } from "@/lib/tauri";
-import { enqueueUpload } from "@/stores/transfer";
+import { enqueueUpload, waitForTransferJobs } from "@/stores/transfer";
 import { useUiStore } from "@/stores/ui";
+import type { SyncManifest } from "@/lib/workspace/syncEngine";
+
+/** dry_run 时压缩清单，避免 Observation 撑爆上下文 */
+function summarizeSyncManifest(manifest: SyncManifest) {
+  const uploads = manifest.entries.filter((e) => e.action === "upload");
+  const sample = uploads.slice(0, 30).map((e) => ({
+    relPath: e.relPath,
+    action: e.action,
+    reason: e.reason,
+    size: e.size,
+  }));
+  return {
+    workspaceId: manifest.workspaceId,
+    dryRun: manifest.dryRun,
+    uploadCount: manifest.uploadCount,
+    skipCount: manifest.skipCount,
+    warnings: manifest.warnings,
+    sample,
+    truncated: uploads.length > sample.length,
+    omittedUploads: Math.max(0, uploads.length - sample.length),
+  };
+}
 
 async function requireWorkspace(workspaceId?: number | null) {
   const ws = await resolveActiveWorkspace(workspaceId ?? undefined);
@@ -70,13 +93,16 @@ export async function runDeployToolHandler(
           error: "SSH session required for remote upload",
         });
       }
+      await ensureRemoteParentDir(sessionId, remoteAbs.abs);
       const jobId = enqueueUpload(sessionId, local.abs, remoteAbs.abs);
       useUiStore.getState().setTransferOpen(true);
+      const transfer = await waitForTransferJobs([jobId], 10 * 60_000);
       return JSON.stringify({
-        ok: true,
+        ok: transfer.failed === 0 && transfer.pending === 0,
         jobId,
         local_path: local.abs,
         remote_path: remoteAbs.abs,
+        transfer,
       });
     }
     case "upload_tree": {
@@ -99,32 +125,43 @@ export async function runDeployToolHandler(
         skipCount: 0,
         dryRun: false,
       };
-      const { enqueued, jobIds } = await applySyncManifest(ws, applyManifest);
+      const { enqueued, jobIds, transfer } = await applySyncManifest(ws, applyManifest);
       if (enqueued > 0) useUiStore.getState().setTransferOpen(true);
       return JSON.stringify({
         ok: true,
         enqueued,
         jobIds,
         subpath: sub,
+        transfer,
       });
     }
     case "sync_to_remote": {
-      const wsRes = await requireWorkspace(asNum(args.workspace_id));
-      if (!wsRes.ok) return JSON.stringify(wsRes);
-      const { ws } = wsRes;
-      const dryRun = args.dry_run !== false;
-      const manifest = await buildSyncManifest(ws, { dryRun });
-      if (dryRun) {
-        return JSON.stringify(manifest, null, 2);
+      try {
+        const wsRes = await requireWorkspace(asNum(args.workspace_id));
+        if (!wsRes.ok) return JSON.stringify(wsRes);
+        const { ws } = wsRes;
+        const dryRun = args.dry_run !== false;
+        const manifest = await buildSyncManifest(ws, { dryRun });
+        if (dryRun) {
+          return JSON.stringify(summarizeSyncManifest(manifest), null, 2);
+        }
+        const { enqueued, jobIds, transfer } = await applySyncManifest(ws, manifest);
+        if (enqueued > 0) useUiStore.getState().setTransferOpen(true);
+        return JSON.stringify({
+          ok: true,
+          enqueued,
+          jobIds,
+          uploadCount: manifest.uploadCount,
+          warnings: manifest.warnings,
+          transfer,
+        });
+      } catch (e) {
+        return JSON.stringify({
+          ok: false,
+          error: String(e),
+          hint: "检查工作空间 remote_root 与 SSH 会话；远程目录不存在时 sync dry_run 仍应成功，实际同步会自动 mkdir -p。",
+        });
       }
-      const { enqueued, jobIds } = await applySyncManifest(ws, manifest);
-      if (enqueued > 0) useUiStore.getState().setTransferOpen(true);
-      return JSON.stringify({
-        ok: true,
-        enqueued,
-        jobIds,
-        uploadCount: manifest.uploadCount,
-      });
     }
     case "write_remote_file": {
       const wsRes = await requireWorkspace(asNum(args.workspace_id));
@@ -146,6 +183,7 @@ export async function runDeployToolHandler(
           error: "SSH SFTP session required",
         });
       }
+      await ensureRemoteParentDir(ep.sessionId, remote.abs);
       await fsWriteFile(ep, remote.abs, content);
       return JSON.stringify({
         ok: true,
@@ -185,7 +223,11 @@ export async function runDeployToolHandler(
         );
       }
 
-      let syncResult: { enqueued: number; jobIds: string[] } | null = null;
+      let syncResult: {
+        enqueued: number;
+        jobIds: string[];
+        transfer?: { completed: number; failed: number; errors: string[] };
+      } | null = null;
       if (syncFirst && manifest && manifest.uploadCount > 0) {
         syncResult = await applySyncManifest(ws, {
           ...manifest,

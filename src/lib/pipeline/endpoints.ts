@@ -18,7 +18,6 @@ export type ResolvedEndpoint = {
   endpoint: FsEndpoint;
   tab: TermTab;
   sessionId: string;
-  provisioned: boolean;
 };
 
 async function defaultLocalShellId(): Promise<string> {
@@ -31,43 +30,46 @@ async function defaultLocalShellId(): Promise<string> {
   return shells.find((s) => s.isDefault)?.id ?? shells[0]?.id ?? "local:powershell";
 }
 
-/** 解析 Pipeline 端点为可执行会话 + FS 端点 */
+/** 解析 Pipeline 端点为可执行会话 + FS 端点（须用户已手动打开对应终端标签） */
 export async function resolvePipelineEndpoint(
   ep: PipelineEndpoint,
 ): Promise<ResolvedEndpoint> {
   if (ep.kind === "local") {
     const shellId = await defaultLocalShellId();
-    const { tab, provisioned } = await ensureLocalShellTab(shellId);
+    const { tab } = await ensureLocalShellTab(shellId);
     const fs = resolveFsEndpoint(tab);
-    if (!tab.sessionId || !fs) throw new Error("Failed to open local shell");
+    if (!tab.sessionId || !fs) {
+      throw new Error("本地 Shell 标签未连接，请先在终端打开并连接");
+    }
     return {
       endpoint: fs,
       tab,
       sessionId: tab.sessionId,
-      provisioned,
     };
   }
   if (ep.kind === "wsl") {
     const shellId =
       ep.shell_id ?? (await resolveDefaultWslShellId(ep.wsl_distro));
-    if (!shellId) throw new Error("No WSL distro available");
-    const { tab, provisioned } = await ensureLocalShellTab(shellId);
+    if (!shellId) throw new Error("未检测到 WSL 发行版");
+    const { tab } = await ensureLocalShellTab(shellId);
     const fs = resolveFsEndpoint(tab);
-    if (!tab.sessionId || !fs) throw new Error("Failed to open WSL session");
+    if (!tab.sessionId || !fs) {
+      throw new Error("WSL 终端标签未连接，请先在终端打开对应 WSL 标签");
+    }
     return {
       endpoint: fs,
       tab,
       sessionId: tab.sessionId,
-      provisioned,
     };
   }
-  const { tab, provisioned } = await ensureSshTab(ep.host_id);
+  const { tab } = await ensureSshTab(ep.host_id);
   const fs = resolveFsEndpoint(tab);
-  if (!tab.sessionId || !fs) throw new Error("Failed to open SSH session");
+  if (!tab.sessionId || !fs) {
+    throw new Error("SSH 终端标签未连接，请先在终端打开对应主机标签");
+  }
   return {
     endpoint: fs,
     tab,
     sessionId: tab.sessionId,
-    provisioned,
   };
 }

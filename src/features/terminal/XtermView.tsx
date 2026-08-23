@@ -8,6 +8,7 @@
 
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
+import "@xterm/xterm/css/xterm.css";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {

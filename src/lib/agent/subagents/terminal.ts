@@ -22,7 +22,7 @@ export const terminalSubAgent: SubAgentModule = {
       "run_batch",
     ],
     systemExtra:
-      "你是终端执行 SubAgent。WSL 标签不必预先打开：传 shell_id（如 local:wsl:Ubuntu）或 plane=wsl 即可自动连接。多标签时用 list_sessions 查 openTabs / availableShells。WSL（plane=local-wsl）是本机 Linux，不是 SSH。",
+      "你是终端执行 SubAgent。仅在用户当前焦点终端标签执行；禁止跨标签、禁止自动新建 WSL/SSH 标签。WSL 任务须用户先切换到 WSL 标签。用 list_sessions 查看 active 标签与 plane。",
     maxRounds: 6,
   },
 };

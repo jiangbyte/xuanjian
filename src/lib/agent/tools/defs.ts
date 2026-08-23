@@ -9,7 +9,7 @@ const TAB_ID_PROP = {
   tab_id: {
     type: "string",
     description:
-      "已打开标签 ID（list_sessions.openTabs）。多标签时指定执行平面。",
+      "当前焦点标签 ID（须与 list_sessions 中 active=true 一致；禁止跨标签）。",
   },
 } as const;
 
@@ -18,21 +18,21 @@ const EXEC_TARGET_PROPS = {
   shell_id: {
     type: "string",
     description:
-      "本地 Shell ID（list_sessions.availableShells）。如 local:wsl:Ubuntu；标签未打开时自动后台连接。",
+      "仅用于校验：须与当前焦点标签 shellId 一致（如 local:wsl:Ubuntu），不会自动打开其他标签。",
   },
   plane: {
     type: "string",
     enum: ["wsl", "ssh"],
     description:
-      "执行平面简写。plane=wsl 可配 wsl_distro；plane=ssh 需 host_id。无 tab 时自动打开。",
+      "仅用于校验：plane=wsl/ssh 须与当前焦点标签类型一致，不会自动新建或切换标签。",
   },
   wsl_distro: {
     type: "string",
-    description: "WSL 发行版名（plane=wsl 时），如 Ubuntu",
+    description: "仅校验：WSL 发行版名须与当前 WSL 标签一致",
   },
   host_id: {
     type: "number",
-    description: "SSH 主机 ID（plane=ssh 时自动连接）",
+    description: "仅校验：SSH host_id 须与当前 SSH 标签一致",
   },
 } as const;
 
@@ -42,13 +42,21 @@ export const TOOL_DEFS: AgentToolDef[] = [
     function: {
       name: "terminal_tail",
       description:
-        "读取当前（或指定）交互终端的最近输出。先观察再行动时必用。",
+        "读取交互终端最近输出。长任务（docker pull/compose 等）可设 wait_ms 为最长等待；出现 shell 提示符或输出稳定后会自动提前返回。",
       parameters: {
         type: "object",
         properties: {
           ...EXEC_TARGET_PROPS,
           session_id: { type: "string", description: "可选，默认活动会话" },
-          max_chars: { type: "number" },
+          max_chars: { type: "number", description: "默认 12000" },
+          wait_ms: {
+            type: "number",
+            description: "最长等待毫秒数（0=立即返回，最大 600000）",
+          },
+          stable_ms: {
+            type: "number",
+            description: "输出连续不变多少毫秒视为稳定（默认 1500）",
+          },
         },
       },
     },
@@ -58,7 +66,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
     function: {
       name: "list_sessions",
       description:
-        "列出 openTabs、availableShells（含 WSL shell_id）、availableHosts；WSL 不必预先打开标签",
+        "列出 openTabs、availableShells、availableHosts；仅 active=true 的焦点标签可用于执行。",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -129,14 +137,17 @@ export const TOOL_DEFS: AgentToolDef[] = [
     function: {
       name: "terminal_run",
       description:
-        "在【可见交互终端】中执行命令。多标签时用 tab_id 指定 WSL 或 SSH。优先用此工具代替 session_exec。",
+        "在【当前焦点交互终端】中执行命令。优先用此工具代替 session_exec。长任务设较大 wait_ms（上限），命令结束或输出稳定后自动返回。",
       parameters: {
         type: "object",
         properties: {
           ...EXEC_TARGET_PROPS,
           session_id: { type: "string" },
           command: { type: "string" },
-          wait_ms: { type: "number" },
+          wait_ms: {
+            type: "number",
+            description: "等待命令输出（毫秒，最大 600000）",
+          },
         },
         required: ["command"],
       },
@@ -147,7 +158,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
     function: {
       name: "session_exec",
       description:
-        "旁路一次性执行（不显示在交互终端）。多标签时用 tab_id 指定 WSL 或 SSH 执行平面。",
+        "旁路一次性执行（不显示在交互终端）。仅在当前焦点标签会话中执行。",
       parameters: {
         type: "object",
         properties: {
@@ -246,7 +257,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
     function: {
       name: "list_files",
       description:
-        "列出指定标签文件端点下的目录（local/WSL/SFTP）。多标签时用 tab_id 选择 WSL 或 SSH。",
+        "列出当前焦点标签文件端点下的目录（local/WSL/SFTP）。",
       parameters: {
         type: "object",
         properties: {
@@ -502,7 +513,8 @@ export const TOOL_DEFS: AgentToolDef[] = [
     type: "function",
     function: {
       name: "sync_to_remote",
-      description: "工作空间增量同步；dry_run 默认 true 仅生成 manifest",
+      description:
+        "工作空间增量同步。dry_run=true（默认）仅生成 manifest 预览；预览后须继续 dry_run=false 实际同步。远程目录不存在时 dry_run 仍可成功，实际同步会自动 mkdir -p。",
       parameters: {
         type: "object",
         properties: {

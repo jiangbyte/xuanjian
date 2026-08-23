@@ -20,6 +20,8 @@
         "decorations": false,
         "resizable": true,
         "center": true,
+        "visible": false,
+        "backgroundColor": "#f6f8fa",
         "devtools": false
       }
     ],

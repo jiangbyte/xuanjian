@@ -38,10 +38,39 @@ import type {
 import {
   ReactLoopGuard,
   REACT_LIMITS,
+  type GuardStopReason,
 } from "@/lib/agent/reactGuards";
+import {
+  registerAgentWallClockHooks,
+  setBlockingUi,
+} from "@/lib/ui/blockingUi";
 import type { NormalizedLlmReply } from "@/lib/agent/llm";
 
 const ORCH_MAX_ROUNDS = REACT_LIMITS.ORCH_MAX_ROUNDS;
+
+/** 压缩历史 tool Observation，避免长任务上下文膨胀导致模型中断 */
+function compactLlmMessagesForModel(messages: LlmMessage[]): LlmMessage[] {
+  const TOOL_KEEP_FULL = 8;
+  const OLD_TOOL_MAX = 3500;
+  const RECENT_TOOL_MAX = 10_000;
+
+  const toolIdxs: number[] = [];
+  messages.forEach((m, i) => {
+    if (m.role === "tool") toolIdxs.push(i);
+  });
+  const keepFullFrom = Math.max(0, toolIdxs.length - TOOL_KEEP_FULL);
+
+  return messages.map((m, i) => {
+    if (m.role !== "tool" || typeof m.content !== "string") return m;
+    const pos = toolIdxs.indexOf(i);
+    const max = pos >= keepFullFrom ? RECENT_TOOL_MAX : OLD_TOOL_MAX;
+    if (m.content.length <= max) return m;
+    return {
+      ...m,
+      content: `${m.content.slice(0, max)}\n…(已截断，共 ${m.content.length} 字符)`,
+    };
+  });
+}
 
 type ProviderBundle = Awaited<ReturnType<typeof resolveProvider>>;
 
@@ -105,6 +134,23 @@ function parseArgs(raw: string): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+function shouldPauseWallClockForTool(
+  name: string,
+  args: Record<string, unknown>,
+): boolean {
+  const wait =
+    typeof args.wait_ms === "number" ? Math.max(args.wait_ms, 0) : 0;
+  if ((name === "terminal_tail" || name === "terminal_run") && wait > 2000) {
+    return true;
+  }
+  if (name === "run_script" && wait > 2000) return true;
+  if (name === "session_exec") return true;
+  if (name === "sync_to_remote" && args.dry_run === false) return true;
+  if (name === "upload_file" || name === "upload_tree") return true;
+  if (name === "deploy" && args.dry_run !== true) return true;
+  return false;
 }
 
 function tryExtractPlan(text: string): string[] | null {
@@ -207,9 +253,15 @@ async function finishGracefully(
   assistantParts: MessagePart[],
   emit: (e: RuntimeEvent) => void,
 ): Promise<void> {
-  if (hasUserFacingText(assistantParts)) return;
+  const guardStop = opts.guard.lastStopReason;
+  if (hasUserFacingText(assistantParts) && !guardStop) return;
 
-  const summary = await tryEarlyStopSummary(opts, provider, assistantParts);
+  const summary = await tryEarlyStopSummary(
+    opts,
+    provider,
+    assistantParts,
+    guardStop,
+  );
   if (summary) {
     assistantParts.push({
       type: "text",
@@ -249,11 +301,14 @@ async function tryEarlyStopSummary(
   opts: LoopOpts,
   provider: ProviderBundle,
   assistantParts: MessagePart[],
+  guardStop: GuardStopReason | null = null,
 ): Promise<string | null> {
-  if (hasUserFacingText(assistantParts)) return null;
-
   const observations = buildObservationsForSummary(assistantParts);
   if (!observations.trim()) return null;
+
+  const incompleteHint = guardStop
+    ? "\n\n注意：任务可能尚未完全结束。请明确说明已完成与未完成的部分，并建议用户回复「继续」以接着执行。"
+    : "";
 
   try {
     emitActivity((e) => opts.input.onEvent(e), "summarizing", "整理回复…");
@@ -275,7 +330,7 @@ async function tryEarlyStopSummary(
         },
         {
           role: "user",
-          content: `用户问题：${opts.userText}\n\n已收集的信息：\n${observations}\n\n请直接回答用户。`,
+          content: `用户问题：${opts.userText}\n\n已收集的信息：\n${observations}${incompleteHint}\n\n请直接回答用户。`,
         },
       ],
       [],
@@ -290,6 +345,10 @@ async function tryEarlyStopSummary(
 async function runReActLoop(opts: LoopOpts): Promise<MessagePart[]> {
   const { input, provider, guard } = opts;
   const emit = (e: RuntimeEvent) => opts.input.onEvent(e);
+  registerAgentWallClockHooks(
+    () => guard.pauseWallClock(),
+    () => guard.resumeWallClock(),
+  );
   const assistantParts: MessagePart[] = [];
   const messages: LlmMessage[] = [
     { role: "system", content: opts.system },
@@ -300,8 +359,11 @@ async function runReActLoop(opts: LoopOpts): Promise<MessagePart[]> {
   let rounds = 0;
   let emptyRounds = 0;
   let finished = false;
+  let progressBonus = 0;
+  let forceTextOnlyNext = false;
+  const roundCap = () => opts.maxRounds + progressBonus;
 
-  while (rounds < opts.maxRounds) {
+  while (rounds < roundCap()) {
     checkAbort(input.signal);
 
     const wallHit = guard.checkWallClock();
@@ -326,8 +388,8 @@ async function runReActLoop(opts: LoopOpts): Promise<MessagePart[]> {
           maxTokens: provider.maxTokens,
           signal: input.signal,
         },
-        messages,
-        opts.tools,
+        compactLlmMessagesForModel(messages),
+        forceTextOnlyNext ? [] : opts.tools,
       );
     } catch (e) {
       const msg = userFacingError(e);
@@ -345,6 +407,7 @@ async function runReActLoop(opts: LoopOpts): Promise<MessagePart[]> {
     }
 
     checkAbort(input.signal);
+    forceTextOnlyNext = false;
 
     if (isEmptyReply(reply)) {
       emptyRounds += 1;
@@ -434,7 +497,7 @@ async function runReActLoop(opts: LoopOpts): Promise<MessagePart[]> {
       anthropic_content: reply.anthropicContent,
     });
 
-    let blockedByGuard = false;
+    let wrapUpAfterTools = false;
     for (const tc of reply.toolCalls) {
       checkAbort(input.signal);
       const blocked = await runOneAction(
@@ -444,12 +507,33 @@ async function runReActLoop(opts: LoopOpts): Promise<MessagePart[]> {
         messages,
         emit,
       );
+      if (blocked === "wrap_up") {
+        wrapUpAfterTools = true;
+        break;
+      }
       if (blocked === "stop") {
-        blockedByGuard = true;
+        wrapUpAfterTools = true;
         break;
       }
     }
-    if (blockedByGuard) break;
+
+    if (
+      reply.toolCalls.length > 0 &&
+      rounds >= opts.maxRounds - 3 &&
+      progressBonus < REACT_LIMITS.PROGRESS_BONUS_ROUNDS
+    ) {
+      progressBonus = REACT_LIMITS.PROGRESS_BONUS_ROUNDS;
+    }
+
+    if (wrapUpAfterTools) {
+      messages.push({
+        role: "user",
+        content:
+          "（系统）请根据目前所有执行结果，用中文向用户说明进展、是否完成、以及若未完成时的下一步建议。不要再调用工具。",
+      });
+      forceTextOnlyNext = true;
+      continue;
+    }
   }
 
   if (!finished) {
@@ -458,6 +542,9 @@ async function runReActLoop(opts: LoopOpts): Promise<MessagePart[]> {
     }
     await finishGracefully(opts, provider, assistantParts, emit);
   }
+
+  registerAgentWallClockHooks(() => {}, () => {});
+  setBlockingUi(false);
 
   return assistantParts;
 }
@@ -468,7 +555,7 @@ async function runOneAction(
   assistantParts: MessagePart[],
   messages: LlmMessage[],
   emit: (e: RuntimeEvent) => void,
-): Promise<"ok" | "stop"> {
+): Promise<"ok" | "stop" | "wrap_up"> {
   const args = parseArgs(tc.function.arguments);
   const name = tc.function.name;
   const { input } = opts;
@@ -484,7 +571,7 @@ async function runOneAction(
       guardBlock,
       opts.agentTag,
     );
-    if (opts.guard.shouldWrapUp) return "stop";
+    if (opts.guard.shouldWrapUp) return "wrap_up";
     return "ok";
   }
 
@@ -497,7 +584,7 @@ async function runOneAction(
       messages,
       emit,
     );
-    return stop ? "stop" : "ok";
+    return stop ? "wrap_up" : "ok";
   }
 
   assistantParts.push({
@@ -532,27 +619,47 @@ async function runOneAction(
     typeof args.command === "string" ? String(args.command) : undefined,
   );
 
-  const resultRaw = await executeLocalTool(name, args, {
-    permissionMode: input.permissionMode,
-    confirmTool: async (info) => {
-      emitActivity(emit, "awaiting_confirm", "等待你确认操作…", info.name);
-      emit({
-        type: "tool_pending",
-        id: tc.id,
-        name: info.name,
-        args: info.args,
-        dangerous: info.dangerous,
-        agent: opts.agentTag,
-      });
-      if (!input.onConfirmTool) return false;
-      return input.onConfirmTool({
-        id: tc.id,
-        name: info.name,
-        args: info.args,
-        dangerous: info.dangerous,
-      });
-    },
-  });
+  const pauseWall = shouldPauseWallClockForTool(name, args);
+  if (pauseWall) opts.guard.pauseWallClock();
+  let resultRaw: string;
+  try {
+    resultRaw = await executeLocalTool(name, args, {
+      permissionMode: input.permissionMode,
+      confirmTool: async (info) => {
+        emitActivity(emit, "awaiting_confirm", "等待你确认操作…", info.name);
+        emit({
+          type: "tool_pending",
+          id: tc.id,
+          name: info.name,
+          args: info.args,
+          dangerous: info.dangerous,
+          agent: opts.agentTag,
+        });
+        if (!input.onConfirmTool) return false;
+        return input.onConfirmTool({
+          id: tc.id,
+          name: info.name,
+          args: info.args,
+          dangerous: info.dangerous,
+        });
+      },
+    }).catch(
+      (e) =>
+        JSON.stringify({
+          ok: false,
+          error: String(e),
+          hint: "工具执行异常；请根据错误调整参数或先修复环境后继续后续步骤。",
+        }),
+    );
+  } finally {
+    if (pauseWall) opts.guard.resumeWallClock();
+  }
+
+  emitActivity(
+    emit,
+    "calling_model",
+    (input.thinkingMode ?? "high") === "off" ? "处理中…" : "思考中…",
+  );
 
   const result = stripAnsi(resultRaw);
   pushResult(assistantParts, messages, emit, tc, name, result, opts.agentTag);
@@ -692,7 +799,7 @@ async function runSubAgentAction(
       agentLabel: def.label,
       persist: false,
       depth: opts.depth + 1,
-      guard: new ReactLoopGuard(def.maxRounds * 3),
+      guard: new ReactLoopGuard(Math.max(def.maxRounds * 8, 120)),
     });
 
     summary = childParts

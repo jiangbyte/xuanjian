@@ -33,13 +33,18 @@ import {
 } from "@/components/ContextMenu";
 import { PathBookmarkButton } from "@/components/PathBookmarkButton";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { PermissionsModal } from "@/features/terminal/PermissionsModal";
 import { joinPath, parentPath } from "@/features/terminal/sftp/pathUtils";
+import { FileListMarqueeOverlay } from "@/features/terminal/sftp/FileListMarqueeOverlay";
+import { useFileListSelection } from "@/features/terminal/sftp/fileListSelection";
+import { uploadLocalPathsToRemote } from "@/features/terminal/sftp/uploadLocalPaths";
+import { useFileDropZone } from "@/features/terminal/sftp/useFileDropZone";
+import { useFileListMarquee } from "@/features/terminal/sftp/useFileListMarquee";
 import { connectHost } from "@/features/terminal/sftp/transferEnqueue";
 import type { PaneTab, SideSnapshot } from "@/features/terminal/sftp/types";
 import { clipboardWriteText } from "@/lib/ui/clipboard";
+import { selectionRow } from "@/lib/core/selection";
 import type { HostRow } from "@/lib/db";
 import { dialogs } from "@/lib/ui/dialogs";
 import { api, type SftpEntry } from "@/lib/tauri";
@@ -51,7 +56,7 @@ import {
   prepareOverwrite,
 } from "@/lib/transfer/conflict";
 import { bookmarkScope } from "@/stores/pathBookmarks";
-import { enqueueDownload, enqueueUpload } from "@/stores/transfer";
+import { enqueueDownload } from "@/stores/transfer";
 import { useUiStore } from "@/stores/ui";
 
 /** 单侧文件浏览器：目录列表、勾选与上下文操作 */
@@ -72,8 +77,6 @@ export function PaneBrowser({
   const remote = tab.kind === "host";
   const [cwd, setCwd] = useState(remote ? "/" : "");
   const [entries, setEntries] = useState<SftpEntry[]>([]);
-  const [selected, setSelected] = useState<SftpEntry | null>(null);
-  const [checked, setChecked] = useState<Record<string, SftpEntry>>({});
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -83,6 +86,9 @@ export function PaneBrowser({
   const [permTarget, setPermTarget] = useState<SftpEntry | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const ephemeralRef = useRef(false);
+  const listRef = useRef<HTMLDivElement>(null);
+  const cwdRef = useRef(cwd);
+  cwdRef.current = cwd;
 
   const ensureSession = useCallback(async () => {
     if (tab.kind !== "host" || tab.hostId == null) return null;
@@ -137,8 +143,6 @@ export function PaneBrowser({
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      setSelected(null);
-      setChecked({});
       setError(null);
       sessionIdRef.current = null;
       setSessionId(null);
@@ -162,12 +166,6 @@ export function PaneBrowser({
     };
   }, [tab.id, tab.kind]);
 
-  useEffect(() => {
-    if (!cwd) return;
-    setChecked({});
-    reload(cwd);
-  }, [cwd, sessionId, reload]);
-
   const visible = useMemo(() => {
     let list = [...entries];
     if (!showHidden) list = list.filter((e) => !e.name.startsWith("."));
@@ -178,37 +176,77 @@ export function PaneBrowser({
     return list;
   }, [entries, showHidden, query]);
 
-  const checkedList = useMemo(() => Object.values(checked), [checked]);
-  const allVisibleChecked =
-    visible.length > 0 && visible.every((e) => checked[e.path]);
+  const {
+    checked,
+    checkedList,
+    clearChecked,
+    handleRowPointer,
+    selectOnly,
+    selectAllVisible,
+    selectMany,
+  } = useFileListSelection(visible);
 
-  const toggleCheck = (entry: SftpEntry, value?: boolean) => {
-    setChecked((prev) => {
-      const next = { ...prev };
-      const on = value ?? !next[entry.path];
-      if (on) next[entry.path] = entry;
-      else delete next[entry.path];
-      return next;
-    });
-  };
+  useEffect(() => {
+    if (!cwd) return;
+    if (tab.kind === "host" && !sessionId) return;
+    void reload(cwd);
+  }, [cwd, sessionId, tab.kind, reload]);
 
-  const toggleAllVisible = () => {
-    if (allVisibleChecked) {
-      setChecked((prev) => {
-        const next = { ...prev };
-        visible.forEach((e) => delete next[e.path]);
-        return next;
-      });
-    } else {
-      setChecked((prev) => {
-        const next = { ...prev };
-        visible.forEach((e) => {
-          next[e.path] = e;
+  useEffect(() => {
+    clearChecked();
+  }, [cwd, clearChecked]);
+
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        selectAllVisible();
+      }
+    };
+    el.addEventListener("keydown", onKey);
+    return () => el.removeEventListener("keydown", onKey);
+  }, [selectAllVisible]);
+
+  const selected = useMemo(() => {
+    if (checkedList.length === 1) return checkedList[0];
+    return checkedList[0] ?? null;
+  }, [checkedList]);
+
+  const dropEnabled = remote;
+  const onDropPaths = useCallback(
+    (paths: string[]) => {
+      if (!remote) return;
+      void (async () => {
+        const sid = sessionIdRef.current || (await ensureSession());
+        if (!sid) return;
+        const dir = cwdRef.current;
+        await uploadLocalPathsToRemote({
+          sessionId: sid,
+          cwd: dir,
+          localPaths: paths,
+          t,
+          onReload: () => reload(dir),
         });
-        return next;
-      });
-    }
-  };
+      })();
+    },
+    [ensureSession, remote, reload, t],
+  );
+  const { dragOver, bind: dropBind } = useFileDropZone(
+    listRef,
+    onDropPaths,
+    dropEnabled,
+  );
+
+  const { marquee, previewPaths, onMouseDown: onMarqueeMouseDown } =
+    useFileListMarquee({
+      containerRef: listRef,
+      visible,
+      onSelect: selectMany,
+      onClear: clearChecked,
+      enabled: !dragOver,
+    });
 
   snapshotRef.current = {
     cwd,
@@ -252,34 +290,46 @@ export function PaneBrowser({
     await reload(cwd);
   };
 
-  const onUpload = async () => {
+  const onUpload = async (paths?: string[]) => {
     if (!remote) return;
     const sid = sessionIdRef.current || (await ensureSession());
     if (!sid) return;
-    const file = await openDialog({ multiple: true });
-    if (!file) return;
-    const paths = Array.isArray(file) ? file : [file];
-    const conflict: ConflictCtx = { mode: "ask" };
-    const destEp: DestEndpoint = { remote: true, sessionId: sid };
-    for (const p of paths) {
-      const name = p.replace(/\\/g, "/").split("/").pop()!;
-      const destPath = joinPath(cwd, name, true);
-      const existing = await findDestEntry(destEp, cwd, name);
-      if (existing) {
-        const decision = await askOverwrite(
-          dialogs,
-          t,
-          conflict,
-          destPath,
-          existing.isDir,
-          false,
-        );
-        if (decision === "abort") break;
-        if (decision === "skip") continue;
-        await prepareOverwrite(destEp, destPath, existing, false);
-      }
-      enqueueUpload(sid, p, destPath);
+    let localPaths = paths;
+    if (!localPaths?.length) {
+      const file = await openDialog({ multiple: true });
+      if (!file) return;
+      localPaths = Array.isArray(file) ? file : [file];
     }
+    await uploadLocalPathsToRemote({
+      sessionId: sid,
+      cwd,
+      localPaths,
+      t,
+      onReload: () => reload(cwdRef.current),
+    });
+  };
+
+  const deleteEntries = async (targets: SftpEntry[]) => {
+    if (!targets.length) return;
+    if (
+      !(await dialogs.confirm(
+        t("terminal.batchDeleteConfirm", { count: targets.length }),
+        { danger: true },
+      ))
+    ) {
+      return;
+    }
+    for (const entry of targets) {
+      if (remote) {
+        const sid = sessionIdRef.current;
+        if (!sid) return;
+        await api.sftpRemove(sid, entry.path, entry.isDir);
+      } else {
+        await api.removeLocalPath(entry.path);
+      }
+    }
+    clearChecked();
+    await reload(cwd);
   };
 
   const blankItems = (): ContextMenuItem[] => [
@@ -328,10 +378,9 @@ export function PaneBrowser({
         onClick: () => {
           if (entry.isDir) {
             setCwd(entry.path);
-            setSelected(null);
+            clearChecked();
           } else {
-            setSelected(entry);
-            toggleCheck(entry, true);
+            selectOnly(entry);
           }
         },
       },
@@ -503,6 +552,19 @@ export function PaneBrowser({
         >
           <ArrowLeftRight size={14} />
         </Button>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          title={t("terminal.batchDelete")}
+          aria-label={t("terminal.batchDelete")}
+          disabled={checkedList.length === 0}
+          onClick={() => {
+            deleteEntries(checkedList).catch(console.error);
+          }}
+        >
+          <Trash2 size={14} />
+        </Button>
         {remote && (
           <Button
             type="button"
@@ -594,14 +656,7 @@ export function PaneBrowser({
         </div>
       )}
 
-      <div className="grid shrink-0 grid-cols-[24px_20px_minmax(100px,1.5fr)_108px_86px_60px_48px] items-center gap-2 border-b border-border bg-muted/40 px-2 py-1.5 text-xs font-medium text-muted-foreground">
-        <span className="flex items-center justify-center">
-          <Checkbox
-            checked={allVisibleChecked}
-            onCheckedChange={() => toggleAllVisible()}
-            aria-label="select all"
-          />
-        </span>
+      <div className="grid shrink-0 grid-cols-[20px_minmax(100px,1.5fr)_108px_86px_60px_48px] items-center gap-2 border-b border-border bg-muted/40 px-2 py-1.5 text-xs font-medium text-muted-foreground">
         <span />
         <span>{t("terminal.name")}</span>
         <span>{t("terminal.modified")}</span>
@@ -609,16 +664,26 @@ export function PaneBrowser({
         <span>{t("terminal.size")}</span>
         <span>{t("terminal.type")}</span>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto p-1">
+      <div
+        ref={listRef}
+        tabIndex={0}
+        className={`relative min-h-0 flex-1 overflow-auto p-1 outline-none select-none ${
+          dragOver
+            ? "bg-primary/5 ring-2 ring-inset ring-primary/40"
+            : ""
+        }`}
+        onMouseDown={onMarqueeMouseDown}
+        {...dropBind}
+      >
         {error && (
           <div className="px-2 py-1 text-xs text-destructive">{error}</div>
         )}
         <button
           type="button"
-          className="grid w-full grid-cols-[24px_20px_minmax(100px,1.5fr)_108px_86px_60px_48px] items-center gap-2 rounded-md px-2 py-1 text-left text-xs hover:bg-accent"
+          data-skip-marquee
+          className="grid w-full grid-cols-[20px_minmax(100px,1.5fr)_108px_86px_60px_48px] items-center gap-2 rounded-md px-2 py-1 text-left text-xs hover:bg-accent"
           onClick={() => setCwd(parentPath(cwd, remote))}
         >
-          <span />
           <span className="flex size-5 items-center justify-center text-primary">
             <Folder size={14} />
           </span>
@@ -628,34 +693,25 @@ export function PaneBrowser({
           <span />
           <span />
         </button>
-        {visible.map((e) => (
+        {visible.map((e, index) => (
           <button
             type="button"
             key={e.path}
-            className={`grid w-full grid-cols-[24px_20px_minmax(100px,1.5fr)_108px_86px_60px_48px] items-center gap-2 rounded-md px-2 py-1 text-left text-xs hover:bg-accent ${
-              selected?.path === e.path ? "bg-accent" : ""
-            }`}
-            onClick={() => {
+            data-file-row
+            data-file-path={e.path}
+            className={selectionRow(
+              !!checked[e.path] || previewPaths.has(e.path),
+              "grid w-full grid-cols-[20px_minmax(100px,1.5fr)_108px_86px_60px_48px] items-center gap-2 rounded-md px-2 py-1 text-left text-xs hover:bg-accent",
+            )}
+            onClick={(ev) => handleRowPointer(e, index, ev)}
+            onDoubleClick={() => {
               if (e.isDir) {
                 setCwd(e.path);
-                setSelected(null);
-              } else {
-                setSelected(e);
+                clearChecked();
               }
             }}
             onContextMenu={(ev) => openContextMenu(ev, openMenu, entryItems(e))}
           >
-            <span
-              className="flex items-center justify-center"
-              onClick={(ev) => {
-                ev.stopPropagation();
-              }}
-            >
-              <Checkbox
-                checked={!!checked[e.path]}
-                onCheckedChange={() => toggleCheck(e)}
-              />
-            </span>
             <span
               className={`flex size-5 items-center justify-center ${
                 e.isDir ? "text-primary" : "text-muted-foreground"
@@ -683,6 +739,7 @@ export function PaneBrowser({
             {t("terminal.loading")}
           </div>
         )}
+        <FileListMarqueeOverlay rect={marquee} />
       </div>
       <div className="flex items-center justify-between border-t border-border px-2 py-1 text-xs text-muted-foreground">
         <span>

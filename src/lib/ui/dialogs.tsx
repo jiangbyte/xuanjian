@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import i18n from "@/i18n";
+import { setBlockingUi } from "@/lib/ui/blockingUi";
 
 export type DialogChoiceAction = {
   id: string;
@@ -80,6 +81,7 @@ const useDialogStore = create<DialogStore>((set) => ({
 }));
 
 function settleAndClear(run: () => void) {
+  setBlockingUi(false);
   useDialogStore.getState().clear();
   run();
 }
@@ -180,6 +182,12 @@ export function DialogHost() {
     if (current?.kind === "prompt") {
       setPromptValue(current.defaultValue);
     }
+    if (current) {
+      setBlockingUi(true, "dialog", current.title);
+    } else {
+      setBlockingUi(false);
+    }
+    return () => setBlockingUi(false);
   }, [current]);
 
   if (!current) return null;

@@ -11,6 +11,7 @@ import { ContextMenuProvider } from "@/components/ContextMenu";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { DialogHost } from "@/lib/ui/dialogs";
+import "@/stores/settings";
 import "@/i18n";
 import "@/styles/index.css";
 

@@ -28,7 +28,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   type ContextMenuItem,
@@ -42,7 +42,7 @@ import type { FileEditorTarget } from "@/features/terminal/FileEditorModal";
 import { PermissionsModal } from "@/features/terminal/PermissionsModal";
 import { SftpTransferModal } from "@/features/terminal/SftpTransferModal";
 import { clipboardWriteText } from "@/lib/ui/clipboard";
-import { getHost } from "@/lib/db";
+import { useCwdState } from "@/features/terminal/sftp/useCwdState";
 import { dialogs } from "@/lib/ui/dialogs";
 import { api, SftpEntry } from "@/lib/tauri";
 import {
@@ -53,13 +53,19 @@ import {
   prepareOverwrite,
 } from "@/lib/transfer/conflict";
 import { bookmarkScope } from "@/stores/pathBookmarks";
-import { enqueueDownload, enqueueUpload } from "@/stores/transfer";
+import { enqueueDownload } from "@/stores/transfer";
 import { isWindowsOs } from "@/lib/core/platform";
 import {
   isWindowsPath,
   joinPath,
   parentPath,
 } from "@/features/terminal/sftp/pathUtils";
+import { FileListMarqueeOverlay } from "@/features/terminal/sftp/FileListMarqueeOverlay";
+import { useFileListSelection } from "@/features/terminal/sftp/fileListSelection";
+import { uploadLocalPathsToRemote } from "@/features/terminal/sftp/uploadLocalPaths";
+import { useFileDropZone } from "@/features/terminal/sftp/useFileDropZone";
+import { useFileListMarquee } from "@/features/terminal/sftp/useFileListMarquee";
+import { selectionRow } from "@/lib/core/selection";
 
 const FileEditorModal = lazy(() =>
   import("@/features/terminal/FileEditorModal").then((m) => ({
@@ -138,8 +144,15 @@ export function TerminalSidePanel({
   const wslMode = Boolean(shellId?.startsWith("local:wsl:"));
   const remote = kind === "ssh";
   const unixPaths = remote || wslMode;
-  const [cwd, setCwd] = useState(kind === "ssh" ? "/" : "");
-  const [pathInput, setPathInput] = useState("");
+  const { cwd, setCwd, pathInput, setPathInput, commitPath } = useCwdState({
+    kind,
+    sessionId,
+    hostId,
+    shellId,
+    wslMode,
+  });
+  const cwdRef = useRef(cwd);
+  cwdRef.current = cwd;
   const [entries, setEntries] = useState<SftpEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -154,70 +167,33 @@ export function TerminalSidePanel({
   );
   const [permTarget, setPermTarget] = useState<SftpEntry | null>(null);
   const pathBoxRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
-  const reload = async (path = cwd) => {
-    if (!sessionId && (kind === "ssh" || wslMode)) {
-      setEntries([]);
-      return;
-    }
-    if (!path) return;
-    setLoading(true);
-    try {
-      setError(null);
-      const list =
-        remote && sessionId
-          ? await api.sftpList(sessionId, path || "/")
-          : wslMode && sessionId
-            ? await api.wslListDir(sessionId, path)
-            : await api.listLocalDir(path);
-      setEntries(list);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (wslMode) {
-      if (!sessionId) return;
-      void api.wslHomeDir(sessionId).then((home) => {
-        setCwd(home);
-        setPathInput(home);
-      });
-      return;
-    }
-    if (kind === "ssh") {
-      const init = async () => {
-        if (hostId != null) {
-          const host = await getHost(hostId);
-          const remotePath = host?.remote_path?.trim();
-          if (remotePath) {
-            setCwd(remotePath);
-            setPathInput(remotePath);
-            return;
-          }
-        }
-        setCwd("/");
-        setPathInput("/");
-      };
-      void init();
-      return;
-    }
-    if (kind === "local") {
-      void api.getHomeDir().then((home) => {
-        setCwd(home);
-        setPathInput(home);
-      });
-    }
-  }, [kind, wslMode, sessionId, shellId, hostId]);
-
-  useEffect(() => {
-    if (cwd) {
-      setPathInput(cwd);
-      reload(cwd);
-    }
-  }, [sessionId, kind, wslMode, cwd]);
+  const reload = useCallback(
+    async (path = cwdRef.current) => {
+      if (!path) return;
+      if (!sessionId && (kind === "ssh" || wslMode)) {
+        setEntries([]);
+        return;
+      }
+      setLoading(true);
+      try {
+        setError(null);
+        const list =
+          remote && sessionId
+            ? await api.sftpList(sessionId, path || "/")
+            : wslMode && sessionId
+              ? await api.wslListDir(sessionId, path)
+              : await api.listLocalDir(path);
+        setEntries(list);
+      } catch (e) {
+        setError(String(e));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [kind, remote, sessionId, wslMode],
+  );
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
@@ -245,6 +221,71 @@ export function TerminalSidePanel({
     });
     return list;
   }, [entries, showHidden, query, sortAsc]);
+
+  const {
+    checked,
+    checkedList,
+    clearChecked,
+    handleRowPointer,
+    selectAllVisible,
+    selectMany,
+  } = useFileListSelection(visible);
+
+  useEffect(() => {
+    if (!cwd) return;
+    if ((remote || wslMode) && !sessionId) {
+      setEntries([]);
+      return;
+    }
+    void reload(cwd);
+  }, [cwd, sessionId, remote, wslMode, reload]);
+
+  useEffect(() => {
+    clearChecked();
+  }, [cwd, clearChecked]);
+
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        selectAllVisible();
+      }
+    };
+    el.addEventListener("keydown", onKey);
+    return () => el.removeEventListener("keydown", onKey);
+  }, [selectAllVisible]);
+
+  const dropEnabled = kind === "ssh" && !!sessionId;
+  const onDropPaths = useCallback(
+    (paths: string[]) => {
+      if (!sessionId || kind !== "ssh") return;
+      const dir = cwdRef.current;
+      void uploadLocalPathsToRemote({
+        sessionId,
+        cwd: dir,
+        localPaths: paths,
+        t,
+        onReload: () => reload(dir),
+      });
+    },
+    [kind, reload, sessionId, t],
+  );
+  const { dragOver, bind: dropBind } = useFileDropZone(
+    listRef,
+    onDropPaths,
+    dropEnabled,
+  );
+
+  const { marquee, previewPaths, onMouseDown: onMarqueeMouseDown } =
+    useFileListMarquee({
+      containerRef: listRef,
+      visible,
+      onSelect: selectMany,
+      onClear: clearChecked,
+      enabled: !dragOver,
+    });
 
   const suggestions = useMemo(() => {
     if (!pathFocus) return [];
@@ -281,13 +322,6 @@ export function TerminalSidePanel({
 
   const goParent = () => setCwd(parentPath(cwd, unixPaths));
 
-  const commitPath = (path: string) => {
-    const next = path.trim();
-    if (!next) return;
-    setCwd(next);
-    setPathFocus(false);
-  };
-
   const openFile = async (entry: SftpEntry) => {
     if (isTooBig(entry)) {
       await dialogs.alert(t("terminal.fileTooLarge"));
@@ -301,17 +335,56 @@ export function TerminalSidePanel({
     });
   };
 
-  const onUpload = async () => {
+  const onUpload = async (paths?: string[]) => {
     if (kind !== "ssh" || !sessionId) return;
-    const file = await open({ multiple: true });
-    if (!file) return;
-    const paths = Array.isArray(file) ? file : [file];
+    let localPaths = paths;
+    if (!localPaths?.length) {
+      const file = await open({ multiple: true });
+      if (!file) return;
+      localPaths = Array.isArray(file) ? file : [file];
+    }
+    await uploadLocalPathsToRemote({
+      sessionId,
+      cwd,
+      localPaths,
+      t,
+      onReload: () => reload(cwdRef.current),
+    });
+  };
+
+  const deleteEntries = async (targets: SftpEntry[]) => {
+    if (!targets.length) return;
+    if (
+      !(await dialogs.confirm(
+        t("terminal.batchDeleteConfirm", { count: targets.length }),
+        { danger: true },
+      ))
+    ) {
+      return;
+    }
+    for (const entry of targets) {
+      if (remote && sessionId) {
+        await api.sftpRemove(sessionId, entry.path, entry.isDir);
+      } else if (wslMode && sessionId) {
+        await api.wslRemove(sessionId, entry.path, entry.isDir);
+      } else {
+        await api.removeLocalPath(entry.path);
+      }
+    }
+    clearChecked();
+    await reload(cwd);
+  };
+
+  const downloadEntries = async (targets: SftpEntry[]) => {
+    if (!remote || !sessionId) return;
+    const files = targets.filter((e) => !e.isDir);
+    if (!files.length) return;
+    const home = await api.getHomeDir();
     const conflict: ConflictCtx = { mode: "ask" };
-    const destEp: DestEndpoint = { remote: true, sessionId };
-    for (const p of paths) {
-      const name = p.replace(/\\/g, "/").split("/").pop()!;
-      const destPath = joinPath(cwd, name, true);
-      const existing = await findDestEntry(destEp, cwd, name);
+    const destEp: DestEndpoint = { remote: false, sessionId: null };
+    for (const entry of files) {
+      const destPath = joinPath(home, entry.name, false);
+      const existing = await findDestEntry(destEp, home, entry.name);
       if (existing) {
         const decision = await askOverwrite(
           dialogs,
@@ -325,8 +398,9 @@ export function TerminalSidePanel({
         if (decision === "skip") continue;
         await prepareOverwrite(destEp, destPath, existing, false);
       }
-      enqueueUpload(sessionId, p, destPath);
+      enqueueDownload(sessionId, entry.path, destPath, entry.size);
     }
+    clearChecked();
   };
 
   const onNewFolder = async () => {
@@ -675,9 +749,40 @@ export function TerminalSidePanel({
             type="button"
             size="icon-sm"
             variant="ghost"
+            title={t("terminal.batchDelete")}
+            aria-label={t("terminal.batchDelete")}
+            disabled={checkedList.length === 0}
+            onClick={() => {
+              deleteEntries(checkedList).catch(console.error);
+            }}
+          >
+            <Trash2 size={14} />
+          </Button>
+        )}
+        {kind === "ssh" && checkedList.some((e) => !e.isDir) && (
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            title={t("terminal.batchDownload")}
+            aria-label={t("terminal.batchDownload")}
+            onClick={() => {
+              downloadEntries(checkedList).catch(console.error);
+            }}
+          >
+            <Download size={14} />
+          </Button>
+        )}
+        {kind === "ssh" && (
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
             title={t("terminal.upload")}
             aria-label={t("terminal.upload")}
-            onClick={onUpload}
+            onClick={() => {
+              onUpload().catch(console.error);
+            }}
           >
             <Upload size={14} />
           </Button>
@@ -774,14 +879,23 @@ export function TerminalSidePanel({
 
       {/* —— 文件列表 —— */}
       <div
-        className="min-h-0 flex-1 overflow-auto p-1"
+        ref={listRef}
+        tabIndex={0}
+        className={`relative min-h-0 flex-1 overflow-auto p-1 outline-none select-none ${
+          dragOver
+            ? "bg-primary/5 ring-2 ring-inset ring-primary/40"
+            : ""
+        }`}
         onContextMenu={(e) => openContextMenu(e, openMenu, blankMenuItems())}
+        onMouseDown={onMarqueeMouseDown}
+        {...dropBind}
       >
         {error && (
           <div className="px-3 py-2 text-xs text-destructive">{error}</div>
         )}
         <button
           type="button"
+          data-skip-marquee
           className="grid w-full grid-cols-[20px_minmax(100px,1.5fr)_108px_86px_60px_48px] items-center gap-2 rounded-md px-2 py-1 text-left text-xs hover:bg-accent"
           onClick={goParent}
         >
@@ -796,17 +910,20 @@ export function TerminalSidePanel({
             {t("terminal.folder")}
           </span>
         </button>
-        {visible.map((e) => (
+        {visible.map((e, index) => (
           <button
             type="button"
             key={e.path}
-            className="grid w-full grid-cols-[20px_minmax(100px,1.5fr)_108px_86px_60px_48px] items-center gap-2 rounded-md px-2 py-1 text-left text-xs hover:bg-accent"
+            data-file-row
+            data-file-path={e.path}
+            className={selectionRow(
+              !!checked[e.path] || previewPaths.has(e.path),
+              "grid w-full grid-cols-[20px_minmax(100px,1.5fr)_108px_86px_60px_48px] items-center gap-2 rounded-md px-2 py-1 text-left text-xs hover:bg-accent",
+            )}
+            onClick={(ev) => handleRowPointer(e, index, ev)}
             onDoubleClick={() => {
               if (e.isDir) setCwd(e.path);
               else openFile(e);
-            }}
-            onClick={() => {
-              if (e.isDir) setCwd(e.path);
             }}
             onContextMenu={(ev) =>
               openContextMenu(ev, openMenu, entryMenuItems(e))
@@ -834,6 +951,17 @@ export function TerminalSidePanel({
             </span>
           </button>
         ))}
+        <FileListMarqueeOverlay rect={marquee} />
+      </div>
+
+      <div className="flex shrink-0 items-center justify-between border-t border-border px-2 py-1 text-xs text-muted-foreground">
+        <span>
+          {visible.length} {t("terminal.items")}
+          {checkedList.length > 0
+            ? ` · ${checkedList.length} ${t("terminal.selected")}`
+            : ""}
+        </span>
+        <span className="truncate pl-2">{cwd}</span>
       </div>
 
       {/* —— 关联弹层：SFTP / 编辑器 / 权限 —— */}

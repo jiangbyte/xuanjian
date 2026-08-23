@@ -79,7 +79,8 @@ export function executionSemanticsBlock(): string {
     "- kind=ssh → 远程 SSH；host_info、sync_to_remote、deploy 依赖 SSH 或工作空间 host_id。",
     "- network_*（ping/dns/tcp_probe/tls_cert）在 Windows 宿主机网络栈执行，不代表 SSH/WSL 内可达性。",
     "- 工作空间 sync/deploy 仅同步代码目录（local_root → remote_root），不用于数据库 dump 等大文件迁移。",
-    "- 多标签流水线用 tab_id 指定目标；WSL/本地 Shell 标签不必预先打开，可传 shell_id（如 local:wsl:Ubuntu）或 plane=wsl 自动后台连接。",
+    "- 所有终端/文件/流水线工具均禁止自动新建终端标签；须用户先在终端手动打开对应标签。",
+    "- Agent 工具仅在【当前焦点标签】执行，禁止跨标签。",
   ].join("\n");
 }
 
@@ -113,7 +114,7 @@ export async function buildExecutionContextBlock(): Promise<string> {
     const shells = await api.listLocalShells();
     const wslShells = shells.filter((s) => s.id.startsWith("local:wsl:"));
     if (wslShells.length) {
-      lines.push("", "可用 WSL（未打开时可传 shell_id 或 plane=wsl 自动连接）:");
+      lines.push("", "可用 WSL（须先打开对应终端标签再执行）:");
       for (const s of wslShells) {
         const open = findOpenLocalShellTab(s.id);
         const state = open ? `已打开 tabId=${open.id}` : "未打开";
@@ -207,6 +208,6 @@ export async function serializeSessionsForAgent(): Promise<
     availableShells,
     availableHosts,
     hint:
-      "WSL/SSH 不必预先打开标签：session_exec 等可传 shell_id（如 local:wsl:Ubuntu）或 plane=wsl / plane=ssh + host_id 自动连接。",
+      "工具仅在当前焦点标签 (active=true) 执行；禁止跨标签。WSL/SSH 须用户先打开对应终端标签。",
   };
 }

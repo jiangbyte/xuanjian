@@ -14,6 +14,7 @@ import {
 import { resolveWorkspaceFsEndpoint } from "@/lib/workspace/context";
 import { api } from "@/lib/tauri";
 import { enqueueUpload } from "@/stores/transfer";
+import { ensureRemoteParentDirs } from "@/lib/workspace/remoteDirs";
 import type { SftpEntry } from "@/lib/tauri";
 
 export type SyncAction = "upload" | "skip";
@@ -35,6 +36,7 @@ export type SyncManifest = {
   entries: SyncManifestEntry[];
   uploadCount: number;
   skipCount: number;
+  warnings?: string[];
 };
 
 function shouldExclude(relPath: string, patterns: string[]) {
@@ -82,16 +84,40 @@ async function listRemoteTree(
   patterns: string[],
   remoteRoot: string,
   out: Map<string, SftpEntry>,
-) {
-  const entries = await api.sftpList(sessionId, dir || "/");
+): Promise<void> {
+  let entries: SftpEntry[];
+  try {
+    entries = await api.sftpList(sessionId, dir || "/");
+  } catch {
+    return;
+  }
   for (const e of entries) {
     const rel = e.path.startsWith(remoteRoot)
       ? e.path.slice(remoteRoot.length).replace(/^\//, "")
       : e.name;
     if (shouldExclude(rel, patterns)) continue;
     out.set(rel, e);
-    if (e.isDir) await listRemoteTree(sessionId, root, e.path, patterns, remoteRoot, out);
+    if (e.isDir) {
+      await listRemoteTree(sessionId, root, e.path, patterns, remoteRoot, out);
+    }
   }
+}
+
+/** 非 dry-run 时确保远程根目录存在 */
+async function ensureRemoteRoot(
+  ws: WorkspaceRow,
+  sessionId: string,
+): Promise<void> {
+  const remoteRoot = (ws.remote_root || "/").replace(/\/$/, "") || "/";
+  if (remoteRoot === "/") return;
+  try {
+    await api.sftpList(sessionId, remoteRoot);
+    return;
+  } catch {
+    /* mkdir below */
+  }
+  const quoted = remoteRoot.replace(/'/g, "'\\''");
+  await api.sessionExec(sessionId, `mkdir -p '${quoted}'`);
 }
 
 /** 构建同步清单：本地较新或远程缺失的文件标记 upload */
@@ -109,15 +135,24 @@ export async function buildSyncManifest(
   await listLocalTree(localRoot, localRoot, patterns, localFiles);
 
   const remoteMap = new Map<string, SftpEntry>();
+  const warnings: string[] = [];
   const ep = resolveWorkspaceFsEndpoint(ws);
   if (ep?.kind === "sftp" && ep.sessionId) {
     const remoteRoot = ws.remote_root || "/";
+    const normalizedRoot = remoteRoot.replace(/\/$/, "") || "/";
+    try {
+      await api.sftpList(ep.sessionId, remoteRoot);
+    } catch {
+      warnings.push(
+        `远程目录 ${remoteRoot} 尚不存在；清单将把所有本地文件标记为待上传。实际同步前会自动 mkdir -p。`,
+      );
+    }
     await listRemoteTree(
       ep.sessionId,
       remoteRoot,
       remoteRoot,
       patterns,
-      remoteRoot.replace(/\/$/, ""),
+      normalizedRoot,
       remoteMap,
     );
   }
@@ -159,6 +194,7 @@ export async function buildSyncManifest(
     entries,
     uploadCount,
     skipCount: entries.length - uploadCount,
+    warnings: warnings.length ? warnings : undefined,
   };
 }
 
@@ -166,16 +202,36 @@ export async function buildSyncManifest(
 export async function applySyncManifest(
   ws: WorkspaceRow,
   manifest: SyncManifest,
-): Promise<{ enqueued: number; jobIds: string[] }> {
+  opts?: { wait?: boolean; waitTimeoutMs?: number },
+): Promise<{
+  enqueued: number;
+  jobIds: string[];
+  transfer?: { completed: number; failed: number; errors: string[] };
+}> {
   const sessionId = resolveWorkspaceFsEndpoint(ws)?.sessionId;
   if (!sessionId) throw new Error("SSH session required for remote sync");
+  await ensureRemoteRoot(ws, sessionId);
+  const uploads = manifest.entries.filter((e) => e.action === "upload");
+  if (uploads.length) {
+    await ensureRemoteParentDirs(
+      sessionId,
+      uploads.map((e) => e.remotePath),
+    );
+  }
   const jobIds: string[] = [];
   let enqueued = 0;
-  for (const e of manifest.entries) {
-    if (e.action !== "upload") continue;
+  for (const e of uploads) {
     const id = enqueueUpload(sessionId, e.localPath, e.remotePath, e.size);
     jobIds.push(id);
     enqueued += 1;
+  }
+  if (opts?.wait !== false && jobIds.length) {
+    const { waitForTransferJobs } = await import("@/stores/transfer");
+    const transfer = await waitForTransferJobs(
+      jobIds,
+      opts?.waitTimeoutMs ?? 10 * 60_000,
+    );
+    return { enqueued, jobIds, transfer };
   }
   return { enqueued, jobIds };
 }

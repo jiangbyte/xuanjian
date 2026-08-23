@@ -7,6 +7,7 @@
  */
 
 import { useMemo, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -215,6 +216,7 @@ export function PermissionsModal({
               }
             }}
           >
+            {saving ? <Loader2 size={14} className="animate-spin" /> : null}
             {t("perms.apply")}
           </Button>
         </DialogFooter>

@@ -41,10 +41,21 @@ export default defineConfig(async () => ({
   build: {
     target: "esnext",
     cssCodeSplit: true,
+    modulePreload: { polyfill: false },
     rollupOptions: {
       output: {
         manualChunks(id: string) {
           if (!id.includes("node_modules")) return;
+          if (
+            id.includes("react-dom") ||
+            id.includes("react-router") ||
+            id.includes("/react/")
+          ) {
+            return "react-vendor";
+          }
+          if (id.includes("i18next") || id.includes("react-i18next")) {
+            return "i18n";
+          }
           if (id.includes("monaco-editor") || id.includes("@monaco-editor")) {
             return "monaco";
           }
@@ -69,5 +80,15 @@ export default defineConfig(async () => ({
   },
   worker: {
     format: "es" as const,
+  },
+  optimizeDeps: {
+    include: [
+      "react",
+      "react-dom",
+      "react-router-dom",
+      "zustand",
+      "i18next",
+      "react-i18next",
+    ],
   },
 }));

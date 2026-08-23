@@ -54,6 +54,10 @@ import { buildOrchestratorSystemPrompt } from "@/lib/agent/prompts";
 import { toolsForOrchestrator } from "@/lib/agent/subagents";
 import { runAgentTurn } from "@/lib/agent/runtime";
 import type { AgentActivityPhase } from "@/lib/agent/types";
+import {
+  getBlockingUi,
+  subscribeBlockingUi,
+} from "@/lib/ui/blockingUi";
 import { discoverRemoteAgents } from "@/lib/agent/remoteClient";
 import { BUILTIN_MCP_SERVER } from "@/lib/agent/mcpBuiltin";
 import {
@@ -130,6 +134,9 @@ export function AiChatPanel() {
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const activitySinceRef = useRef(Date.now());
+  const [activityTick, setActivityTick] = useState(0);
+  const [blockingUi, setBlockingUiState] = useState(getBlockingUi);
   const confirmWaiters = useRef(
     new Map<string, (ok: boolean) => void>(),
   );
@@ -304,9 +311,45 @@ export function AiChatPanel() {
     void bindTabSession(activeTabId).catch(console.error);
   }, [activeTabId, bindTabSession]);
 
+  useEffect(() => subscribeBlockingUi(setBlockingUiState), []);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, busy, activity.label]);
+  }, [messages, busy, activity.label, blockingUi.active]);
+
+  useEffect(() => {
+    if (!busy) return;
+    const id = window.setInterval(() => setActivityTick((n) => n + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [busy]);
+
+  const activityElapsed = useMemo(() => {
+    if (!busy) return "";
+    void activityTick;
+    const ms = Date.now() - activitySinceRef.current;
+    if (ms < 3000) return "";
+    const s = Math.floor(ms / 1000);
+    if (s < 60) return `${s}s`;
+    return `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s`;
+  }, [busy, activityTick, activity.phase, activity.label]);
+
+  const activityStatusLabel = useMemo(() => {
+    if (blockingUi.active) {
+      if (blockingUi.source === "dialog") {
+        return t("terminal.aiWaitingDialog");
+      }
+      if (blockingUi.source === "transfer") {
+        const prog = blockingUi.detail;
+        return prog
+          ? `${t("terminal.aiWaitingTransfer")} (${prog})`
+          : t("terminal.aiWaitingTransfer");
+      }
+    }
+    if (activity.phase === "awaiting_confirm") {
+      return activity.label || t("terminal.aiAwaitingConfirm");
+    }
+    return activity.label || t("terminal.aiWorking");
+  }, [activity.label, activity.phase, blockingUi, t]);
 
   const filteredSessions = useMemo(() => {
     const q = histQ.trim().toLowerCase();
@@ -385,11 +428,16 @@ export function AiChatPanel() {
             return;
           }
           if (e.type === "activity") {
+            activitySinceRef.current = Date.now();
             setActivity({
               phase: e.phase,
               label: e.label,
               detail: e.detail,
             });
+            return;
+          }
+          if (e.type === "done") {
+            setActivity({ phase: "idle", label: "" });
             return;
           }
           setMessages((prev) => {
@@ -806,9 +854,14 @@ export function AiChatPanel() {
               <div className="flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2 py-1.5 text-[11px] text-muted-foreground">
                 <Loader2 size={12} className="animate-spin text-primary" />
                 <span className="min-w-0 flex-1 truncate">
-                  {activity.label || t("terminal.aiWorking")}
-                  {activity.detail ? (
+                  {activityStatusLabel}
+                  {activity.detail &&
+                  !blockingUi.active &&
+                  activity.phase !== "awaiting_confirm" ? (
                     <span className="opacity-70"> · {activity.detail}</span>
+                  ) : null}
+                  {activityElapsed ? (
+                    <span className="opacity-60"> · {activityElapsed}</span>
                   ) : null}
                 </span>
               </div>
@@ -874,7 +927,13 @@ export function AiChatPanel() {
           <div className="mb-1.5 flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-[11px] text-foreground">
             <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary" />
             <span className="min-w-0 flex-1 truncate font-medium">
-              {activity.label || t("terminal.aiWorking")}
+              {activityStatusLabel}
+              {activityElapsed ? (
+                <span className="font-normal opacity-70">
+                  {" "}
+                  · {activityElapsed}
+                </span>
+              ) : null}
             </span>
             <Button
               type="button"

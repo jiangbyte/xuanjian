@@ -6,12 +6,13 @@
  * 设置/快速切换按需懒加载；离终端页时卸载左右侧栏以停止轮询与重型编辑器。
  */
 
-import { lazy, memo, Suspense, useEffect } from "react";
+import { lazy, memo, Suspense, useEffect, useLayoutEffect } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
 import { TitleBar } from "@/components/TitleBar";
 import { TerminalWorkspace } from "@/features/terminal/TerminalWorkspace";
 import { initSchedulerListener } from "@/lib/automation/schedulerListener";
+import { runWhenIdle, showMainWindowWhenReady } from "@/lib/boot";
 import { importCmdHistoryFromLocalStorage } from "@/lib/db/cmdHistory";
 import { getSetting } from "@/lib/db/settings";
 import { hydrateCmdHistory } from "@/stores/cmdHistory";
@@ -66,36 +67,45 @@ export function AppShell() {
   const setSwitcherOpen = useUiStore((s) => s.setSwitcherOpen);
   const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
 
+  useLayoutEffect(() => {
+    showMainWindowWhenReady();
+  }, []);
+
   useEffect(() => {
     const stop = initSessionRecorder();
     return () => stop();
   }, []);
 
   useEffect(() => {
-    void importCmdHistoryFromLocalStorage()
-      .then(() => hydrateCmdHistory())
-      .catch(console.error);
+    return runWhenIdle(() => {
+      void importCmdHistoryFromLocalStorage()
+        .then(() => hydrateCmdHistory())
+        .catch(console.error);
+    });
   }, []);
 
   useEffect(() => initTransferProgressListener(), []);
 
-  useEffect(() => initSchedulerListener(), []);
+  useEffect(() => {
+    return runWhenIdle(() => initSchedulerListener());
+  }, []);
 
   useEffect(() => {
-    api
-      .hostPlatform()
-      .then(hydrateHostOs)
-      .catch(() => undefined);
+    return runWhenIdle(() => {
+      void api.hostPlatform().then(hydrateHostOs).catch(() => undefined);
+    });
   }, []);
 
   /** 启动时从 DB 同步主题（默认跟随系统） */
   useEffect(() => {
-    getSetting("theme")
-      .then((v) => {
-        const theme = (v as ThemeMode | null) || "system";
-        useSettingsStore.getState().hydrate({ theme });
-      })
-      .catch(console.error);
+    return runWhenIdle(() => {
+      getSetting("theme")
+        .then((v) => {
+          const theme = (v as ThemeMode | null) || "system";
+          useSettingsStore.getState().hydrate({ theme });
+        })
+        .catch(console.error);
+    });
   }, []);
 
   useEffect(() => {
