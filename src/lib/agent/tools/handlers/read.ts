@@ -11,10 +11,10 @@ import {
   safeDockerArg,
 } from "@/lib/agent/tools/handlers/dockerHelpers";
 import {
-  activeFsEndpoint,
-  activeSessionId,
-  resolveTab,
-  tabIdFromArgs,
+  activeFsEndpointAsync,
+  activeSessionIdAsync,
+  formatResolveError,
+  resolveTabForExecution,
 } from "@/lib/agent/tools/helpers";
 import { asNum } from "@/lib/agent/tools/types";
 import { searchCmdHistory, searchNotes, searchSessionLogs } from "@/lib/db";
@@ -45,16 +45,14 @@ export async function runReadToolHandler(
 ): Promise<string | null> {
   switch (name) {
     case "list_files": {
-      const tabId = tabIdFromArgs(args);
-      const ep = activeFsEndpoint(tabId);
-      if (!ep) {
+      const hit = await activeFsEndpointAsync(args);
+      if (!hit) {
         return JSON.stringify({
           ok: false,
-          error: tabId
-            ? `No file endpoint for tab_id=${tabId}`
-            : "No active session",
+          error: formatResolveError(args, "No active session"),
         });
       }
+      const { endpoint: ep, tab, provisioned } = hit;
       const path =
         typeof args.path === "string" && args.path.trim() ? args.path.trim() : ".";
       const limit = Math.min(Math.max(asNum(args.limit) ?? 200, 1), 500);
@@ -65,7 +63,8 @@ export async function runReadToolHandler(
         return JSON.stringify(
           {
             path,
-            tab_id: tabId ?? null,
+            tab_id: tab.id,
+            auto_opened: provisioned,
             endpoint: ep.kind,
             count: slice.length,
             total: rows.length,
@@ -86,16 +85,14 @@ export async function runReadToolHandler(
       }
     }
     case "read_file": {
-      const tabId = tabIdFromArgs(args);
-      const ep = activeFsEndpoint(tabId);
-      if (!ep) {
+      const hit = await activeFsEndpointAsync(args);
+      if (!hit) {
         return JSON.stringify({
           ok: false,
-          error: tabId
-            ? `No file endpoint for tab_id=${tabId}`
-            : "No active session",
+          error: formatResolveError(args, "No active session"),
         });
       }
+      const { endpoint: ep } = hit;
       const path = typeof args.path === "string" ? args.path.trim() : "";
       if (!path) return JSON.stringify({ ok: false, error: "path required" });
       const max =
@@ -116,16 +113,14 @@ export async function runReadToolHandler(
       }
     }
     case "file_info": {
-      const tabId = tabIdFromArgs(args);
-      const ep = activeFsEndpoint(tabId);
-      if (!ep) {
+      const hit = await activeFsEndpointAsync(args);
+      if (!hit) {
         return JSON.stringify({
           ok: false,
-          error: tabId
-            ? `No file endpoint for tab_id=${tabId}`
-            : "No active session",
+          error: formatResolveError(args, "No active session"),
         });
       }
+      const { endpoint: ep } = hit;
       const path = typeof args.path === "string" ? args.path.trim() : "";
       if (!path) return JSON.stringify({ ok: false, error: "path required" });
       try {
@@ -219,11 +214,14 @@ export async function runReadToolHandler(
       }
     }
     case "docker_ps": {
-      const sid = activeSessionId(
-        typeof args.session_id === "string" ? args.session_id : undefined,
-        tabIdFromArgs(args),
-      );
-      if (!sid) return JSON.stringify({ ok: false, error: "No active session" });
+      const target = await activeSessionIdAsync(args);
+      if (!target) {
+        return JSON.stringify({
+          ok: false,
+          error: formatResolveError(args, "No active session"),
+        });
+      }
+      const sid = target.sessionId;
       const all = args.all !== false;
       const flag = all ? "-a" : "";
       const raw = await api.sessionExec(
@@ -246,11 +244,14 @@ export async function runReadToolHandler(
       return JSON.stringify({ ok: true, count: rows.length, containers: rows }, null, 2);
     }
     case "docker_logs": {
-      const sid = activeSessionId(
-        typeof args.session_id === "string" ? args.session_id : undefined,
-        tabIdFromArgs(args),
-      );
-      if (!sid) return JSON.stringify({ ok: false, error: "No active session" });
+      const target = await activeSessionIdAsync(args);
+      if (!target) {
+        return JSON.stringify({
+          ok: false,
+          error: formatResolveError(args, "No active session"),
+        });
+      }
+      const sid = target.sessionId;
       const container =
         typeof args.container === "string" ? args.container.trim() : "";
       if (!container) {
@@ -274,11 +275,14 @@ export async function runReadToolHandler(
       }
     }
     case "docker_inspect": {
-      const sid = activeSessionId(
-        typeof args.session_id === "string" ? args.session_id : undefined,
-        tabIdFromArgs(args),
-      );
-      if (!sid) return JSON.stringify({ ok: false, error: "No active session" });
+      const target = await activeSessionIdAsync(args);
+      if (!target) {
+        return JSON.stringify({
+          ok: false,
+          error: formatResolveError(args, "No active session"),
+        });
+      }
+      const sid = target.sessionId;
       const container =
         typeof args.container === "string" ? args.container.trim() : "";
       if (!container) {
@@ -362,12 +366,15 @@ export async function runReadToolHandler(
       );
     }
     case "port_snapshot": {
-      const tab = resolveTab(tabIdFromArgs(args));
-      const sid =
-        (typeof args.session_id === "string" ? args.session_id : null) ||
-        tab?.sessionId ||
-        null;
-      if (!sid) return JSON.stringify({ ok: false, error: "No active session" });
+      const resolved = await resolveTabForExecution(args);
+      if (!resolved?.tab.sessionId) {
+        return JSON.stringify({
+          ok: false,
+          error: formatResolveError(args, "No active session"),
+        });
+      }
+      const { tab } = resolved;
+      const sid = tab.sessionId!;
       const env = resolveProbeEnv(
         tab?.kind ?? "local",
         tab?.shellId,
@@ -377,12 +384,15 @@ export async function runReadToolHandler(
       return stripAnsi(out.slice(0, 16_000));
     }
     case "disk_snapshot": {
-      const tab = resolveTab(tabIdFromArgs(args));
-      const sid =
-        (typeof args.session_id === "string" ? args.session_id : null) ||
-        tab?.sessionId ||
-        null;
-      if (!sid) return JSON.stringify({ ok: false, error: "No active session" });
+      const resolved = await resolveTabForExecution(args);
+      if (!resolved?.tab.sessionId) {
+        return JSON.stringify({
+          ok: false,
+          error: formatResolveError(args, "No active session"),
+        });
+      }
+      const { tab } = resolved;
+      const sid = tab.sessionId!;
       const env = resolveProbeEnv(
         tab?.kind ?? "local",
         tab?.shellId,

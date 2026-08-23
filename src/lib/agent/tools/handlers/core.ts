@@ -5,6 +5,7 @@
 
 import { stripAnsi } from "@/lib/agent/ansi";
 import { runDeployToolHandler } from "@/lib/agent/tools/handlers/deploy";
+import { runPipelineToolHandler } from "@/lib/agent/tools/handlers/pipeline";
 import { runReadToolHandler } from "@/lib/agent/tools/handlers/read";
 import {
   getHost,
@@ -24,9 +25,10 @@ import { api } from "@/lib/tauri";
 import { getHostOs } from "@/lib/core/platform";
 import { serializeSessionsForAgent, describePlane } from "@/lib/agent/executionContext";
 import {
-  activeSessionId,
+  activeSessionIdAsync,
   activeTabHostId,
-  resolveTab,
+  formatResolveError,
+  resolveTabForExecution,
   tabIdFromArgs,
 } from "@/lib/agent/tools/helpers";
 import { asNum, sleep } from "@/lib/agent/tools/types";
@@ -96,25 +98,20 @@ export async function runToolHandler(
 
   switch (name) {
     case "terminal_tail": {
-      const tabId = tabIdFromArgs(args);
-      const sid = activeSessionId(
-        typeof args.session_id === "string" ? args.session_id : undefined,
-        tabId,
-      );
-      if (!sid) {
-        return tabId
-          ? `No session for tab_id=${tabId}`
-          : "No active terminal session";
-      }
+      const target = await activeSessionIdAsync(args);
+      if (!target) return formatResolveError(args, "No active terminal session");
       const max =
         typeof args.max_chars === "number" ? args.max_chars : 8000;
-      const text = stripAnsi(await getTranscriptTail(sid, max));
+      const text = stripAnsi(await getTranscriptTail(target.sessionId, max));
       return text || "(empty transcript)";
     }
     case "host_info": {
       let hostId =
         typeof args.host_id === "number" ? args.host_id : undefined;
-      if (hostId == null) hostId = activeTabHostId(tabIdFromArgs(args));
+      if (hostId == null) {
+        const resolved = await resolveTabForExecution(args);
+        hostId = resolved?.tab.hostId ?? activeTabHostId(tabIdFromArgs(args));
+      }
       if (hostId == null) return "No host bound to active tab";
       const h = await getHost(hostId);
       if (!h) return "Host not found";
@@ -242,16 +239,9 @@ export async function runToolHandler(
     }
     case "terminal_run": {
       if (!cmd) return "command required";
-      const tabId = tabIdFromArgs(args);
-      const sid = activeSessionId(
-        typeof args.session_id === "string" ? args.session_id : undefined,
-        tabId,
-      );
-      if (!sid) {
-        return tabId
-          ? `No session for tab_id=${tabId}`
-          : "No active session";
-      }
+      const target = await activeSessionIdAsync(args);
+      if (!target) return formatResolveError(args);
+      const { sessionId: sid, tab, provisioned } = target;
       const before = await getTranscriptTail(sid, 2000);
       await api.sessionWrite(sid, `${cmd}\n`);
       useCmdHistory.getState().push({ cmd, sessionId: sid });
@@ -266,7 +256,9 @@ export async function runToolHandler(
       return JSON.stringify({
         ok: true,
         visible_in_terminal: true,
-        tab_id: resolveTab(tabId)?.id ?? tabId ?? null,
+        tab_id: tab.id,
+        plane: describePlane(tab),
+        auto_opened: provisioned,
         command: cmd,
         output: stripAnsi((delta || after).slice(0, 16_000)),
       });
@@ -289,16 +281,9 @@ export async function runToolHandler(
           vars: resolved.vars,
         });
       }
-      const sid = activeSessionId(
-        typeof args.session_id === "string" ? args.session_id : undefined,
-        tabIdFromArgs(args),
-      );
-      if (!sid) {
-        const tabId = tabIdFromArgs(args);
-        return tabId
-          ? `No session for tab_id=${tabId}`
-          : "No active session";
-      }
+      const target = await activeSessionIdAsync(args);
+      if (!target) return formatResolveError(args);
+      const { sessionId: sid } = target;
       const before = await getTranscriptTail(sid, 2000);
       await sendScriptToSession(sid, resolved.body, {
         pasteOnly: Boolean(script.paste_only),
@@ -325,38 +310,25 @@ export async function runToolHandler(
       });
     }
     case "host_metrics": {
-      const tab = resolveTab(tabIdFromArgs(args));
-      const sid =
-        (typeof args.session_id === "string" ? args.session_id : null) ||
-        tab?.sessionId ||
-        null;
-      if (!sid) return "No active session";
-      const env = resolveProbeEnv(
-        tab?.kind ?? "local",
-        tab?.shellId,
-        getHostOs(),
-      );
-      const out = await api.sessionExec(sid, metricsCmd(env, tab?.shellId));
+      const resolved = await resolveTabForExecution(args);
+      if (!resolved?.tab.sessionId) return formatResolveError(args);
+      const { tab } = resolved;
+      const sid = tab.sessionId!;
+      const env = resolveProbeEnv(tab.kind ?? "local", tab.shellId, getHostOs());
+      const out = await api.sessionExec(sid, metricsCmd(env, tab.shellId));
       return out.slice(0, 12_000);
     }
     case "session_exec": {
       if (!cmd) return "command required";
-      const tabId = tabIdFromArgs(args);
-      const sid = activeSessionId(
-        typeof args.session_id === "string" ? args.session_id : undefined,
-        tabId,
-      );
-      if (!sid) {
-        return tabId
-          ? `No session for tab_id=${tabId}`
-          : "No active session";
-      }
-      const tab = resolveTab(tabId);
+      const target = await activeSessionIdAsync(args);
+      if (!target) return formatResolveError(args);
+      const { sessionId: sid, tab, provisioned } = target;
       const out = await api.sessionExec(sid, cmd);
       return JSON.stringify({
         ok: true,
-        tab_id: tab?.id ?? tabId ?? null,
-        plane: tab ? describePlane(tab) : null,
+        tab_id: tab.id,
+        plane: describePlane(tab),
+        auto_opened: provisioned,
         command: cmd,
         output: stripAnsi(out.slice(0, 20_000)),
       });
@@ -422,11 +394,9 @@ export async function runToolHandler(
       return lines.join("\n");
     }
     case "docker_compose_up": {
-      const sid = activeSessionId(
-        typeof args.session_id === "string" ? args.session_id : undefined,
-        tabIdFromArgs(args),
-      );
-      if (!sid) return "No active session";
+      const target = await activeSessionIdAsync(args);
+      if (!target) return formatResolveError(args);
+      const sid = target.sessionId;
       const composeFile =
         typeof args.compose_file === "string" && args.compose_file.trim()
           ? args.compose_file.trim()
@@ -447,6 +417,8 @@ export async function runToolHandler(
     default: {
       const readResult = await runReadToolHandler(name, args);
       if (readResult != null) return readResult;
+      const pipelineResult = await runPipelineToolHandler(name, args);
+      if (pipelineResult != null) return pipelineResult;
       const deployResult = await runDeployToolHandler(name, args);
       if (deployResult != null) return deployResult;
       return `Unknown tool: ${name}`;

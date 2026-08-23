@@ -19,12 +19,15 @@ export const deploySubAgent: SubAgentModule = {
       "upload_tree",
       "write_remote_file",
       "deploy",
+      "run_pipeline",
+      "get_pipeline",
+      "list_pipelines",
       "terminal_tail",
       "session_exec",
       "list_sessions",
     ],
     systemExtra:
-      "你是部署 SubAgent。编译在 WSL（tab_id + plane=local-wsl），部署在 SSH（tab_id + plane=remote-ssh）。先 sync_to_remote(dry_run=true) 生成变更清单。数据库 dump 不要用 workspace sync，用 session_exec + scp。路径必须在工作空间根内。",
+      "你是部署 SubAgent。WSL 编译用 plane=wsl 或 shell_id，无需预先打开标签；远程部署用 plane=ssh + host_id 或 tab_id。数据库 dump 走 session_exec + scp，不用 workspace sync。",
     maxRounds: 5,
   },
 };

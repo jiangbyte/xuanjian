@@ -9,7 +9,30 @@ const TAB_ID_PROP = {
   tab_id: {
     type: "string",
     description:
-      "终端标签 ID（list_sessions 返回的 tabId）。多标签时指定 WSL/SSH 等执行平面，默认当前焦点标签。",
+      "已打开标签 ID（list_sessions.openTabs）。多标签时指定执行平面。",
+  },
+} as const;
+
+const EXEC_TARGET_PROPS = {
+  tab_id: TAB_ID_PROP.tab_id,
+  shell_id: {
+    type: "string",
+    description:
+      "本地 Shell ID（list_sessions.availableShells）。如 local:wsl:Ubuntu；标签未打开时自动后台连接。",
+  },
+  plane: {
+    type: "string",
+    enum: ["wsl", "ssh"],
+    description:
+      "执行平面简写。plane=wsl 可配 wsl_distro；plane=ssh 需 host_id。无 tab 时自动打开。",
+  },
+  wsl_distro: {
+    type: "string",
+    description: "WSL 发行版名（plane=wsl 时），如 Ubuntu",
+  },
+  host_id: {
+    type: "number",
+    description: "SSH 主机 ID（plane=ssh 时自动连接）",
   },
 } as const;
 
@@ -23,7 +46,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
       parameters: {
         type: "object",
         properties: {
-          tab_id: TAB_ID_PROP.tab_id,
+          ...EXEC_TARGET_PROPS,
           session_id: { type: "string", description: "可选，默认活动会话" },
           max_chars: { type: "number" },
         },
@@ -35,7 +58,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
     function: {
       name: "list_sessions",
       description:
-        "列出打开的终端标签、执行平面（plane）、文件端点（fsKind）、cwd 与 tabId",
+        "列出 openTabs、availableShells（含 WSL shell_id）、availableHosts；WSL 不必预先打开标签",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -110,7 +133,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
       parameters: {
         type: "object",
         properties: {
-          tab_id: TAB_ID_PROP.tab_id,
+          ...EXEC_TARGET_PROPS,
           session_id: { type: "string" },
           command: { type: "string" },
           wait_ms: { type: "number" },
@@ -128,7 +151,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
       parameters: {
         type: "object",
         properties: {
-          tab_id: TAB_ID_PROP.tab_id,
+          ...EXEC_TARGET_PROPS,
           session_id: { type: "string" },
           command: { type: "string" },
         },
@@ -144,7 +167,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
       parameters: {
         type: "object",
         properties: {
-          tab_id: TAB_ID_PROP.tab_id,
+          ...EXEC_TARGET_PROPS,
           script_id: { type: "number" },
           session_id: { type: "string" },
           vars: { type: "object", additionalProperties: { type: "string" } },
@@ -162,7 +185,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
       parameters: {
         type: "object",
         properties: {
-          tab_id: TAB_ID_PROP.tab_id,
+          ...EXEC_TARGET_PROPS,
           session_id: { type: "string" },
         },
       },
@@ -210,7 +233,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
       parameters: {
         type: "object",
         properties: {
-          tab_id: TAB_ID_PROP.tab_id,
+          ...EXEC_TARGET_PROPS,
           session_id: { type: "string" },
           compose_file: { type: "string", description: "可选 compose 文件路径" },
           detach: { type: "boolean", description: "默认 true（-d）" },
@@ -227,7 +250,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
       parameters: {
         type: "object",
         properties: {
-          tab_id: TAB_ID_PROP.tab_id,
+          ...EXEC_TARGET_PROPS,
           path: { type: "string", description: "目录路径，默认 ." },
           limit: { type: "number" },
           offset: { type: "number" },
@@ -243,7 +266,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
       parameters: {
         type: "object",
         properties: {
-          tab_id: TAB_ID_PROP.tab_id,
+          ...EXEC_TARGET_PROPS,
           path: { type: "string" },
           max_chars: { type: "number" },
         },
@@ -259,7 +282,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
       parameters: {
         type: "object",
         properties: {
-          tab_id: TAB_ID_PROP.tab_id,
+          ...EXEC_TARGET_PROPS,
           path: { type: "string" },
         },
         required: ["path"],
@@ -334,7 +357,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
       parameters: {
         type: "object",
         properties: {
-          tab_id: TAB_ID_PROP.tab_id,
+          ...EXEC_TARGET_PROPS,
           session_id: { type: "string" },
           all: { type: "boolean", description: "含已停止，默认 true" },
         },
@@ -349,7 +372,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
       parameters: {
         type: "object",
         properties: {
-          tab_id: TAB_ID_PROP.tab_id,
+          ...EXEC_TARGET_PROPS,
           session_id: { type: "string" },
           container: { type: "string" },
           tail: { type: "number" },
@@ -366,7 +389,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
       parameters: {
         type: "object",
         properties: {
-          tab_id: TAB_ID_PROP.tab_id,
+          ...EXEC_TARGET_PROPS,
           session_id: { type: "string" },
           container: { type: "string" },
         },
@@ -425,7 +448,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
       parameters: {
         type: "object",
         properties: {
-          tab_id: TAB_ID_PROP.tab_id,
+          ...EXEC_TARGET_PROPS,
           session_id: { type: "string" },
         },
       },
@@ -439,7 +462,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
       parameters: {
         type: "object",
         properties: {
-          tab_id: TAB_ID_PROP.tab_id,
+          ...EXEC_TARGET_PROPS,
           session_id: { type: "string" },
         },
       },
@@ -521,6 +544,44 @@ export const TOOL_DEFS: AgentToolDef[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "list_pipelines",
+      description:
+        "列出已保存的多阶段 Pipeline。返回 stages_summary（含每步 prompt 意图说明）。",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_pipeline",
+      description:
+        "读取 Pipeline 完整定义。各阶段含 prompt 字段（意图/成功标准），执行前务必阅读 stages_summary。",
+      parameters: {
+        type: "object",
+        properties: { pipeline_id: { type: "number" } },
+        required: ["pipeline_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "run_pipeline",
+      description:
+        "按顺序执行 Pipeline。执行前用 get_pipeline 阅读各阶段 prompt；运行日志会输出 [意图] 行。支持 dry_run。",
+      parameters: {
+        type: "object",
+        properties: {
+          pipeline_id: { type: "number" },
+          dry_run: { type: "boolean" },
+        },
+        required: ["pipeline_id"],
+      },
+    },
+  },
 ];
 
 export const READ_TOOL_NAMES = new Set([
@@ -548,6 +609,8 @@ export const READ_TOOL_NAMES = new Set([
   "search_cmd_history",
   "port_snapshot",
   "disk_snapshot",
+  "list_pipelines",
+  "get_pipeline",
 ]);
 
 export const WRITE_TOOL_NAMES = new Set([
@@ -561,4 +624,5 @@ export const WRITE_TOOL_NAMES = new Set([
   "sync_to_remote",
   "write_remote_file",
   "deploy",
+  "run_pipeline",
 ]);

@@ -7,6 +7,10 @@ import { stripAnsi } from "@/lib/agent/ansi";
 import { resolveFsEndpoint } from "@/lib/fs";
 import { resolveActiveWorkspace } from "@/lib/workspace/context";
 import { api } from "@/lib/tauri";
+import {
+  findOpenLocalShellTab,
+  findOpenSshTab,
+} from "@/lib/session/ensureSession";
 import type { TermTab } from "@/stores/ui";
 import { useUiStore } from "@/stores/ui";
 
@@ -75,7 +79,7 @@ export function executionSemanticsBlock(): string {
     "- kind=ssh → 远程 SSH；host_info、sync_to_remote、deploy 依赖 SSH 或工作空间 host_id。",
     "- network_*（ping/dns/tcp_probe/tls_cert）在 Windows 宿主机网络栈执行，不代表 SSH/WSL 内可达性。",
     "- 工作空间 sync/deploy 仅同步代码目录（local_root → remote_root），不用于数据库 dump 等大文件迁移。",
-    "- 多标签流水线必须用 tab_id 指定目标，勿假设用户当前焦点标签。",
+    "- 多标签流水线用 tab_id 指定目标；WSL/本地 Shell 标签不必预先打开，可传 shell_id（如 local:wsl:Ubuntu）或 plane=wsl 自动后台连接。",
   ].join("\n");
 }
 
@@ -88,7 +92,7 @@ export async function buildExecutionContextBlock(): Promise<string> {
   const lines: string[] = ["【当前执行环境】"];
 
   if (!tabs.length) {
-    lines.push("（无打开终端标签）");
+    lines.push("（无已打开终端标签）");
   } else {
     const cwdResults = await Promise.all(tabs.map((t) => probeTabCwd(t)));
     if (active) {
@@ -103,6 +107,21 @@ export async function buildExecutionContextBlock(): Promise<string> {
       const suffix = cwd ? ` cwd=${cwd}` : "";
       lines.push(`- ${formatTabSummary(t, t.id === activeTabId)}${suffix}`);
     });
+  }
+
+  try {
+    const shells = await api.listLocalShells();
+    const wslShells = shells.filter((s) => s.id.startsWith("local:wsl:"));
+    if (wslShells.length) {
+      lines.push("", "可用 WSL（未打开时可传 shell_id 或 plane=wsl 自动连接）:");
+      for (const s of wslShells) {
+        const open = findOpenLocalShellTab(s.id);
+        const state = open ? `已打开 tabId=${open.id}` : "未打开";
+        lines.push(`- shellId=${s.id} name="${s.name}" ${state}`);
+      }
+    }
+  } catch {
+    /* ignore */
   }
 
   lines.push("");
@@ -122,11 +141,11 @@ export async function buildExecutionContextBlock(): Promise<string> {
 
 /** list_sessions 工具用的序列化 */
 export async function serializeSessionsForAgent(): Promise<
-  Record<string, unknown>[]
+  Record<string, unknown>
 > {
   const { tabs, activeTabId } = useUiStore.getState();
   const cwdResults = await Promise.all(tabs.map((t) => probeTabCwd(t)));
-  return tabs.map((t, i) => {
+  const openTabs = tabs.map((t, i) => {
     const ep = resolveFsEndpoint(t);
     return {
       tabId: t.id,
@@ -142,4 +161,52 @@ export async function serializeSessionsForAgent(): Promise<
       cwd: cwdResults[i],
     };
   });
+
+  let availableShells: Record<string, unknown>[] = [];
+  try {
+    const shells = await api.listLocalShells();
+    availableShells = shells.map((s) => {
+      const openTab = findOpenLocalShellTab(s.id);
+      return {
+        shellId: s.id,
+        name: s.name,
+        plane: s.id.startsWith("local:wsl:")
+          ? "local-wsl"
+          : s.id === "local:powershell"
+            ? "local-windows-powershell"
+            : "local",
+        isDefault: s.isDefault,
+        openTabId: openTab?.id ?? null,
+        sessionReady: Boolean(openTab?.sessionId),
+      };
+    });
+  } catch {
+    /* ignore */
+  }
+
+  let availableHosts: Record<string, unknown>[] = [];
+  try {
+    const { listHosts } = await import("@/lib/db");
+    const hosts = await listHosts();
+    availableHosts = hosts.map((h) => {
+      const openTab = findOpenSshTab(h.id);
+      return {
+        hostId: h.id,
+        name: h.name,
+        host: h.host,
+        openTabId: openTab?.id ?? null,
+        sessionReady: Boolean(openTab?.sessionId),
+      };
+    });
+  } catch {
+    /* ignore */
+  }
+
+  return {
+    openTabs,
+    availableShells,
+    availableHosts,
+    hint:
+      "WSL/SSH 不必预先打开标签：session_exec 等可传 shell_id（如 local:wsl:Ubuntu）或 plane=wsl / plane=ssh + host_id 自动连接。",
+  };
 }

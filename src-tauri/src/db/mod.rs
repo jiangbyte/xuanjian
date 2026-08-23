@@ -505,5 +505,34 @@ UPDATE app_settings SET value = 'system' WHERE key = 'theme';
 "#,
             kind: MigrationKind::Up,
         },
+        // —— 迁移 v20：多阶段 Pipeline ——
+        Migration {
+            version: 20,
+            description: "pipelines",
+            sql: r#"
+CREATE TABLE IF NOT EXISTS pipelines (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  description TEXT,
+  definition_json TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS pipeline_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  pipeline_id INTEGER NOT NULL,
+  dry_run INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'running',
+  result_json TEXT,
+  started_at TEXT NOT NULL DEFAULT (datetime('now')),
+  finished_at TEXT,
+  FOREIGN KEY (pipeline_id) REFERENCES pipelines(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_pipeline_runs_pipeline ON pipeline_runs(pipeline_id, started_at DESC);
+"#,
+            kind: MigrationKind::Up,
+        },
     ]
 }
