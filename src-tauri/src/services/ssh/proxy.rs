@@ -20,11 +20,22 @@ pub async fn connect_via_proxy(
 ) -> Result<TcpStream> {
     match proxy.proxy_type.to_ascii_lowercase().as_str() {
         "socks5" | "socks" => {
-            connect_socks5(&proxy.proxy_host, proxy.proxy_port, target_host, target_port).await
+            connect_socks5(
+                &proxy.proxy_host,
+                proxy.proxy_port,
+                target_host,
+                target_port,
+            )
+            .await
         }
         "http" | "https" => {
-            connect_http_connect(&proxy.proxy_host, proxy.proxy_port, target_host, target_port)
-                .await
+            connect_http_connect(
+                &proxy.proxy_host,
+                proxy.proxy_port,
+                target_host,
+                target_port,
+            )
+            .await
         }
         other => Err(anyhow!(
             "unsupported SSH proxy type: {other} (supported: socks5, http)"

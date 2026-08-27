@@ -3,7 +3,10 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { splitPlanFromReply, buildPlanExecutePrompt } from "@xuanjian/agent-core";
+import {
+  splitPlanFromReply,
+  buildPlanExecutePrompt,
+} from "@xuanjian/agent-core";
 
 describe("splitPlanFromReply", () => {
   it("ignores diagnostic bullets when no actionable steps", () => {

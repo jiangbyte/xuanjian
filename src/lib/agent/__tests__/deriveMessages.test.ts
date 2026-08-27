@@ -3,9 +3,9 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { deriveMessages } from "@/lib/agent/session/deriveMessages";
-import { resetSessionSeqCounter } from "@/lib/agent/session/partsMapping";
-import type { SessionEvent } from "@/lib/agent/session/types";
+import { deriveMessages } from "@/lib/agent/history/deriveMessages";
+import { resetSessionSeqCounter } from "@/lib/agent/history/partsMapping";
+import type { SessionEvent } from "@/lib/agent/history/types";
 
 describe("deriveMessages", () => {
   it("projects user and assistant text", () => {

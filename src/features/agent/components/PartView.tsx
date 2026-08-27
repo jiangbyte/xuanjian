@@ -43,7 +43,7 @@ export function PartView({
     return (
       <button
         type="button"
-        className="w-full rounded-md border border-dashed border-border bg-muted/40 px-2 py-1.5 text-left text-[12px] leading-[1.55] text-muted-foreground"
+        className="w-full max-w-full min-w-0 overflow-hidden rounded-md border border-dashed border-border bg-muted/40 px-2 py-1.5 text-left text-[12px] leading-[1.55] text-muted-foreground"
         onClick={() => setOpen((v) => !v)}
       >
         <span className="font-medium text-foreground/80">
@@ -53,11 +53,11 @@ export function PartView({
             : ""}
         </span>
         {open ? (
-          <pre className="mt-1 whitespace-pre-wrap font-sans text-[12px] leading-[1.55]">
+          <pre className="mt-1 max-w-full whitespace-pre-wrap break-words font-sans text-[12px] leading-[1.55] [overflow-wrap:anywhere]">
             {part.text}
           </pre>
         ) : (
-          <span className="ml-1 opacity-70">
+          <span className="ml-1 block truncate opacity-70">
             {part.text.slice(0, 64)}
             {part.text.length > 64 ? "…" : ""}
           </span>
@@ -69,7 +69,7 @@ export function PartView({
     return (
       <div
         className={cn(
-          "rounded-md border px-2 py-1.5 text-[11px]",
+          "max-w-full min-w-0 overflow-hidden rounded-md border px-2 py-1.5 text-[11px]",
           part.status === "running" && "border-primary/40 bg-primary/5",
           part.status === "done" && "border-border bg-muted/30",
           part.status === "error" && "border-destructive/40 bg-destructive/5",
@@ -154,7 +154,7 @@ export function PartView({
   }
   if (part.type === "tool_pending") {
     return (
-      <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px]">
+      <div className="max-w-full min-w-0 overflow-hidden rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px]">
         <div className="font-medium">
           待确认{part.dangerous ? " · 危险" : ""}
           {part.agent && part.agent !== "orchestrator"
@@ -164,7 +164,7 @@ export function PartView({
         <div className="mt-0.5 text-foreground">
           {toolLabel(part.name, part.args)}
         </div>
-        <pre className="mt-1 max-h-20 overflow-auto font-mono text-[10px] text-muted-foreground">
+        <pre className="mt-1 max-h-20 max-w-full overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-all font-mono text-[10px] text-muted-foreground">
           {JSON.stringify(part.args, null, 0)}
         </pre>
         <div className="mt-1.5 flex gap-1.5">
@@ -191,13 +191,13 @@ export function PartView({
   }
   if (part.type === "tool_call") {
     return (
-      <div className="flex items-start gap-1.5 rounded-md border border-border px-2 py-1 text-[12px] leading-[1.55]">
+      <div className="flex max-w-full min-w-0 items-start gap-1.5 overflow-hidden rounded-md border border-border px-2 py-1 text-[12px] leading-[1.55]">
         <Wrench size={12} className="mt-0.5 shrink-0 text-primary" />
-        <div className="min-w-0">
-          <div className="font-medium">
+        <div className="min-w-0 flex-1">
+          <div className="break-words font-medium [overflow-wrap:anywhere]">
             Action · {toolLabel(part.name, part.args)}
           </div>
-          <pre className="truncate font-mono text-[11px] text-muted-foreground">
+          <pre className="mt-0.5 max-w-full whitespace-pre-wrap break-all font-mono text-[11px] text-muted-foreground">
             {JSON.stringify(part.args)}
           </pre>
         </div>
@@ -206,11 +206,11 @@ export function PartView({
   }
   if (part.type === "tool_result") {
     return (
-      <details className="rounded-md bg-muted/40 px-2 py-1.5 text-[12px] leading-[1.55]">
-        <summary className="cursor-pointer font-medium">
+      <details className="max-w-full min-w-0 overflow-hidden rounded-md bg-muted/40 px-2 py-1.5 text-[12px] leading-[1.55]">
+        <summary className="cursor-pointer break-words font-medium [overflow-wrap:anywhere]">
           Observation · {part.name}
         </summary>
-        <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[11px] leading-snug">
+        <pre className="mt-1 max-h-40 max-w-full overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-all font-mono text-[11px] leading-snug">
           {part.result}
         </pre>
       </details>

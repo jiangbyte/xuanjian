@@ -107,31 +107,39 @@ jobs:
           releaseBody: |
             ## Highlights
 
-            - **玄鉴 Agent（LangGraph）**
-              - 本地编排改为 LangGraph（`agent-core` / `agent-adapters`），移除 Remote Agent / agent-server
-              - 修复 Anthropic / DeepSeek 历史回放时 `tool_result` 缺少对应 `tool_use` 导致的 400
-              - 上下文占用对齐 deepseek-harness：chars÷4 启发式 + API prompt 样本投影
-              - 自动上下文压缩阈值可配置；WebView 使用 `@langchain/langgraph/web` 避免白屏
-            - **启动体验**：启动闪屏、主题预加载，减少白屏等待
-            - **文件浏览器 / SFTP**：拖放上传、框选多选、批量删除/下载
-            - **多阶段流水线**（v1.0.0 起）：可视化编排 WSL / SSH 跨环境部署
+            ### Agent bottom terminal
+            - Split workspace: user terminal on top, **Agent bottom panel** below (separate PTY, multi-tab)
+            - `terminal_run` / `session_exec` execute visibly in the bottom panel
+            - Transcript recording, replay, and `terminal_tail` aligned with the agent session
 
-            ## 安装包
+            ### Terminal & sidebar
+            - Denser sidebar lists; Docker logs: selectable copy + auto-follow latest
+            - SFTP toolbar horizontal scroll on narrow panes; collapse no longer remounts main xterm
 
-            | 平台 | 产物 |
+            ### Agent & UI
+            - LangGraph runtime (`agent-core` / `agent-adapters`) hardening
+            - AI sidebar ReAct cards wrap instead of horizontal overflow
+            - Settings: agent catalog, plugins/tools, MCP sections reorganized
+
+            ### Network
+            - Connections, traffic monitor, speed-test charts
+
+            Full notes: [docs/release-notes/v1.3.0.md](https://github.com/jiangbyte/xuanjian/blob/main/docs/release-notes/v1.3.0.md)
+
+            ## Installers
+
+            | Platform | Artifacts |
             | --- | --- |
-            | Windows x64 | `*_x64-setup.exe`（NSIS，推荐）、`*_x64_en-US.msi` |
-            | macOS Apple Silicon | `aarch64` 的 `.dmg` / `.app` 包 |
-            | macOS Intel | `x64` 的 `.dmg` / `.app` 包 |
-            | Linux x64 | `.deb`、`.AppImage`、`.rpm` |
+            | Windows x64 | `*_x64-setup.exe` (NSIS), `*_x64_en-US.msi` |
+            | macOS Apple Silicon | `aarch64` `.dmg` / `.app` |
+            | macOS Intel | `x64` `.dmg` / `.app` |
+            | Linux x64 | `.deb`, `.AppImage`, `.rpm` |
 
-            安装包不含本机用户数据；首次运行会在本机创建空库。
+            Installers do not include user data. Windows requires [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
 
-            Windows 需已安装 [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)（系统通常已自带）。
+            ## Feedback
 
-            ## 反馈
-
-            问题与建议：[Issues](https://github.com/jiangbyte/xuanjian/issues)
+            [Issues](https://github.com/jiangbyte/xuanjian/issues)
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

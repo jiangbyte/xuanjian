@@ -54,7 +54,9 @@ export async function runReadToolHandler(
       }
       const { endpoint: ep, tab, provisioned } = hit;
       const path =
-        typeof args.path === "string" && args.path.trim() ? args.path.trim() : ".";
+        typeof args.path === "string" && args.path.trim()
+          ? args.path.trim()
+          : ".";
       const limit = Math.min(Math.max(asNum(args.limit) ?? 200, 1), 500);
       const offset = Math.max(asNum(args.offset) ?? 0, 0);
       try {
@@ -128,7 +130,8 @@ export async function runReadToolHandler(
         const rows = await fsListDir(ep, dir);
         const name = basename(path);
         const hit = rows.find(
-          (e) => e.name === name || e.path === path || e.path.endsWith(`/${name}`),
+          (e) =>
+            e.name === name || e.path === path || e.path.endsWith(`/${name}`),
         );
         if (!hit) {
           return JSON.stringify({ ok: false, error: "not found", path });
@@ -151,9 +154,9 @@ export async function runReadToolHandler(
       }
     }
     case "ping": {
-      const target =
-        typeof args.target === "string" ? args.target.trim() : "";
-      if (!target) return JSON.stringify({ ok: false, error: "target required" });
+      const target = typeof args.target === "string" ? args.target.trim() : "";
+      if (!target)
+        return JSON.stringify({ ok: false, error: "target required" });
       const count = asNum(args.count);
       try {
         const out = await api.networkPing(target, count ?? undefined);
@@ -241,7 +244,11 @@ export async function runReadToolHandler(
           ports: row.Ports || "",
         }),
       );
-      return JSON.stringify({ ok: true, count: rows.length, containers: rows }, null, 2);
+      return JSON.stringify(
+        { ok: true, count: rows.length, containers: rows },
+        null,
+        2,
+      );
     }
     case "docker_logs": {
       const target = await activeSessionIdAsync(args);
@@ -290,10 +297,7 @@ export async function runReadToolHandler(
       }
       try {
         const ref = safeDockerArg(container);
-        const raw = await api.sessionExec(
-          sid,
-          `docker inspect ${ref} 2>&1`,
-        );
+        const raw = await api.sessionExec(sid, `docker inspect ${ref} 2>&1`);
         if (looksLikeDockerError(raw) && !raw.trim().startsWith("[")) {
           return JSON.stringify({ ok: false, error: raw.slice(0, 800) });
         }

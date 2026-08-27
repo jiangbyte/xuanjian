@@ -71,9 +71,27 @@ export function AppShell() {
     showMainWindowWhenReady();
   }, []);
 
+  /** 首帧绘制后预加载 Monaco / xterm / 图表等重型模块 */
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      void import("@/lib/boot/preloadHeavyModules").then((m) =>
+        m.preloadHeavyModules(),
+      );
+    });
+    return () => cancelAnimationFrame(id);
+  }, []);
+
   useEffect(() => {
     const stop = initSessionRecorder();
     return () => stop();
+  }, []);
+
+  useEffect(() => {
+    return runWhenIdle(() => {
+      void import("@/lib/boot/seedSampleData")
+        .then((m) => m.seedSampleDataIfNeeded())
+        .catch(console.error);
+    });
   }, []);
 
   useEffect(() => {
@@ -92,7 +110,10 @@ export function AppShell() {
 
   useEffect(() => {
     return runWhenIdle(() => {
-      void api.hostPlatform().then(hydrateHostOs).catch(() => undefined);
+      void api
+        .hostPlatform()
+        .then(hydrateHostOs)
+        .catch(() => undefined);
     });
   }, []);
 

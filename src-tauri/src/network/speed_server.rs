@@ -173,9 +173,7 @@ pub async fn network_speed_server_start(
 
 /// 停止本机内网测速服务
 #[tauri::command]
-pub async fn network_speed_server_stop(
-    state: State<'_, Arc<NetworkState>>,
-) -> Result<(), String> {
+pub async fn network_speed_server_stop(state: State<'_, Arc<NetworkState>>) -> Result<(), String> {
     let mut guard = state.speed_server.running.lock().await;
     if let Some(running) = guard.take() {
         running.abort.store(true, Ordering::SeqCst);

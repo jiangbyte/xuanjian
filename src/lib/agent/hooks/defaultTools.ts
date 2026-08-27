@@ -42,7 +42,11 @@ async function needsConfirm(
   name: string,
   args: Record<string, unknown>,
   ctx: ToolExecContext,
-): Promise<{ needs: boolean; dangerous: boolean; confirmArgs: Record<string, unknown> }> {
+): Promise<{
+  needs: boolean;
+  dangerous: boolean;
+  confirmArgs: Record<string, unknown>;
+}> {
   const cmd = typeof args.command === "string" ? args.command.trim() : "";
 
   let scriptPreview: { name: string; body: string } | null = null;

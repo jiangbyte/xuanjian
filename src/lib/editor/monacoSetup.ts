@@ -21,6 +21,7 @@ declare global {
 }
 
 let configured = false;
+let preloadPromise: Promise<void> | null = null;
 
 /** 幂等：配置本地 monaco 与 workers，替代 CDN loader */
 export function ensureMonacoLocal(): void {
@@ -48,6 +49,49 @@ export function ensureMonacoLocal(): void {
     monaco,
     paths: { vs: "" },
   });
+}
+
+/** 预热隐藏实例，触发 worker 与渲染管线初始化 */
+async function warmupMonacoInstance(
+  monacoInstance: typeof monaco,
+): Promise<void> {
+  if (typeof document === "undefined") return;
+  const host = document.createElement("div");
+  host.style.cssText =
+    "position:fixed;width:0;height:0;overflow:hidden;opacity:0;pointer-events:none;left:-9999px";
+  document.body.appendChild(host);
+  try {
+    const editor = monacoInstance.editor.create(host, {
+      value: " ",
+      language: "plaintext",
+      automaticLayout: false,
+    });
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+    editor.dispose();
+  } finally {
+    host.remove();
+  }
+}
+
+/**
+ * 应用启动时预加载 Monaco 与常用编辑器模块，避免首次打开文件编辑白屏等待。
+ * 可重复调用，共享同一 Promise。
+ */
+export function preloadMonacoEditor(): Promise<void> {
+  if (preloadPromise) return preloadPromise;
+  preloadPromise = (async () => {
+    ensureMonacoLocal();
+    const monacoInstance = await loader.init();
+    await warmupMonacoInstance(monacoInstance);
+    await import("@/features/terminal/FileEditorModal");
+  })().catch((err) => {
+    preloadPromise = null;
+    console.error("[monaco] preload failed", err);
+    throw err;
+  });
+  return preloadPromise;
 }
 
 ensureMonacoLocal();

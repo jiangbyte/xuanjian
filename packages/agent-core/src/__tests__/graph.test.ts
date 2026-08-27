@@ -3,7 +3,12 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import { AgentInbox, type AgentPorts, type CoreLlmMessage, type NormalizedLlmReply } from "../index";
+import {
+  AgentInbox,
+  type AgentPorts,
+  type CoreLlmMessage,
+  type NormalizedLlmReply,
+} from "../index";
 import { runOrchestratorGraph } from "../graph";
 
 function mockPorts(reply: NormalizedLlmReply): AgentPorts {
@@ -126,8 +131,8 @@ describe("runOrchestratorGraph", () => {
 
     expect(ports.tools.execute).toHaveBeenCalled();
     expect(parts.some((p) => p.type === "tool_result")).toBe(true);
-    expect(parts.some((p) => p.type === "text" && p.text.includes("根目录"))).toBe(
-      true,
-    );
+    expect(
+      parts.some((p) => p.type === "text" && p.text.includes("根目录")),
+    ).toBe(true);
   });
 });

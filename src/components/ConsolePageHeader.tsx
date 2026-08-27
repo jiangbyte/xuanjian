@@ -46,7 +46,9 @@ export function ConsolePageHeader({
           </div>
         ) : null}
       </div>
-      {children ? <div className="border-t border-border px-5 py-3">{children}</div> : null}
+      {children ? (
+        <div className="border-t border-border px-5 py-3">{children}</div>
+      ) : null}
     </div>
   );
 }
@@ -66,12 +68,19 @@ export function ConsoleSection({
   className?: string;
 }) {
   return (
-    <section className={cn("flex min-h-0 flex-col border border-border bg-background", className)}>
+    <section
+      className={cn(
+        "flex min-h-0 flex-col border border-border bg-background",
+        className,
+      )}
+    >
       <div className="flex shrink-0 items-baseline justify-between gap-2 border-b border-border px-4 py-2.5">
         <div className="min-w-0">
           <h2 className="text-sm font-semibold">{title}</h2>
           {description ? (
-            <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {description}
+            </p>
           ) : null}
         </div>
         {actions ? (
@@ -95,7 +104,11 @@ export function ConsoleEmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center border border-dashed border-border px-6 py-12 text-center">
-      <Icon size={20} strokeWidth={1.75} className="mb-3 text-muted-foreground" />
+      <Icon
+        size={20}
+        strokeWidth={1.75}
+        className="mb-3 text-muted-foreground"
+      />
       <p className="text-sm font-medium text-foreground">{title}</p>
       {description ? (
         <p className="mt-1 max-w-sm text-xs leading-relaxed text-muted-foreground">

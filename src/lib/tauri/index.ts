@@ -176,6 +176,22 @@ export const api = {
     invoke<string>("network_traceroute", { target }),
   networkDnsLookup: (host: string, recordType: string) =>
     invoke<string>("network_dns_lookup", { host, recordType }),
+  networkDnsResolve: (
+    host: string,
+    recordType: string,
+    nameserver?: string | null,
+  ) =>
+    invoke<DnsRecordRow[]>("network_dns_resolve", {
+      host,
+      recordType,
+      nameserver: nameserver ?? null,
+    }),
+  networkListConnections: (protocol?: string | null) =>
+    invoke<SocketRow[]>("network_list_connections", {
+      protocol: protocol ?? null,
+    }),
+  networkInterfaceTraffic: () =>
+    invoke<InterfaceTraffic[]>("network_interface_traffic"),
   networkTcpProbe: (host: string, ports: number[], timeoutMs?: number) =>
     invoke<TcpProbeResult[]>("network_tcp_probe", {
       host,
@@ -200,9 +216,17 @@ export const api = {
   networkTlsCert: (hostPort: string) =>
     invoke<TlsCertInfo>("network_tls_cert", { hostPort }),
   networkWhois: (query: string) => invoke<string>("network_whois", { query }),
+  networkSpeedListNodes: (ipv6?: boolean | null) =>
+    invoke<SpeedServer[]>("network_speed_list_nodes", { ipv6: ipv6 ?? null }),
+  networkSpeedPickNode: (ipv6?: boolean | null, nodeId?: string | null) =>
+    invoke<SpeedServer>("network_speed_pick_node", {
+      ipv6: ipv6 ?? null,
+      nodeId: nodeId ?? null,
+    }),
   networkSpeedTest: (input: {
     downloadUrl: string;
     uploadUrl: string;
+    latencyUrl?: string | null;
     downloadBytes?: number;
     uploadBytes?: number;
     concurrency?: number;
@@ -211,6 +235,7 @@ export const api = {
     invoke<string>("network_speed_test", {
       downloadUrl: input.downloadUrl,
       uploadUrl: input.uploadUrl,
+      latencyUrl: input.latencyUrl ?? null,
       downloadBytes: input.downloadBytes ?? null,
       uploadBytes: input.uploadBytes ?? null,
       concurrency: input.concurrency ?? null,
@@ -311,6 +336,27 @@ export type DataDirInfo = {
 };
 
 export type NetInterface = { name: string; addrs: string[] };
+export type DnsRecordRow = {
+  recordType: string;
+  name: string;
+  value: string;
+  ttl?: number | null;
+  priority?: number | null;
+};
+export type SocketRow = {
+  protocol: string;
+  localAddr: string;
+  remoteAddr: string;
+  state: string;
+  pid?: number | null;
+};
+export type InterfaceTraffic = {
+  name: string;
+  receivedBytes: number;
+  transmittedBytes: number;
+  receivedPackets: number;
+  transmittedPackets: number;
+};
 export type TcpProbeResult = {
   host: string;
   port: number;
@@ -412,8 +458,20 @@ export function onNetworkToolOutput(
   return listen<NetworkToolOutput>("network-tool-output", (e) => cb(e.payload));
 }
 
+export type SpeedServer = {
+  id: string;
+  name: string;
+  location: string;
+  ipv6: boolean;
+  pingUrl: string;
+  downloadUrl: string;
+  uploadUrl: string;
+};
+/** @deprecated use SpeedServer */
+export type SpeedNode = SpeedServer;
 export type SpeedTestResult = {
   latencyMs: number;
+  jitterMs: number;
   downloadMbps: number;
   uploadMbps: number;
   downloadedBytes: number;
@@ -434,6 +492,7 @@ export type SpeedProgress = {
     | "error"
     | string;
   latencyMs?: number;
+  jitterMs?: number;
   bytesDone?: number;
   bytesTotal?: number;
   mbps?: number;

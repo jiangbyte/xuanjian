@@ -47,9 +47,11 @@ export async function insertMetricSnapshot(
 }
 
 /** 列出指标快照（可按 session 过滤） */
-export async function listMetricSnapshots(
-  opts?: { sessionId?: string; hostId?: number; limit?: number },
-): Promise<MetricSnapshotRow[]> {
+export async function listMetricSnapshots(opts?: {
+  sessionId?: string;
+  hostId?: number;
+  limit?: number;
+}): Promise<MetricSnapshotRow[]> {
   const db = await getDb();
   const limit = opts?.limit ?? 50;
   if (opts?.sessionId) {

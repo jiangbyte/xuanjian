@@ -1,46 +1,45 @@
 /**
  * @file 网络工具控制台壳
  * @author Charlie
- * @description 左侧导航切换连通性、IP 计算、端口、HTTP、测速等子面板。
- * 子面板按需懒加载，避免一次拉入 recharts / xyflow。
+ * @description 配置信息、连通性、DNS、端口连接、性能流量、历史。
  */
 
 import {
-  Calculator,
-  Gauge,
-  Globe2,
+  Activity,
+  Cable,
   History,
   Network,
   Radar,
-  ScanSearch,
+  Search,
+  Settings2,
 } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
+const InfoPanel = lazy(() =>
+  import("@/features/network/panels/InfoPanel").then((m) => ({
+    default: m.InfoPanel,
+  })),
+);
 const ConnectivityPanel = lazy(() =>
   import("@/features/network/panels/ConnectivityPanel").then((m) => ({
     default: m.ConnectivityPanel,
   })),
 );
-const IpCalcPanel = lazy(() =>
-  import("@/features/network/panels/IpCalcPanel").then((m) => ({
-    default: m.IpCalcPanel,
+const DnsPanel = lazy(() =>
+  import("@/features/network/panels/DnsPanel").then((m) => ({
+    default: m.DnsPanel,
   })),
 );
-const PortsPanel = lazy(() =>
-  import("@/features/network/panels/PortsPanel").then((m) => ({
-    default: m.PortsPanel,
+const PortsConnectionsPanel = lazy(() =>
+  import("@/features/network/panels/PortsConnectionsPanel").then((m) => ({
+    default: m.PortsConnectionsPanel,
   })),
 );
-const HttpPanel = lazy(() =>
-  import("@/features/network/panels/HttpPanel").then((m) => ({
-    default: m.HttpPanel,
-  })),
-);
-const SpeedTestPanel = lazy(() =>
-  import("@/features/network/panels/SpeedTestPanel").then((m) => ({
-    default: m.SpeedTestPanel,
+const PerformancePanel = lazy(() =>
+  import("@/features/network/panels/PerformancePanel").then((m) => ({
+    default: m.PerformancePanel,
   })),
 );
 const NetworkHistoryPanel = lazy(() =>
@@ -49,14 +48,20 @@ const NetworkHistoryPanel = lazy(() =>
   })),
 );
 
-type TabId = "connectivity" | "ipCalc" | "ports" | "http" | "speedTest" | "history";
+type TabId =
+  | "info"
+  | "connectivity"
+  | "dns"
+  | "ports"
+  | "performance"
+  | "history";
 
 const TABS: { id: TabId; icon: typeof Network; labelKey: string }[] = [
+  { id: "info", icon: Settings2, labelKey: "network.info" },
   { id: "connectivity", icon: Radar, labelKey: "network.connectivity" },
-  { id: "ipCalc", icon: Calculator, labelKey: "network.ipCalc" },
-  { id: "ports", icon: ScanSearch, labelKey: "network.ports" },
-  { id: "http", icon: Globe2, labelKey: "network.http" },
-  { id: "speedTest", icon: Gauge, labelKey: "network.speedTest" },
+  { id: "dns", icon: Search, labelKey: "network.dnsTitle" },
+  { id: "ports", icon: Cable, labelKey: "network.portsConn" },
+  { id: "performance", icon: Activity, labelKey: "network.performance" },
   { id: "history", icon: History, labelKey: "networkHistory.title" },
 ];
 
@@ -71,7 +76,7 @@ function PanelFallback() {
 /** 网络工具主控制台：侧栏 + 当前子面板 */
 export function NetworkConsole() {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<TabId>("connectivity");
+  const [tab, setTab] = useState<TabId>("info");
 
   return (
     <div className="flex h-full min-h-0">
@@ -105,13 +110,13 @@ export function NetworkConsole() {
           })}
         </nav>
       </aside>
-      <main className="min-w-0 flex-1 overflow-hidden bg-background">
+      <main className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-background">
         <Suspense fallback={<PanelFallback />}>
+          {tab === "info" && <InfoPanel />}
           {tab === "connectivity" && <ConnectivityPanel />}
-          {tab === "ipCalc" && <IpCalcPanel />}
-          {tab === "ports" && <PortsPanel />}
-          {tab === "http" && <HttpPanel />}
-          {tab === "speedTest" && <SpeedTestPanel />}
+          {tab === "dns" && <DnsPanel />}
+          {tab === "ports" && <PortsConnectionsPanel />}
+          {tab === "performance" && <PerformancePanel />}
           {tab === "history" && <NetworkHistoryPanel />}
         </Suspense>
       </main>

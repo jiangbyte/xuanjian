@@ -18,17 +18,11 @@ export type ToolDomain =
   | "network"
   | "docker"
   | "deploy"
-  | "pipeline"
   | "script"
   | "other";
 
 const DOMAIN_NAMES: Record<ToolDomain, string[]> = {
-  terminal: [
-    "terminal_run",
-    "terminal_tail",
-    "session_exec",
-    "list_sessions",
-  ],
+  terminal: ["terminal_run", "terminal_tail", "session_exec", "list_sessions"],
   read: [
     "list_files",
     "read_file",
@@ -44,12 +38,7 @@ const DOMAIN_NAMES: Record<ToolDomain, string[]> = {
     "create_inspection_report",
   ],
   network: ["ping", "dns_lookup", "tcp_probe", "tls_cert"],
-  docker: [
-    "docker_ps",
-    "docker_logs",
-    "docker_inspect",
-    "docker_compose_up",
-  ],
+  docker: ["docker_ps", "docker_logs", "docker_inspect", "docker_compose_up"],
   deploy: [
     "upload_file",
     "upload_tree",
@@ -57,7 +46,6 @@ const DOMAIN_NAMES: Record<ToolDomain, string[]> = {
     "write_remote_file",
     "deploy",
   ],
-  pipeline: ["list_pipelines", "get_pipeline", "run_pipeline"],
   script: [
     "list_scripts",
     "get_script",
@@ -89,7 +77,6 @@ export function toolsByDomain(
     network: [],
     docker: [],
     deploy: [],
-    pipeline: [],
     script: [],
     other: [],
   };
@@ -105,10 +92,7 @@ export function toCoreToolDefs(defs: AgentToolDef[]): CoreToolDef[] {
 
 /** 权限中间件：计划模式拦截写工具 */
 export function withPlanModeGuard(
-  execute: (
-    name: string,
-    args: Record<string, unknown>,
-  ) => Promise<string>,
+  execute: (name: string, args: Record<string, unknown>) => Promise<string>,
   permissionMode: "confirm" | "plan" | "full",
 ): typeof execute {
   return async (name, args) => {
@@ -123,10 +107,4 @@ export function withPlanModeGuard(
   };
 }
 
-export {
-  LOCAL_TOOLS,
-  READ_TOOLS,
-  WRITE_TOOLS,
-  getAllTools,
-  isWriteTool,
-};
+export { LOCAL_TOOLS, READ_TOOLS, WRITE_TOOLS, getAllTools, isWriteTool };

@@ -3,9 +3,9 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { deriveMessages } from "@/lib/agent/session/deriveMessages";
-import { resetSessionSeqCounter } from "@/lib/agent/session/partsMapping";
-import type { SessionEvent } from "@/lib/agent/session/types";
+import { deriveMessages } from "@/lib/agent/history/deriveMessages";
+import { resetSessionSeqCounter } from "@/lib/agent/history/partsMapping";
+import type { SessionEvent } from "@/lib/agent/history/types";
 
 describe("deriveMessages thinking persistence", () => {
   it("preserves thinking and synthesizes tool_use for Anthropic replay", () => {
@@ -34,10 +34,12 @@ describe("deriveMessages thinking persistence", () => {
     ];
     const msgs = deriveMessages(events);
     const assistant = msgs.find((m) => m.role === "assistant");
-    expect(assistant?.anthropic_content?.some((b) => b.type === "thinking")).toBe(
-      true,
+    expect(
+      assistant?.anthropic_content?.some((b) => b.type === "thinking"),
+    ).toBe(true);
+    const toolUse = assistant?.anthropic_content?.find(
+      (b) => b.type === "tool_use",
     );
-    const toolUse = assistant?.anthropic_content?.find((b) => b.type === "tool_use");
     expect(toolUse).toMatchObject({
       type: "tool_use",
       id: "c1",
@@ -79,8 +81,8 @@ describe("deriveMessages thinking persistence", () => {
         (b) => b.type === "tool_use" && b.id === "call_00_abc",
       ),
     ).toBe(true);
-    expect(msgs.some((m) => m.role === "tool" && m.tool_call_id === "call_00_abc")).toBe(
-      true,
-    );
+    expect(
+      msgs.some((m) => m.role === "tool" && m.tool_call_id === "call_00_abc"),
+    ).toBe(true);
   });
 });

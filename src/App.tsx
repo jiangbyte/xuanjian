@@ -56,11 +56,6 @@ const BatchConsole = lazy(() =>
     default: m.BatchConsole,
   })),
 );
-const PipelineConsole = lazy(() =>
-  import("@/features/pipeline/PipelineConsole").then((m) => ({
-    default: m.PipelineConsole,
-  })),
-);
 const FleetDashboard = lazy(() =>
   import("@/features/fleet/FleetDashboard").then((m) => ({
     default: m.FleetDashboard,
@@ -120,14 +115,6 @@ export default function App() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <BatchConsole />
-              </Suspense>
-            }
-          />
-          <Route
-            path="pipelines"
-            element={
-              <Suspense fallback={<RouteFallback />}>
-                <PipelineConsole />
               </Suspense>
             }
           />

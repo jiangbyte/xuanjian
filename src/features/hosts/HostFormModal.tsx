@@ -28,6 +28,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { HOST_COLORS } from "@/features/hosts/hostColors";
 import { GroupRow, HostInput, HostRow } from "@/lib/db";
+import { sshConnectWithTrust } from "@/lib/session/connect";
 import { api } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 
@@ -123,7 +124,7 @@ export function HostFormModal({
     }
     setTesting(true);
     try {
-      const session = await api.sshConnect({
+      const session = await sshConnectWithTrust({
         host: host.trim(),
         port,
         username: username.trim() || "root",

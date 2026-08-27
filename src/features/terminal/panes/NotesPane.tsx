@@ -52,9 +52,13 @@ import {
 } from "@/lib/db";
 import { dialogs } from "@/lib/ui/dialogs";
 import { cn } from "@/lib/utils";
-
-const listRowClass =
-  "flex w-full items-center gap-2 rounded-md p-2 text-left hover:bg-accent";
+import {
+  sidebarGroupTitleClass,
+  sidebarItemSubClass,
+  sidebarItemTitleClass,
+  sidebarListRowClass,
+  sidebarPanelTitleClass,
+} from "./sidebarUi";
 
 type CategoryGroup = {
   id: number | "none";
@@ -277,7 +281,7 @@ export function NotesPane() {
             <TooltipTrigger asChild>
               <Button
                 type="button"
-                size="icon-sm"
+                size="icon-xs"
                 variant="ghost"
                 aria-label={t("notes.back")}
                 onClick={async () => {
@@ -298,7 +302,7 @@ export function NotesPane() {
                 <TooltipTrigger asChild>
                   <Button
                     type="button"
-                    size="icon-sm"
+                    size="icon-xs"
                     variant={editing.pinned ? "default" : "ghost"}
                     aria-label={
                       editing.pinned ? t("notes.unpin") : t("notes.pin")
@@ -318,7 +322,7 @@ export function NotesPane() {
                 <TooltipTrigger asChild>
                   <Button
                     type="button"
-                    size="icon-sm"
+                    size="icon-xs"
                     variant="ghost"
                     aria-label={t("notes.done")}
                     onClick={() => exitEdit()}
@@ -333,7 +337,7 @@ export function NotesPane() {
                 <TooltipTrigger asChild>
                   <Button
                     type="button"
-                    size="icon-sm"
+                    size="icon-xs"
                     variant="ghost"
                     aria-label={t("notes.edit")}
                     onClick={() => setIsEditing(true)}
@@ -348,7 +352,7 @@ export function NotesPane() {
               <TooltipTrigger asChild>
                 <Button
                   type="button"
-                  size="icon-sm"
+                  size="icon-xs"
                   variant="ghost"
                   aria-label={t("notes.delete")}
                   onClick={async () => {
@@ -376,7 +380,7 @@ export function NotesPane() {
         <div className="shrink-0 space-y-1.5 border-b border-border px-3 py-2">
           {isEditing ? (
             <Input
-              className="h-8 border-0 bg-transparent px-0 text-base font-semibold shadow-none focus-visible:ring-0"
+              className="h-8 border-0 bg-transparent px-0 text-sm font-semibold shadow-none focus-visible:ring-0"
               value={title}
               onChange={(e) => {
                 setTitle(e.target.value);
@@ -384,7 +388,7 @@ export function NotesPane() {
               }}
             />
           ) : (
-            <h2 className="truncate text-base font-semibold leading-snug">
+            <h2 className="truncate text-sm font-semibold leading-snug">
               {title || t("notes.untitled")}
             </h2>
           )}
@@ -434,7 +438,11 @@ export function NotesPane() {
               />
             </div>
           ) : (
-            <MarkdownViewer source={body} emptyHint={t("notes.previewEmpty")} />
+            <MarkdownViewer
+              source={body}
+              emptyHint={t("notes.previewEmpty")}
+              density="sidebar"
+            />
           )}
         </div>
       </div>
@@ -444,7 +452,7 @@ export function NotesPane() {
   return (
     <div className="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground">
       <div className="flex shrink-0 items-center gap-1.5 border-b border-border px-3 py-2">
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+        <span className={cn("min-w-0 flex-1 truncate", sidebarPanelTitleClass)}>
           {t("notes.title")}
         </span>
         <Tooltip>
@@ -508,7 +516,7 @@ export function NotesPane() {
               <div key={String(group.id)} className="mb-1">
                 <button
                   type="button"
-                  className={cn(listRowClass, "py-1.5")}
+                  className={cn(sidebarListRowClass, "py-1")}
                   onClick={() => toggle(group.id)}
                   onContextMenu={(e) =>
                     openContextMenu(e, openMenu, [
@@ -532,28 +540,33 @@ export function NotesPane() {
                       className="shrink-0 text-muted-foreground"
                     />
                   )}
-                  <span className="min-w-0 flex-1 truncate text-left text-xs font-medium">
-                    {group.name}
-                  </span>
-                  <Badge variant="secondary">{group.notes.length}</Badge>
+                  <span className={sidebarGroupTitleClass}>{group.name}</span>
+                  <Badge size="sm" variant="secondary">
+                    {group.notes.length}
+                  </Badge>
                 </button>
                 {!closed &&
                   group.notes.map((n) => (
                     <button
                       key={n.id}
                       type="button"
-                      className={cn(listRowClass, "pl-6")}
+                      className={cn(sidebarListRowClass, "pl-5")}
                       onClick={() => openNote(n)}
                       onContextMenu={(e) =>
                         openContextMenu(e, openMenu, noteContextItems(n))
                       }
                     >
                       <div className="min-w-0 w-full space-y-0.5 text-left">
-                        <div className="flex items-center gap-1 truncate text-sm font-semibold">
-                          {!!n.pinned && <Pin size={12} className="shrink-0" />}
+                        <div
+                          className={cn(
+                            "flex items-center gap-1",
+                            sidebarItemTitleClass,
+                          )}
+                        >
+                          {!!n.pinned && <Pin size={11} className="shrink-0" />}
                           <span className="truncate">{n.title}</span>
                         </div>
-                        <div className="truncate text-xs text-muted-foreground">
+                        <div className={sidebarItemSubClass}>
                           {n.body
                             .replace(/[#>*_`\n]/g, " ")
                             .trim()

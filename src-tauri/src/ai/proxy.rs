@@ -315,7 +315,9 @@ fn openai_messages_to_anthropic(params: &ChatProxyParams) -> Result<Value, Strin
                     .iter()
                     .filter_map(|b| {
                         if b.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
-                            b.get("id").and_then(|id| id.as_str()).map(|s| s.to_string())
+                            b.get("id")
+                                .and_then(|id| id.as_str())
+                                .map(|s| s.to_string())
                         } else {
                             None
                         }
@@ -346,7 +348,11 @@ fn openai_messages_to_anthropic(params: &ChatProxyParams) -> Result<Value, Strin
                     }
                 }
             }
-            let ar = if role == "assistant" { "assistant" } else { "user" };
+            let ar = if role == "assistant" {
+                "assistant"
+            } else {
+                "user"
+            };
             out.push(json!({ "role": ar, "content": content_blocks }));
             continue;
         }
@@ -368,8 +374,7 @@ fn openai_messages_to_anthropic(params: &ChatProxyParams) -> Result<Value, Strin
                         .pointer("/function/arguments")
                         .and_then(|x| x.as_str())
                         .unwrap_or("{}");
-                    let input: Value =
-                        serde_json::from_str(args_str).unwrap_or_else(|_| json!({}));
+                    let input: Value = serde_json::from_str(args_str).unwrap_or_else(|_| json!({}));
                     blocks.push(json!({
                         "type": "tool_use",
                         "id": id,
@@ -386,10 +391,7 @@ fn openai_messages_to_anthropic(params: &ChatProxyParams) -> Result<Value, Strin
         }
 
         if role == "tool" {
-            let tool_use_id = m
-                .get("tool_call_id")
-                .and_then(|x| x.as_str())
-                .unwrap_or("");
+            let tool_use_id = m.get("tool_call_id").and_then(|x| x.as_str()).unwrap_or("");
             let content = content_as_string(m.get("content"));
             // Anthropic：tool_result 必须挂在 user 消息上；合并相邻 tool 结果
             let block = json!({
@@ -400,7 +402,10 @@ fn openai_messages_to_anthropic(params: &ChatProxyParams) -> Result<Value, Strin
             if let Some(last) = out.last_mut() {
                 if last.get("role").and_then(|r| r.as_str()) == Some("user") {
                     if let Some(arr) = last.get_mut("content").and_then(|c| c.as_array_mut()) {
-                        if arr.iter().any(|b| b.get("type").and_then(|t| t.as_str()) == Some("tool_result")) {
+                        if arr
+                            .iter()
+                            .any(|b| b.get("type").and_then(|t| t.as_str()) == Some("tool_result"))
+                        {
                             arr.push(block);
                             continue;
                         }
@@ -422,10 +427,7 @@ fn openai_messages_to_anthropic(params: &ChatProxyParams) -> Result<Value, Strin
         }
     }
 
-    let max_tokens = params
-        .max_tokens
-        .filter(|n| *n > 0)
-        .unwrap_or(4096);
+    let max_tokens = params.max_tokens.filter(|n| *n > 0).unwrap_or(4096);
     let mut body = json!({
         "model": params.model,
         "max_tokens": max_tokens,
@@ -513,10 +515,7 @@ pub async fn ai_chat_stream(
 }
 
 #[tauri::command]
-pub async fn ai_chat_cancel(
-    state: State<'_, Arc<AiState>>,
-    job_id: String,
-) -> Result<(), String> {
+pub async fn ai_chat_cancel(state: State<'_, Arc<AiState>>, job_id: String) -> Result<(), String> {
     if let Some(c) = state.stream_cancels.lock().remove(&job_id) {
         c.store(true, Ordering::SeqCst);
     }

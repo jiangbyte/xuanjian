@@ -4,7 +4,7 @@
  */
 
 import type { AgentToolDef } from "@/lib/agent/tools/types";
-import { listMcpServers, type McpServerRow } from "@/lib/db";
+import { listMcpServers, listMcpToolPrefs, type McpServerRow } from "@/lib/db";
 import { api } from "@/lib/tauri";
 
 export type McpTestResult = {
@@ -43,7 +43,9 @@ function mcpToolName(serverName: string, toolName: string): string {
   return `${MCP_PREFIX}${safeServer}__${toolName}`;
 }
 
-function parseMcpToolName(full: string): { serverKey: string; toolName: string } | null {
+function parseMcpToolName(
+  full: string,
+): { serverKey: string; toolName: string } | null {
   if (!full.startsWith(MCP_PREFIX)) return null;
   const rest = full.slice(MCP_PREFIX.length);
   const idx = rest.indexOf("__");
@@ -171,10 +173,15 @@ export async function testMcpConnection(
   }
 }
 
-/** 从 mcp_servers 表发现全部已启用 MCP 工具并缓存 */
+/** 从 mcp_servers 表发现全部已启用 MCP 工具并缓存（尊重 mcp_tool_prefs） */
 export async function refreshMcpTools(): Promise<AgentToolDef[]> {
   routeByFullName.clear();
   const servers = (await listMcpServers()).filter((s) => s.enabled);
+  const prefs = await listMcpToolPrefs();
+  const prefMap = new Map<string, boolean>();
+  for (const p of prefs) {
+    prefMap.set(`${p.mcp_server_id}:${p.tool_name}`, Boolean(p.enabled));
+  }
   const tools: AgentToolDef[] = [];
   for (const server of servers) {
     try {
@@ -183,6 +190,9 @@ export async function refreshMcpTools(): Promise<AgentToolDef[]> {
           ? await discoverStdioTools(server)
           : await discoverHttpTools(server);
       for (const tool of discovered) {
+        const prefKey = `${server.id}:${tool.name}`;
+        const pref = prefMap.get(prefKey);
+        if (pref === false) continue;
         const def = toAgentTool(server, tool);
         tools.push(def);
         registerRoute(server, tool);

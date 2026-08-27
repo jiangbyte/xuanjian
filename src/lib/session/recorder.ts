@@ -210,6 +210,35 @@ function ensureWriteWrap() {
   };
 }
 
+function updateTabLogId(tabId: string, logId: number): void {
+  const store = useUiStore.getState();
+  if (store.tabs.some((t) => t.id === tabId)) {
+    store.updateTab(tabId, { logId });
+    return;
+  }
+  if (store.agentTabs.some((t) => t.id === tabId)) {
+    store.updateAgentTab(tabId, { logId });
+  }
+}
+
+function findTabById(tabId: string) {
+  const store = useUiStore.getState();
+  return (
+    store.tabs.find((t) => t.id === tabId) ??
+    store.agentTabs.find((t) => t.id === tabId) ??
+    null
+  );
+}
+
+function findTabBySessionId(sessionId: string) {
+  const store = useUiStore.getState();
+  return (
+    store.tabs.find((t) => t.sessionId === sessionId) ??
+    store.agentTabs.find((t) => t.sessionId === sessionId) ??
+    null
+  );
+}
+
 /** 为指定会话创建日志并开始缓冲输入/输出块 */
 export async function startSessionRecording(opts: {
   tabId: string;
@@ -278,7 +307,7 @@ export async function startSessionRecording(opts: {
       return logId;
     }
     rec.logId = logId;
-    useUiStore.getState().updateTab(opts.tabId, { logId });
+    updateTabLogId(opts.tabId, logId);
     await flush(rec);
     void pruneSessionLogs(1000).catch(console.error);
     return logId;
@@ -296,7 +325,7 @@ export async function startRecordingForOpenTab(
   tabId: string,
   sessionId: string,
 ): Promise<void> {
-  const tab = useUiStore.getState().tabs.find((t) => t.id === tabId);
+  const tab = findTabById(tabId);
   if (!tab) return;
   await startSessionRecording({
     tabId,
@@ -341,7 +370,7 @@ export async function endSessionRecording(
 
 /** 按标签 ID 结束录制（优先用 sessionId，否则扫全局映射） */
 export async function endRecordingForTab(tabId: string): Promise<void> {
-  const tab = useUiStore.getState().tabs.find((t) => t.id === tabId);
+  const tab = findTabById(tabId);
   if (tab?.sessionId) {
     await endSessionRecording(tab.sessionId, "closed");
     return;
@@ -380,6 +409,14 @@ export async function reconcileOrphanOpenLogs(): Promise<void> {
         liveSessions.add(tab.sessionId);
       }
     }
+    for (const tab of useUiStore.getState().agentTabs) {
+      if (
+        tab.sessionId &&
+        (tab.status === "open" || tab.status === "connecting")
+      ) {
+        liveSessions.add(tab.sessionId);
+      }
+    }
     await finalizeOrphanOpenLogs([...liveSessions]);
   } catch (e) {
     console.error("reconcileOrphanOpenLogs failed", e);
@@ -400,9 +437,7 @@ export async function getTranscriptTail(
     return s.length > maxChars ? s.slice(s.length - maxChars) : s;
   }
   // 回落：从活跃 tab 的 logId 读
-  const tab = useUiStore
-    .getState()
-    .tabs.find((t) => t.sessionId === sessionId);
+  const tab = findTabBySessionId(sessionId);
   if (tab?.logId == null) return "";
   try {
     const { listSessionLogChunks } = await import("@/lib/db");

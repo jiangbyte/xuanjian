@@ -15,7 +15,7 @@ import {
   estimateTokens,
   type ContextBudgetBreakdown,
   type LlmUsage,
-} from "@/lib/agent/contextBudget";
+} from "@/lib/agent/contextBudget/core";
 import type { MessagePart } from "@/lib/db";
 
 export type { ContextBudgetBreakdown, LlmUsage };

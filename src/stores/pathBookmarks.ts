@@ -118,12 +118,8 @@ export function bookmarkScope(opts: {
   hostId?: number | null;
   shellId?: string | null;
 }) {
-  if (
-    opts.kind === "wsl" ||
-    opts.shellId?.startsWith("local:wsl:")
-  ) {
-    const distro =
-      opts.shellId?.replace(/^local:wsl:/, "").trim() || "default";
+  if (opts.kind === "wsl" || opts.shellId?.startsWith("local:wsl:")) {
+    const distro = opts.shellId?.replace(/^local:wsl:/, "").trim() || "default";
     return `wsl:${distro}`;
   }
   if (opts.kind === "ssh" || opts.kind === "host") {

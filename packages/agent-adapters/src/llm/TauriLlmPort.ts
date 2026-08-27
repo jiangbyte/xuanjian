@@ -11,12 +11,12 @@ import type {
 } from "@xuanjian/agent-core";
 import type { LlmMessage } from "@/lib/agent/llm";
 import type { AgentToolDef } from "@/lib/agent/tools";
-import type { ProviderBundle } from "@/lib/agent/provider";
+import type { ProviderBundle } from "@/lib/agent/runtime/provider";
 
 let providerBundle: ProviderBundle | null = null;
 
 export async function resolveAndCacheProvider(modelRef?: string | null) {
-  const { resolveProvider } = await import("@/lib/agent/provider");
+  const { resolveProvider } = await import("@/lib/agent/runtime/provider");
   providerBundle = await resolveProvider(modelRef);
   return providerBundle;
 }
@@ -50,7 +50,9 @@ export function createTauriLlmPort(): LlmPort {
   return {
     async complete(messages, tools, opts) {
       if (!providerBundle) {
-        throw new Error("provider not resolved; call resolveAndCacheProvider first");
+        throw new Error(
+          "provider not resolved; call resolveAndCacheProvider first",
+        );
       }
       const { chatCompletion } = await import("@/lib/agent/llm");
       const reply = await chatCompletion(
@@ -77,7 +79,9 @@ export function createTauriLlmPort(): LlmPort {
 
     async stream(messages, tools, opts: LlmRequestOpts = {}) {
       if (!providerBundle) {
-        throw new Error("provider not resolved; call resolveAndCacheProvider first");
+        throw new Error(
+          "provider not resolved; call resolveAndCacheProvider first",
+        );
       }
       const { requestModelReply } = await import("@/lib/agent/llm/stream");
       const reply = await requestModelReply(

@@ -66,6 +66,10 @@ body.is-pane-resizing {
   user-select: none !important;
 }
 
+body.is-pane-resizing-vertical {
+  cursor: row-resize !important;
+}
+
 body.is-pane-resizing iframe,
 body.is-pane-resizing .xterm {
   pointer-events: none !important;

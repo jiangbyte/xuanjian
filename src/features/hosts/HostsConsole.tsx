@@ -293,7 +293,9 @@ export function HostsConsole() {
 
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <div className="flex shrink-0 items-baseline justify-between gap-3 border-b border-border px-4 py-2.5">
-            <h2 className="truncate text-sm font-semibold">{activeGroupLabel}</h2>
+            <h2 className="truncate text-sm font-semibold">
+              {activeGroupLabel}
+            </h2>
             <p className="shrink-0 text-xs text-muted-foreground">
               {t("hosts.hostsCount", { count: filtered.length })}
             </p>

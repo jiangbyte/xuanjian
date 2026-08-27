@@ -42,16 +42,13 @@ async function runSubAgentAction(opts: {
   args: Record<string, unknown>;
   parent: OrchestratorConfig;
 }): Promise<{ ok: boolean; summary: string; children: MessagePart[] }> {
-  const {
-    SUB_AGENTS,
-    toolsForSubAgent,
-    isSubAgentKind,
-  } = await import("@/lib/agent/subagents");
+  const { SUB_AGENTS, toolsForSubAgent, isSubAgentKind } = await import(
+    "@/lib/agent/subagents"
+  );
   const { buildSubAgentSystemWithContext } = await import(
-    "@/lib/agent/prompts"
+    "@/lib/agent/runtime/prompts"
   );
   const { normalizeSubAgentArgs } = await import("@xuanjian/agent-core");
-
 
   const normalized = normalizeSubAgentArgs(opts.args);
   const kindRaw = normalized.agent ?? opts.kind;
@@ -84,7 +81,9 @@ async function runSubAgentAction(opts: {
       emit: opts.parent.emit,
       onConfirmTool: opts.parent.onConfirmTool,
       signal: opts.parent.signal,
-      inbox: getSessionInbox(-(opts.parent.sessionIdHint ?? 1) - opts.parent.depth),
+      inbox: getSessionInbox(
+        -(opts.parent.sessionIdHint ?? 1) - opts.parent.depth,
+      ),
       runSubAgent: opts.parent.depth >= 2 ? undefined : runSubAgentAction,
       compactMessages: opts.parent.compactMessages,
       sessionIdHint: opts.parent.sessionIdHint,
@@ -112,7 +111,7 @@ export async function runAgentTurn(input: RunAgentInput): Promise<void> {
   await refreshAllTools();
 
   const { buildOrchestratorSystemWithContext } = await import(
-    "@/lib/agent/prompts"
+    "@/lib/agent/runtime/prompts"
   );
   const { toolsForOrchestrator } = await import("@/lib/agent/subagents");
 
@@ -132,9 +131,7 @@ export async function runAgentTurn(input: RunAgentInput): Promise<void> {
     input.permissionMode,
   ) as unknown as CoreToolDef[];
 
-  const { compactLlmMessagesForModel } = await import(
-    "@/lib/agent/compaction"
-  );
+  const { compactLlmMessagesForModel } = await import("@/lib/agent/compaction");
   const compactMessages = async (messages: CoreLlmMessage[]) =>
     compactLlmMessagesForModel(
       messages as import("@/lib/agent/llm").LlmMessage[],

@@ -23,6 +23,7 @@ import { clipboardWriteText } from "@/lib/ui/clipboard";
 import { addNetworkHistory } from "@/lib/db";
 import { COMMON_PORTS } from "@/lib/network/ipcalc";
 import { api, type TcpProbeResult } from "@/lib/tauri";
+import { cn } from "@/lib/utils";
 
 /** 解析 `22,80,443` 或 `8000-8010` 等形式，最多 500 个端口 */
 function parsePorts(input: string): number[] {
@@ -43,16 +44,20 @@ function parsePorts(input: string): number[] {
 }
 
 /** TCP 端口扫描面板 */
-export function PortsPanel() {
+export function PortsPanel({ embedded = false }: { embedded?: boolean }) {
   const { t } = useTranslation();
-  const [host, setHost] = useState("127.0.0.1");
-  const [range, setRange] = useState("22,80,443");
-  const [timeoutMs, setTimeoutMs] = useState(800);
+  const [host, setHost] = useState("");
+  const [range, setRange] = useState("");
+  const [timeoutText, setTimeoutText] = useState("");
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<TcpProbeResult[]>([]);
   const [progress, setProgress] = useState(0);
 
   const ports = useMemo(() => parsePorts(range), [range]);
+  const timeoutMs = useMemo(() => {
+    const n = Number(timeoutText.trim());
+    return Number.isFinite(n) && n >= 100 ? Math.min(n, 10_000) : 800;
+  }, [timeoutText]);
 
   const probe = async () => {
     const h = host.trim();
@@ -102,7 +107,12 @@ export function PortsPanel() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 p-4">
+    <div
+      className={cn(
+        "flex h-full min-h-0 w-full flex-col gap-3",
+        !embedded && "p-4",
+      )}
+    >
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-[180px] flex-1 space-y-1.5">
           <Label htmlFor="ports-host">{t("network.host")}</Label>
@@ -110,6 +120,7 @@ export function PortsPanel() {
             id="ports-host"
             value={host}
             onChange={(e) => setHost(e.target.value)}
+            placeholder={t("network.hostPlaceholder")}
           />
         </div>
         <div className="min-w-[200px] flex-[2] space-y-1.5">
@@ -118,6 +129,7 @@ export function PortsPanel() {
             id="ports-range"
             value={range}
             onChange={(e) => setRange(e.target.value)}
+            placeholder={t("network.portRangePlaceholder")}
           />
         </div>
         <div className="w-28 space-y-1.5">
@@ -125,8 +137,9 @@ export function PortsPanel() {
           <Input
             id="ports-timeout"
             type="number"
-            value={timeoutMs}
-            onChange={(e) => setTimeoutMs(Number(e.target.value) || 800)}
+            value={timeoutText}
+            onChange={(e) => setTimeoutText(e.target.value)}
+            placeholder="800"
           />
         </div>
         <Button disabled={busy} onClick={probe}>

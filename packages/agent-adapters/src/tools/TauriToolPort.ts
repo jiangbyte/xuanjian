@@ -1,5 +1,5 @@
 /**
- * @file 工具端口：桥接现有 tools pipeline
+ * @file 工具端口：桥接本地工具执行与 hooks
  */
 
 import type {
@@ -9,7 +9,7 @@ import type {
   ToolPort,
 } from "@xuanjian/agent-core";
 import { getAllTools, isWriteTool } from "@/lib/agent/tools/registry";
-import { executeToolViaPipeline } from "@/lib/agent/tools/pipeline";
+import { executeToolWithHooks } from "@/lib/agent/tools/execute";
 import { isDangerousCommand } from "@/lib/agent/tools/types";
 
 export function createTauriToolPort(): ToolPort {
@@ -23,7 +23,7 @@ export function createTauriToolPort(): ToolPort {
     },
 
     async execute(name, args, ctx) {
-      return executeToolViaPipeline(name, args, {
+      return executeToolWithHooks(name, args, {
         permissionMode: ctx.permissionMode,
         confirmTool: async (info) => {
           const dangerous =

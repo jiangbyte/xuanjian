@@ -108,7 +108,10 @@ export function WorkspaceSwitcher() {
               )}
             </span>
           </TooltipTrigger>
-          <TooltipContent side="bottom" className="max-w-[260px] text-xs leading-relaxed">
+          <TooltipContent
+            side="bottom"
+            className="max-w-[260px] text-xs leading-relaxed"
+          >
             <p className="font-medium">{t("terminal.workspaceHelpTitle")}</p>
             <p className="mt-1 text-muted-foreground">
               {t("terminal.workspaceHelpBody")}
@@ -132,7 +135,10 @@ export function WorkspaceSwitcher() {
             <SelectValue placeholder={t("terminal.workspaceNone")} />
           </SelectTrigger>
           <SelectContent align="start">
-            <SelectItem value="__none__" className="text-xs text-muted-foreground">
+            <SelectItem
+              value="__none__"
+              className="text-xs text-muted-foreground"
+            >
               {t("terminal.workspaceNone")}
             </SelectItem>
             {hostWorkspaces.map((w) => (

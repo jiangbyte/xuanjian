@@ -32,8 +32,7 @@ export function normalizeTerminalChunk(text: string): string {
     .join("\n");
 }
 
-const SHELL_PROMPT_RE =
-  /(?:^|\n)(?:\x1b\][^\x07]*\x07)*[^\n]*[@#$%]\s*$/;
+const SHELL_PROMPT_RE = /(?:^|\n)(?:\x1b\][^\x07]*\x07)*[^\n]*[@#$%]\s*$/;
 
 const ERROR_TAIL_RE =
   /(?:dependency failed to start|is unhealthy|Error response from daemon|exit code \d+|✘|(?:^|\n)[^\n]*\berror\b[^\n]*$|(?:^|\n)[^\n]*\bfailed\b[^\n]*$)/im;
@@ -72,9 +71,7 @@ export async function waitForTerminalOutput(opts: {
   const pollMs = opts.pollMs ?? 400;
 
   if (waitMs <= 0) {
-    const output = stripAnsi(
-      await getTranscriptTail(opts.sessionId, maxChars),
-    );
+    const output = stripAnsi(await getTranscriptTail(opts.sessionId, maxChars));
     return {
       output,
       waited_ms: 0,

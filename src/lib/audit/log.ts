@@ -3,10 +3,7 @@
  * @author Charlie
  */
 
-import {
-  insertAuditEvent,
-  type AuditAction,
-} from "@/lib/db/audit";
+import { insertAuditEvent, type AuditAction } from "@/lib/db/audit";
 
 export type AuditInput = {
   action: AuditAction | string;

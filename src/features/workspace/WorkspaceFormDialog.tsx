@@ -73,8 +73,7 @@ export function WorkspaceFormDialog({
         local_root: localRoot.trim(),
         host_id: hostId,
         remote_root: remoteRoot.trim() || "/",
-        exclude_patterns:
-          patterns.length > 0 ? JSON.stringify(patterns) : null,
+        exclude_patterns: patterns.length > 0 ? JSON.stringify(patterns) : null,
         tab_id: tabId,
       });
       onOpenChange(false);
@@ -127,7 +126,9 @@ export function WorkspaceFormDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="ws-remote">{t("terminal.workspaceRemoteRoot")}</Label>
+            <Label htmlFor="ws-remote">
+              {t("terminal.workspaceRemoteRoot")}
+            </Label>
             <Input
               id="ws-remote"
               value={remoteRoot}

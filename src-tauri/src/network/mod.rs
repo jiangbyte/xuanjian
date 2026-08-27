@@ -4,12 +4,16 @@
 //!
 //! Author: Charlie
 
+pub mod connections;
+pub mod dns;
 mod parse;
 pub mod speed;
+pub mod speed_nodes;
 pub mod speed_server;
+pub mod stats;
 
-use parse::{parse_tool_line, ToolMode};
 use parking_lot::Mutex;
+use parse::{parse_tool_line, ToolMode};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::ToSocketAddrs;
@@ -145,10 +149,7 @@ pub async fn network_ping(
     state.cancels.lock().insert(job_id.clone(), cancel.clone());
 
     let continuous = matches!(count, Some(0));
-    let n = count
-        .filter(|&c| c > 0)
-        .unwrap_or(4)
-        .clamp(1, 100);
+    let n = count.filter(|&c| c > 0).unwrap_or(4).clamp(1, 100);
     let job = job_id.clone();
     let target_c = target.clone();
     let st = state.inner().clone();
@@ -257,8 +258,7 @@ pub async fn network_traceroute(
                             st.cancels.lock().remove(&job);
                             return;
                         }
-                        let event =
-                            parse_tool_line(&line, ToolMode::Traceroute, &mut seq_hint);
+                        let event = parse_tool_line(&line, ToolMode::Traceroute, &mut seq_hint);
                         emit_parsed(&app, &job, &line, false, event);
                     }
                 }
@@ -364,9 +364,14 @@ pub async fn network_tcp_probe(
 }
 
 #[tauri::command]
-pub fn network_cancel(state: State<'_, Arc<NetworkState>>, job_id: String) -> Result<(), String> {
+pub fn network_cancel(
+    app: AppHandle,
+    state: State<'_, Arc<NetworkState>>,
+    job_id: String,
+) -> Result<(), String> {
     if let Some(flag) = state.cancels.lock().get(&job_id) {
         flag.store(true, Ordering::SeqCst);
+        speed::emit_speed_cancelled(&app, &job_id);
     }
     Ok(())
 }

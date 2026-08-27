@@ -21,8 +21,8 @@ export function MarkdownViewer({
   source: string;
   className?: string;
   emptyHint?: string;
-  /** compact：侧栏对话等窄区域 — 标题与正文同级，避免忽大忽小 */
-  density?: "default" | "compact";
+  /** compact：Agent 窄栏；sidebar：终端侧栏笔记预览 */
+  density?: "default" | "compact" | "sidebar";
 }) {
   const markdownColorMode = useSettingsStore((s) => s.markdownColorMode);
   const theme = useSettingsStore((s) => s.theme);
@@ -31,12 +31,14 @@ export function MarkdownViewer({
 
   const trimmed = source.trim();
   const compact = density === "compact";
+  const sidebar = density === "sidebar";
 
   return (
     <div
       className={cn(
         "md-preview-wrap min-h-0 overflow-auto",
-        !compact && "flex-1",
+        compact && "overflow-x-hidden",
+        !compact && !sidebar && "flex-1",
         compact && "xj-md-chat",
         className,
       )}
@@ -70,11 +72,37 @@ export function MarkdownViewer({
                   "[&_th]:!px-1.5 [&_th]:!py-1 [&_th]:!font-medium",
                   "[&_td]:!px-1.5 [&_td]:!py-1",
                   "[&_pre]:!my-1.5 [&_pre]:!rounded-md [&_pre]:!p-2 [&_pre]:!text-[11px]",
-                  "[&_code]:!text-[11px]",
+                  "[&_pre]:!whitespace-pre-wrap [&_pre]:!break-all",
+                  "[&_code]:!text-[11px] [&_code]:!break-all",
                   "[&_pre_code]:!text-[11px]",
                   "[&_strong]:!font-semibold",
                 ].join(" ")
-              : "px-4 py-3 text-[15px]",
+              : sidebar
+                ? [
+                    "!px-3 !py-2 text-xs leading-relaxed",
+                    "[&_h1]:!m-0 [&_h1]:!mb-2 [&_h1]:!mt-0 [&_h1]:!border-0 [&_h1]:!pb-0",
+                    "[&_h1]:!text-sm [&_h1]:!font-semibold [&_h1]:!leading-snug",
+                    "[&_h2]:!m-0 [&_h2]:!mb-1.5 [&_h2]:!mt-3 [&_h2]:!border-0 [&_h2]:!pb-0",
+                    "[&_h2]:!text-xs [&_h2]:!font-semibold [&_h2]:!leading-snug",
+                    "[&_h3]:!m-0 [&_h3]:!mb-1 [&_h3]:!mt-2.5 [&_h3]:!text-xs [&_h3]:!font-semibold",
+                    "[&_h4]:!m-0 [&_h4]:!mb-1 [&_h4]:!mt-2 [&_h4]:!text-xs [&_h4]:!font-medium",
+                    "[&_h5]:!m-0 [&_h5]:!text-xs [&_h5]:!font-medium",
+                    "[&_h6]:!m-0 [&_h6]:!text-xs [&_h6]:!font-medium",
+                    "[&_p]:!my-1.5 [&_p]:!text-xs [&_p]:!leading-relaxed",
+                    "[&_li]:!my-0.5 [&_li]:!text-xs [&_li]:!leading-relaxed",
+                    "[&_ul]:!my-1.5 [&_ul]:!pl-4 [&_ol]:!my-1.5 [&_ol]:!pl-4",
+                    "[&_blockquote]:!my-1.5 [&_blockquote]:!border-l-2 [&_blockquote]:!py-0.5 [&_blockquote]:!pl-2.5 [&_blockquote]:!text-xs",
+                    "[&_hr]:!my-2.5",
+                    "[&_table]:!my-2 [&_table]:!block [&_table]:!w-full [&_table]:!overflow-x-auto",
+                    "[&_table]:!text-xs [&_table]:!leading-snug",
+                    "[&_th]:!px-2 [&_th]:!py-1 [&_th]:!font-medium",
+                    "[&_td]:!px-2 [&_td]:!py-1",
+                    "[&_pre]:!my-2 [&_pre]:!rounded-md [&_pre]:!p-2 [&_pre]:!text-xs",
+                    "[&_code]:!text-xs",
+                    "[&_pre_code]:!text-xs",
+                    "[&_strong]:!font-semibold",
+                  ].join(" ")
+                : "px-4 py-3 text-[15px]",
           )}
           wrapperElement={{ "data-color-mode": colorMode }}
         />
@@ -82,7 +110,11 @@ export function MarkdownViewer({
         <p
           className={cn(
             "text-center text-muted-foreground",
-            compact ? "px-2 py-4 text-xs" : "px-4 py-8 text-sm",
+            compact
+              ? "px-2 py-4 text-xs"
+              : sidebar
+                ? "px-3 py-6 text-xs"
+                : "px-4 py-8 text-sm",
           )}
         >
           {emptyHint || "…"}

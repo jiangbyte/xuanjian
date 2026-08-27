@@ -24,9 +24,13 @@ import { clipboardWriteText } from "@/lib/ui/clipboard";
 import { dialogs } from "@/lib/ui/dialogs";
 import { api } from "@/lib/tauri";
 import { useCmdHistory } from "@/stores/cmdHistory";
-
-const listRowClass =
-  "group flex w-full items-center gap-2 rounded-md p-2 text-left hover:bg-accent";
+import {
+  SIDEBAR_ICON,
+  sidebarListRowClass,
+  sidebarMonoTitleClass,
+  sidebarPanelMetaClass,
+  sidebarPanelTitleClass,
+} from "./sidebarUi";
 
 /**
  * 命令历史侧栏：筛选、复制、重跑、清空。
@@ -72,15 +76,15 @@ export function HistoryPane({ sessionId }: { sessionId: string | null }) {
     <div className="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground">
       {/* —— 标题与清空 —— */}
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
-        <span className="text-xs font-medium">{t("termTab.history")}</span>
-        <span className="text-xs text-muted-foreground">
+        <span className={sidebarPanelTitleClass}>{t("termTab.history")}</span>
+        <span className={sidebarPanelMetaClass}>
           {t("termTab.historyCount", { count: filtered.length })}
         </span>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               type="button"
-              size="icon-sm"
+              size="icon-xs"
               variant="ghost"
               className="ml-auto"
               aria-label={t("termTab.clearHistory")}
@@ -94,7 +98,7 @@ export function HistoryPane({ sessionId }: { sessionId: string | null }) {
                 }
               }}
             >
-              <Trash2 size={13} />
+              <Trash2 size={SIDEBAR_ICON} />
             </Button>
           </TooltipTrigger>
           <TooltipContent>{t("termTab.clearHistory")}</TooltipContent>
@@ -143,21 +147,19 @@ export function HistoryPane({ sessionId }: { sessionId: string | null }) {
           </p>
         ) : (
           filtered.map((item) => (
-            <div key={item.id} className={listRowClass} title={item.cmd}>
-              <span className="min-w-0 flex-1 truncate text-left font-mono text-sm font-semibold">
-                {item.cmd}
-              </span>
+            <div key={item.id} className={sidebarListRowClass} title={item.cmd}>
+              <span className={sidebarMonoTitleClass}>{item.cmd}</span>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     type="button"
-                    size="icon-sm"
+                    size="icon-xs"
                     variant="ghost"
                     className="shrink-0 opacity-60 group-hover:opacity-100"
                     aria-label={t("termTab.historyCopy")}
                     onClick={() => copy(item.cmd).catch(console.error)}
                   >
-                    <Copy size={13} />
+                    <Copy size={SIDEBAR_ICON} />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>{t("termTab.historyCopy")}</TooltipContent>
@@ -166,13 +168,13 @@ export function HistoryPane({ sessionId }: { sessionId: string | null }) {
                 <TooltipTrigger asChild>
                   <Button
                     type="button"
-                    size="icon-sm"
+                    size="icon-xs"
                     variant="ghost"
                     className="shrink-0 opacity-60 group-hover:opacity-100"
                     aria-label={t("termTab.historyRun")}
                     onClick={() => run(item.cmd).catch(console.error)}
                   >
-                    <Play size={13} />
+                    <Play size={SIDEBAR_ICON} />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>{t("termTab.historyRun")}</TooltipContent>

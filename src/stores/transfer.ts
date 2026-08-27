@@ -489,9 +489,9 @@ export async function waitForTransferJobs(
   try {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-      const jobs = useTransferStore.getState().jobs.filter((j) =>
-        jobIds.includes(j.id),
-      );
+      const jobs = useTransferStore
+        .getState()
+        .jobs.filter((j) => jobIds.includes(j.id));
       const pending = jobs.filter(
         (j) =>
           j.status === "queued" ||
@@ -519,9 +519,9 @@ export async function waitForTransferJobs(
       }
       await new Promise((r) => setTimeout(r, 400));
     }
-    const jobs = useTransferStore.getState().jobs.filter((j) =>
-      jobIds.includes(j.id),
-    );
+    const jobs = useTransferStore
+      .getState()
+      .jobs.filter((j) => jobIds.includes(j.id));
     const still = jobs.filter(
       (j) => j.status === "queued" || j.status === "running",
     );

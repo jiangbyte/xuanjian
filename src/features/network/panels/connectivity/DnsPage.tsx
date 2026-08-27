@@ -1,5 +1,5 @@
 /**
- * @file DNS 连通性页面（独立状态）
+ * @file DNS 连通性页面（hickory-resolver）
  * @author Charlie
  */
 
@@ -16,19 +16,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { addNetworkHistory } from "@/lib/db";
-import { api } from "@/lib/tauri";
+import { api, type DnsRecordRow } from "@/lib/tauri";
 import { DnsResults } from "./DnsResults";
 import { RawLog } from "./RawLog";
 
-/** DNS：原文 + 结果表，状态与其它模式隔离 */
+/** DNS：结构化结果 + 原始日志 */
 export function DnsPage() {
   const { t } = useTranslation();
-  const [target, setTarget] = useState("1.1.1.1");
+  const [target, setTarget] = useState("");
+  const [nameserver, setNameserver] = useState("");
   const [dnsType, setDnsType] = useState("A");
   const [lines, setLines] = useState<string[]>([]);
+  const [records, setRecords] = useState<DnsRecordRow[]>([]);
   const [busy, setBusy] = useState(false);
 
-  const clear = () => setLines([]);
+  const clear = () => {
+    setLines([]);
+    setRecords([]);
+  };
 
   const start = async () => {
     const host = target.trim();
@@ -36,18 +41,30 @@ export function DnsPage() {
     clear();
     setBusy(true);
     try {
-      const out = await api.networkDnsLookup(host, dnsType);
-      setLines(out.split("\n"));
-      await addNetworkHistory("dns", `${dnsType} ${host}`, out.slice(0, 500));
+      const rows = await api.networkDnsResolve(
+        host,
+        dnsType,
+        nameserver.trim() || null,
+      );
+      setRecords(rows);
+      const text = rows
+        .map(
+          (r) =>
+            `${r.recordType}\t${r.name}\t${r.priority != null ? `${r.priority} ` : ""}${r.value}${r.ttl != null ? ` (ttl=${r.ttl})` : ""}`,
+        )
+        .join("\n");
+      setLines(text.split("\n"));
+      await addNetworkHistory("dns", `${dnsType} ${host}`, text.slice(0, 500));
     } catch (e) {
       setLines([String(e)]);
+      setRecords([]);
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
+    <div className="flex h-full min-h-0 w-full flex-col gap-3">
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-[200px] flex-1 space-y-1.5">
           <Label htmlFor="dns-target">{t("network.host")}</Label>
@@ -57,6 +74,17 @@ export function DnsPage() {
             value={target}
             onChange={(e) => setTarget(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && start()}
+            placeholder={t("network.hostPlaceholder")}
+          />
+        </div>
+        <div className="w-36 space-y-1.5">
+          <Label htmlFor="dns-ns">{t("network.dnsServer")}</Label>
+          <Input
+            id="dns-ns"
+            className="h-8"
+            value={nameserver}
+            onChange={(e) => setNameserver(e.target.value)}
+            placeholder={t("network.dnsServerPlaceholder")}
           />
         </div>
         <div className="w-28 space-y-1.5">
@@ -66,7 +94,17 @@ export function DnsPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {["A", "AAAA", "MX", "TXT", "PTR", "NS", "CNAME"].map((type) => (
+              {[
+                "A",
+                "AAAA",
+                "MX",
+                "TXT",
+                "PTR",
+                "NS",
+                "CNAME",
+                "SOA",
+                "SRV",
+              ].map((type) => (
                 <SelectItem key={type} value={type}>
                   {type}
                 </SelectItem>
@@ -88,11 +126,11 @@ export function DnsPage() {
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-3">
-        <div className="flex min-h-0 flex-[3] flex-col">
-          <RawLog lines={lines} busy={busy} />
-        </div>
         <div className="flex min-h-0 flex-[2] flex-col overflow-hidden">
-          <DnsResults lines={lines} recordType={dnsType} busy={busy} />
+          <DnsResults records={records} busy={busy} />
+        </div>
+        <div className="flex min-h-0 flex-[1] flex-col">
+          <RawLog lines={lines} busy={busy} />
         </div>
       </div>
     </div>

@@ -49,8 +49,8 @@ import {
   buildProjectedMessagesFromUi,
   measureSurfaceTokens,
 } from "@/lib/agent/contextBudget/meter";
-import { buildAgentHistory } from "@/lib/agent/session";
-import { buildOrchestratorSystemPrompt } from "@/lib/agent/prompts";
+import { buildAgentHistory } from "@/lib/agent/history";
+import { buildOrchestratorSystemPrompt } from "@/lib/agent/runtime/prompts";
 import { toolsForOrchestrator } from "@/lib/agent/subagents";
 import { runAgentTurn } from "@xuanjian/agent-adapters";
 import {
@@ -58,11 +58,7 @@ import {
   buildPlanExecutePrompt,
   type AgentActivityPhase,
 } from "@xuanjian/agent-core";
-import {
-  getBlockingUi,
-  subscribeBlockingUi,
-} from "@/lib/ui/blockingUi";
-import { BUILTIN_MCP_SERVER } from "@/lib/agent/mcpBuiltin";
+import { getBlockingUi, subscribeBlockingUi } from "@/lib/ui/blockingUi";
 import {
   appendAgentMessage,
   clearAgentSessionTabBinding,
@@ -92,8 +88,6 @@ type LiveMsg = {
   role: "user" | "assistant";
   parts: MessagePart[];
 };
-
-void BUILTIN_MCP_SERVER;
 
 export function AiChatPanel() {
   const { t } = useTranslation();
@@ -136,9 +130,7 @@ export function AiChatPanel() {
   const activitySinceRef = useRef(Date.now());
   const [activityTick, setActivityTick] = useState(0);
   const [blockingUi, setBlockingUiState] = useState(getBlockingUi);
-  const confirmWaiters = useRef(
-    new Map<string, (ok: boolean) => void>(),
-  );
+  const confirmWaiters = useRef(new Map<string, (ok: boolean) => void>());
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
   const sampledSurfaceRef = useRef<number | null>(null);
@@ -279,14 +271,7 @@ export function AiChatPanel() {
       setSessionUsage(null);
       saveLastAgentSessionId(id);
     },
-    [
-      tabs,
-      modelRef,
-      permissionMode,
-      loadSession,
-      reloadMeta,
-      t,
-    ],
+    [tabs, modelRef, permissionMode, loadSession, reloadMeta, t],
   );
 
   useEffect(() => {
@@ -402,7 +387,8 @@ export function AiChatPanel() {
           modelRef: modelRef || null,
           permissionMode: activeMode,
           thinkingMode,
-          history: history as import("@xuanjian/agent-core").RunAgentInput["history"],
+          history:
+            history as import("@xuanjian/agent-core").RunAgentInput["history"],
           signal: ac.signal,
           onConfirmTool: (req) =>
             new Promise<boolean>((resolve) => {
@@ -442,7 +428,10 @@ export function AiChatPanel() {
               const next = [...prev];
               const idx = next.findIndex((m) => m.id === asstId);
               if (idx < 0) return prev;
-              next[idx] = { ...next[idx], parts: reduceParts(next[idx].parts, e) };
+              next[idx] = {
+                ...next[idx],
+                parts: reduceParts(next[idx].parts, e),
+              };
               return next;
             });
           },
@@ -466,14 +455,7 @@ export function AiChatPanel() {
         setBusy(false);
       }
     },
-    [
-      permissionMode,
-      ensureSession,
-      modelRef,
-      thinkingMode,
-      reloadMeta,
-      t,
-    ],
+    [permissionMode, ensureSession, modelRef, thinkingMode, reloadMeta, t],
   );
 
   const executePlan = useCallback(
@@ -548,9 +530,7 @@ export function AiChatPanel() {
     });
     return {
       ...meter,
-      sessionInput: sessionUsage
-        ? sessionUsage.totalPrompt
-        : undefined,
+      sessionInput: sessionUsage ? sessionUsage.totalPrompt : undefined,
       sessionOutput: sessionUsage?.output,
     };
   }, [
@@ -601,7 +581,8 @@ export function AiChatPanel() {
                       return;
                     }
                     const id = await createAgentSession({
-                      title: activeTab?.title?.trim() || t("terminal.aiNewChat"),
+                      title:
+                        activeTab?.title?.trim() || t("terminal.aiNewChat"),
                       model_ref: modelRef || null,
                       permission_mode: permissionMode,
                       host_id: activeTab?.hostId ?? null,
@@ -620,7 +601,9 @@ export function AiChatPanel() {
                   <Plus size={14} />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="left">{t("terminal.aiNewChat")}</TooltipContent>
+              <TooltipContent side="left">
+                {t("terminal.aiNewChat")}
+              </TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -635,7 +618,9 @@ export function AiChatPanel() {
                   <History size={14} />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="left">{t("terminal.aiHistory")}</TooltipContent>
+              <TooltipContent side="left">
+                {t("terminal.aiHistory")}
+              </TooltipContent>
             </Tooltip>
           </div>
         </div>
@@ -681,7 +666,9 @@ export function AiChatPanel() {
                       void (async () => {
                         await loadSession(s.id);
                         if (activeTabId) {
-                          await updateAgentSession(s.id, { tab_id: activeTabId });
+                          await updateAgentSession(s.id, {
+                            tab_id: activeTabId,
+                          });
                           await clearAgentSessionTabBinding(activeTabId, s.id);
                           await reloadMeta();
                         }
@@ -711,48 +698,48 @@ export function AiChatPanel() {
           </div>
         ) : null}
 
-        <div className="h-full overflow-auto px-2.5 py-2">
-        {messages.length === 0 && !busy ? (
-          <div className="flex h-full min-h-[120px] flex-col items-center justify-center gap-1 px-3 text-center">
-            <Sparkles size={18} className="text-muted-foreground/50" />
-            <p className="text-xs text-muted-foreground">
-              {t("terminal.aiEmptyHint")}
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2.5">
-            {messages.map((m) => (
-              <MessageBlock
-                key={m.id}
-                messageId={m.id}
-                role={m.role}
-                parts={m.parts}
-                onConfirm={resolveConfirm}
-                onExecutePlan={executePlan}
-                executedPlanKeys={executedPlanKeys}
-                busy={busy}
-                permissionMode={permissionMode}
-              />
-            ))}
-            {busy ? (
-              <div className="flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2 py-1.5 text-[11px] text-muted-foreground">
-                <Loader2 size={12} className="animate-spin text-primary" />
-                <span className="min-w-0 flex-1 truncate">
-                  {activityStatusLabel}
-                  {activity.detail &&
-                  !blockingUi.active &&
-                  activity.phase !== "awaiting_confirm" ? (
-                    <span className="opacity-70"> · {activity.detail}</span>
-                  ) : null}
-                  {activityElapsed ? (
-                    <span className="opacity-60"> · {activityElapsed}</span>
-                  ) : null}
-                </span>
-              </div>
-            ) : null}
-            <div ref={bottomRef} />
-          </div>
-        )}
+        <div className="h-full overflow-x-hidden overflow-y-auto px-2.5 py-2">
+          {messages.length === 0 && !busy ? (
+            <div className="flex h-full min-h-[120px] flex-col items-center justify-center gap-1 px-3 text-center">
+              <Sparkles size={18} className="text-muted-foreground/50" />
+              <p className="text-xs text-muted-foreground">
+                {t("terminal.aiEmptyHint")}
+              </p>
+            </div>
+          ) : (
+            <div className="min-w-0 max-w-full space-y-2.5">
+              {messages.map((m) => (
+                <MessageBlock
+                  key={m.id}
+                  messageId={m.id}
+                  role={m.role}
+                  parts={m.parts}
+                  onConfirm={resolveConfirm}
+                  onExecutePlan={executePlan}
+                  executedPlanKeys={executedPlanKeys}
+                  busy={busy}
+                  permissionMode={permissionMode}
+                />
+              ))}
+              {busy ? (
+                <div className="flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2 py-1.5 text-[11px] text-muted-foreground">
+                  <Loader2 size={12} className="animate-spin text-primary" />
+                  <span className="min-w-0 flex-1 truncate">
+                    {activityStatusLabel}
+                    {activity.detail &&
+                    !blockingUi.active &&
+                    activity.phase !== "awaiting_confirm" ? (
+                      <span className="opacity-70"> · {activity.detail}</span>
+                    ) : null}
+                    {activityElapsed ? (
+                      <span className="opacity-60"> · {activityElapsed}</span>
+                    ) : null}
+                  </span>
+                </div>
+              ) : null}
+              <div ref={bottomRef} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -767,9 +754,7 @@ export function AiChatPanel() {
               >
                 <div className="font-medium text-foreground">
                   待确认{p.dangerous ? " · 危险" : ""}
-                  {p.agent && p.agent !== "orchestrator"
-                    ? ` · ${p.agent}`
-                    : ""}
+                  {p.agent && p.agent !== "orchestrator" ? ` · ${p.agent}` : ""}
                 </div>
                 <div className="mt-0.5 truncate text-muted-foreground">
                   {toolLabel(p.name, p.args)}
@@ -838,9 +823,7 @@ export function AiChatPanel() {
           <div className="flex items-center gap-0.5 border-b border-border/70 px-1 py-0.5">
             <Select
               value={permissionMode}
-              onValueChange={(v) =>
-                setPermissionMode(v as AgentPermissionMode)
-              }
+              onValueChange={(v) => setPermissionMode(v as AgentPermissionMode)}
             >
               <SelectTrigger className="h-7 min-w-0 flex-1 border-0 bg-transparent px-1.5 text-[11px] shadow-none focus:ring-0">
                 <SelectValue />
@@ -895,7 +878,9 @@ export function AiChatPanel() {
               </SelectTrigger>
               <SelectContent side="top" align="end">
                 <SelectItem value="off">{t("terminal.aiThinkOff")}</SelectItem>
-                <SelectItem value="high">{t("terminal.aiThinkHigh")}</SelectItem>
+                <SelectItem value="high">
+                  {t("terminal.aiThinkHigh")}
+                </SelectItem>
                 <SelectItem value="max">{t("terminal.aiThinkMax")}</SelectItem>
               </SelectContent>
             </Select>

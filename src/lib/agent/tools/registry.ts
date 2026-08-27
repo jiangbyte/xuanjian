@@ -9,7 +9,7 @@ import {
   WRITE_TOOL_NAMES,
 } from "@/lib/agent/tools/defs";
 import type { AgentToolDef, ToolExecContext } from "@/lib/agent/tools/types";
-import { executeToolViaPipeline } from "@/lib/agent/tools/pipeline";
+import { executeToolWithHooks } from "@/lib/agent/tools/execute";
 
 export type { AgentToolDef, ToolExecContext } from "@/lib/agent/tools/types";
 export { isDangerousCommand } from "@/lib/agent/tools/types";
@@ -48,7 +48,7 @@ export async function executeLocalTool(
   args: Record<string, unknown>,
   ctx: ToolExecContext,
 ): Promise<string> {
-  return executeToolViaPipeline(name, args, ctx);
+  return executeToolWithHooks(name, args, ctx);
 }
 
 /** 按名称合并额外工具（MCP 等动态注册） */

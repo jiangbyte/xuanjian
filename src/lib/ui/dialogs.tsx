@@ -53,6 +53,15 @@ type DialogRequest =
       resolve: (v: boolean) => void;
     }
   | {
+      kind: "hostKeyTrust";
+      title: string;
+      message: string;
+      fingerprint: string;
+      confirmLabel: string;
+      cancelLabel: string;
+      resolve: (v: boolean) => void;
+    }
+  | {
       kind: "prompt";
       title: string;
       message: string;
@@ -126,6 +135,34 @@ export function dialogConfirm(
   });
 }
 
+/** SSH 主机密钥信任确认（指纹可滚动、自动换行） */
+export function dialogHostKeyTrust(opts: {
+  host: string;
+  port: number;
+  fingerprint: string;
+  title?: string;
+  message?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+}): Promise<boolean> {
+  return new Promise((resolve) => {
+    useDialogStore.getState().enqueue({
+      kind: "hostKeyTrust",
+      title: opts.title ?? i18n.t("hosts.trustHostKeyTitle"),
+      message:
+        opts.message ??
+        i18n.t("hosts.trustHostKeyMessage", {
+          host: opts.host,
+          port: opts.port,
+        }),
+      fingerprint: opts.fingerprint,
+      confirmLabel: opts.confirmLabel ?? i18n.t("hosts.trustHostKeyConfirm"),
+      cancelLabel: opts.cancelLabel ?? i18n.t("dialog.cancel"),
+      resolve,
+    });
+  });
+}
+
 /** 输入框；取消返回 null */
 export function dialogPrompt(
   message: string,
@@ -162,6 +199,7 @@ export function dialogChoice(
 export type DialogApi = {
   alert: typeof dialogAlert;
   confirm: typeof dialogConfirm;
+  hostKeyTrust: typeof dialogHostKeyTrust;
   prompt: typeof dialogPrompt;
   choice: typeof dialogChoice;
 };
@@ -169,6 +207,7 @@ export type DialogApi = {
 export const dialogs: DialogApi = {
   alert: dialogAlert,
   confirm: dialogConfirm,
+  hostKeyTrust: dialogHostKeyTrust,
   prompt: dialogPrompt,
   choice: dialogChoice,
 };
@@ -203,7 +242,7 @@ export function DialogHost() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{current.title}</AlertDialogTitle>
-            <AlertDialogDescription className="whitespace-pre-wrap">
+            <AlertDialogDescription className="whitespace-pre-wrap break-words">
               {current.message}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -230,7 +269,7 @@ export function DialogHost() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{current.title}</AlertDialogTitle>
-            <AlertDialogDescription className="whitespace-pre-wrap">
+            <AlertDialogDescription className="whitespace-pre-wrap break-words">
               {current.message}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -246,6 +285,51 @@ export function DialogHost() {
                   ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   : undefined
               }
+              onClick={() => settleAndClear(() => current.resolve(true))}
+            >
+              {current.confirmLabel}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    );
+  }
+
+  if (current.kind === "hostKeyTrust") {
+    return (
+      <AlertDialog
+        open
+        onOpenChange={(open) => {
+          if (!open) settleAndClear(() => current.resolve(false));
+        }}
+      >
+        <AlertDialogContent className="max-w-md overflow-hidden">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{current.title}</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p className="break-words">{current.message}</p>
+                <div className="min-w-0 rounded-md border border-border bg-muted/40 p-2">
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    SHA256
+                  </div>
+                  <div
+                    className="mt-1 max-h-24 overflow-y-auto break-all font-mono text-xs text-foreground"
+                    title={`SHA256:${current.fingerprint}`}
+                  >
+                    {current.fingerprint}
+                  </div>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => settleAndClear(() => current.resolve(false))}
+            >
+              {current.cancelLabel}
+            </AlertDialogCancel>
+            <AlertDialogAction
               onClick={() => settleAndClear(() => current.resolve(true))}
             >
               {current.confirmLabel}

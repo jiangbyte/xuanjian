@@ -7,6 +7,7 @@
  */
 
 import {
+  ArrowDown,
   Copy,
   Loader2,
   Play,
@@ -18,7 +19,14 @@ import {
   Terminal,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { FloatingWindow } from "@/components/FloatingWindow";
@@ -37,6 +45,15 @@ import {
 import { clipboardWriteText } from "@/lib/ui/clipboard";
 import { dialogs } from "@/lib/ui/dialogs";
 import { api, onSessionExecOutput } from "@/lib/tauri";
+import {
+  SIDEBAR_ICON,
+  sidebarItemRowClass,
+  sidebarItemSubClass,
+  sidebarItemTitleClass,
+  sidebarPanelMetaClass,
+  sidebarPanelTitleClass,
+  sidebarTagRowClass,
+} from "./sidebarUi";
 
 const LOG_MAX_LINES = 1000;
 
@@ -158,6 +175,11 @@ function appendCapped(prev: string, chunk: string): string {
   return lines.slice(-LOG_MAX_LINES).join("\n");
 }
 
+function isLogSelecting(): boolean {
+  const sel = window.getSelection();
+  return Boolean(sel && sel.type === "Range" && !sel.isCollapsed);
+}
+
 /**
  * Docker 侧栏：分区列表、过滤、启停/删除等操作。
  */
@@ -184,6 +206,7 @@ export function DockerPane({
   } | null>(null);
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsLive, setLogsLive] = useState(false);
+  const [logsFollow, setLogsFollow] = useState(true);
   const logsJobRef = useRef<string | null>(null);
   const logsScrollRef = useRef<HTMLDivElement | null>(null);
   const stickBottomRef = useRef(true);
@@ -341,6 +364,14 @@ export function DockerPane({
     }
   };
 
+  const scrollLogsToBottom = useCallback(() => {
+    const el = logsScrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    stickBottomRef.current = true;
+    setLogsFollow(true);
+  }, []);
+
   const stopLogsStream = useCallback(async () => {
     const jobId = logsJobRef.current;
     logsJobRef.current = null;
@@ -362,6 +393,7 @@ export function DockerPane({
       setLogsLoading(true);
       setBusy(`logs:${id}`);
       stickBottomRef.current = true;
+      setLogsFollow(true);
       try {
         const ref = safeArg(id);
         const jobId = await api.sessionExecStream(
@@ -409,12 +441,13 @@ export function DockerPane({
     };
   }, [t]);
 
-  useEffect(() => {
-    if (!logsView) return;
-    if (!stickBottomRef.current) return;
+  useLayoutEffect(() => {
+    if (!logsView || !logsFollow) return;
+    if (isLogSelecting()) return;
     const el = logsScrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [logsView?.body]);
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [logsView?.body, logsFollow]);
 
   useEffect(() => {
     return () => {
@@ -504,21 +537,24 @@ export function DockerPane({
     <div className="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground">
       {/* —— 标题与刷新 —— */}
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
-        <span className="text-xs font-medium">{t("termTab.docker")}</span>
-        <span className="text-xs text-muted-foreground">
+        <span className={sidebarPanelTitleClass}>{t("termTab.docker")}</span>
+        <span className={sidebarPanelMetaClass}>
           {t("termTab.dockerCount", { count })}
         </span>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               type="button"
-              size="icon-sm"
+              size="icon-xs"
               variant="ghost"
               className="ml-auto"
               aria-label={t("terminal.refresh")}
               onClick={() => refresh()}
             >
-              <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+              <RefreshCw
+                size={SIDEBAR_ICON}
+                className={loading ? "animate-spin" : ""}
+              />
             </Button>
           </TooltipTrigger>
           <TooltipContent>{t("terminal.refresh")}</TooltipContent>
@@ -547,7 +583,7 @@ export function DockerPane({
         <div className="mt-2">
           <InputGroup className="h-7">
             <InputGroupAddon>
-              <Search size={13} />
+              <Search size={SIDEBAR_ICON} />
             </InputGroupAddon>
             <InputGroupInput
               className="text-xs"
@@ -597,11 +633,11 @@ export function DockerPane({
             filteredContainers.map((c) => (
               <div
                 key={c.id}
-                className="flex flex-col gap-1 rounded-md px-2 py-1.5 hover:bg-accent"
+                className="flex flex-col gap-0.5 rounded-md px-1.5 py-1 hover:bg-accent"
               >
                 <div className="flex w-full min-w-0 items-start gap-2">
                   <div
-                    className={`mt-1.5 size-2 shrink-0 rounded-full ${
+                    className={`mt-1 size-1.5 shrink-0 rounded-full ${
                       isRunning(c.state)
                         ? "bg-success"
                         : c.state.toLowerCase() === "exited"
@@ -610,39 +646,36 @@ export function DockerPane({
                     }`}
                   />
                   <div className="min-w-0 flex-1">
-                    <div
-                      className="text-sm font-medium truncate"
-                      title={c.name}
-                    >
+                    <div className={sidebarItemTitleClass} title={c.name}>
                       {c.name || shortId(c.id)}
                     </div>
-                    <div
-                      className="text-xs text-muted-foreground truncate"
-                      title={c.image}
-                    >
+                    <div className={sidebarItemSubClass} title={c.image}>
                       {c.image}
                     </div>
-                    <div className="text-xs text-muted-foreground truncate">
+                    <div className={sidebarItemSubClass}>
                       {shortId(c.id)}
                       {c.ports ? ` · ${c.ports}` : ""}
                     </div>
-                    <div className="mt-1.5 flex flex-wrap gap-1">
-                      <Badge variant={badgeVariant(stateTone(c.state))}>
+                    <div className={sidebarTagRowClass}>
+                      <Badge
+                        size="sm"
+                        variant={badgeVariant(stateTone(c.state))}
+                      >
                         {c.state || "?"}
                       </Badge>
-                      <Badge variant="secondary" title={c.status}>
+                      <Badge size="sm" variant="secondary" title={c.status}>
                         {c.status || "-"}
                       </Badge>
                     </div>
                   </div>
                 </div>
-                <div className="mt-1.5 flex flex-wrap gap-0.5 pl-[13px]">
+                <div className="mt-1 flex flex-wrap gap-0.5 pl-[11px]">
                   {isRunning(c.state) ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
                           type="button"
-                          size="icon-sm"
+                          size="icon-xs"
                           variant="ghost"
                           aria-label={t("termTab.dockerStop")}
                           disabled={busy === c.id}
@@ -656,7 +689,7 @@ export function DockerPane({
                             )
                           }
                         >
-                          <Square size={13} />
+                          <Square size={SIDEBAR_ICON} />
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>{t("termTab.dockerStop")}</TooltipContent>
@@ -666,7 +699,7 @@ export function DockerPane({
                       <TooltipTrigger asChild>
                         <Button
                           type="button"
-                          size="icon-sm"
+                          size="icon-xs"
                           variant="ghost"
                           aria-label={t("termTab.dockerStart")}
                           disabled={busy === c.id}
@@ -674,7 +707,7 @@ export function DockerPane({
                             runDocker(c.id, `docker start ${safeArg(c.id)}`)
                           }
                         >
-                          <Play size={13} />
+                          <Play size={SIDEBAR_ICON} />
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>
@@ -686,7 +719,7 @@ export function DockerPane({
                     <TooltipTrigger asChild>
                       <Button
                         type="button"
-                        size="icon-sm"
+                        size="icon-xs"
                         variant="ghost"
                         aria-label={t("termTab.dockerRestart")}
                         disabled={busy === c.id}
@@ -694,7 +727,7 @@ export function DockerPane({
                           runDocker(c.id, `docker restart ${safeArg(c.id)}`)
                         }
                       >
-                        <RotateCcw size={13} />
+                        <RotateCcw size={SIDEBAR_ICON} />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>
@@ -705,12 +738,12 @@ export function DockerPane({
                     <TooltipTrigger asChild>
                       <Button
                         type="button"
-                        size="icon-sm"
+                        size="icon-xs"
                         variant="ghost"
                         aria-label={t("termTab.dockerShell")}
                         onClick={() => openShell(c.id)}
                       >
-                        <Terminal size={13} />
+                        <Terminal size={SIDEBAR_ICON} />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>{t("termTab.dockerShell")}</TooltipContent>
@@ -719,13 +752,13 @@ export function DockerPane({
                     <TooltipTrigger asChild>
                       <Button
                         type="button"
-                        size="icon-sm"
+                        size="icon-xs"
                         variant="ghost"
                         aria-label={t("termTab.dockerLogs")}
                         disabled={!!busy}
                         onClick={() => showLogs(c.id, c.name || shortId(c.id))}
                       >
-                        <ScrollText size={13} />
+                        <ScrollText size={SIDEBAR_ICON} />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>{t("termTab.dockerLogs")}</TooltipContent>
@@ -734,12 +767,12 @@ export function DockerPane({
                     <TooltipTrigger asChild>
                       <Button
                         type="button"
-                        size="icon-sm"
+                        size="icon-xs"
                         variant="ghost"
                         aria-label={t("termTab.dockerCopy")}
                         onClick={() => copyText(c.name || c.id)}
                       >
-                        <Copy size={13} />
+                        <Copy size={SIDEBAR_ICON} />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>{t("termTab.dockerCopy")}</TooltipContent>
@@ -748,7 +781,7 @@ export function DockerPane({
                     <TooltipTrigger asChild>
                       <Button
                         type="button"
-                        size="icon-sm"
+                        size="icon-xs"
                         variant="ghost"
                         aria-label={t("termTab.dockerRemove")}
                         disabled={busy === c.id}
@@ -762,7 +795,7 @@ export function DockerPane({
                           )
                         }
                       >
-                        <Trash2 size={13} />
+                        <Trash2 size={SIDEBAR_ICON} />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>{t("termTab.dockerRemove")}</TooltipContent>
@@ -785,16 +818,16 @@ export function DockerPane({
               return (
                 <div
                   key={`${img.id}:${img.tag}`}
-                  className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
+                  className={sidebarItemRowClass}
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium truncate" title={ref}>
+                    <div className={sidebarItemTitleClass} title={ref}>
                       {img.repository}
                     </div>
-                    <div className="text-xs text-muted-foreground truncate">
+                    <div className={sidebarItemSubClass}>
                       {img.tag} · {shortId(img.id)}
                     </div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className={sidebarItemSubClass}>
                       {img.size}
                       {img.created ? ` · ${img.created}` : ""}
                     </div>
@@ -803,12 +836,12 @@ export function DockerPane({
                     <TooltipTrigger asChild>
                       <Button
                         type="button"
-                        size="icon-sm"
+                        size="icon-xs"
                         variant="ghost"
                         aria-label={t("termTab.dockerCopy")}
                         onClick={() => copyText(ref)}
                       >
-                        <Copy size={13} />
+                        <Copy size={SIDEBAR_ICON} />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>{t("termTab.dockerCopy")}</TooltipContent>
@@ -817,7 +850,7 @@ export function DockerPane({
                     <TooltipTrigger asChild>
                       <Button
                         type="button"
-                        size="icon-sm"
+                        size="icon-xs"
                         variant="ghost"
                         aria-label={t("termTab.dockerRemove")}
                         disabled={busy === img.id}
@@ -829,7 +862,7 @@ export function DockerPane({
                           )
                         }
                       >
-                        <Trash2 size={13} />
+                        <Trash2 size={SIDEBAR_ICON} />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>{t("termTab.dockerRemove")}</TooltipContent>
@@ -847,21 +880,16 @@ export function DockerPane({
             filteredNetworks.map((n) => {
               const builtin = ["bridge", "host", "none"].includes(n.name);
               return (
-                <div
-                  key={n.id}
-                  className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
-                >
+                <div key={n.id} className={sidebarItemRowClass}>
                   <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium truncate">{n.name}</div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className={sidebarItemTitleClass}>{n.name}</div>
+                    <div className={sidebarItemSubClass}>
                       {n.driver} · {n.scope}
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {shortId(n.id)}
-                    </div>
+                    <div className={sidebarItemSubClass}>{shortId(n.id)}</div>
                     {builtin && (
-                      <div className="mt-1.5">
-                        <Badge variant="secondary">
+                      <div className={sidebarTagRowClass}>
+                        <Badge size="sm" variant="secondary">
                           {t("termTab.dockerBuiltin")}
                         </Badge>
                       </div>
@@ -871,12 +899,12 @@ export function DockerPane({
                     <TooltipTrigger asChild>
                       <Button
                         type="button"
-                        size="icon-sm"
+                        size="icon-xs"
                         variant="ghost"
                         aria-label={t("termTab.dockerCopy")}
                         onClick={() => copyText(n.name)}
                       >
-                        <Copy size={13} />
+                        <Copy size={SIDEBAR_ICON} />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>{t("termTab.dockerCopy")}</TooltipContent>
@@ -886,7 +914,7 @@ export function DockerPane({
                       <TooltipTrigger asChild>
                         <Button
                           type="button"
-                          size="icon-sm"
+                          size="icon-xs"
                           variant="ghost"
                           aria-label={t("termTab.dockerRemove")}
                           disabled={busy === n.id}
@@ -900,7 +928,7 @@ export function DockerPane({
                             )
                           }
                         >
-                          <Trash2 size={13} />
+                          <Trash2 size={SIDEBAR_ICON} />
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>
@@ -918,20 +946,14 @@ export function DockerPane({
           </div>
         ) : (
           filteredVolumes.map((v) => (
-            <div
-              key={v.name}
-              className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
-            >
+            <div key={v.name} className={sidebarItemRowClass}>
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium truncate">{v.name}</div>
-                <div className="text-xs text-muted-foreground">
+                <div className={sidebarItemTitleClass}>{v.name}</div>
+                <div className={sidebarItemSubClass}>
                   {v.driver} · {v.scope}
                 </div>
                 {v.mountpoint ? (
-                  <div
-                    className="text-xs text-muted-foreground truncate"
-                    title={v.mountpoint}
-                  >
+                  <div className={sidebarItemSubClass} title={v.mountpoint}>
                     {v.mountpoint}
                   </div>
                 ) : null}
@@ -940,12 +962,12 @@ export function DockerPane({
                 <TooltipTrigger asChild>
                   <Button
                     type="button"
-                    size="icon-sm"
+                    size="icon-xs"
                     variant="ghost"
                     aria-label={t("termTab.dockerCopy")}
                     onClick={() => copyText(v.name)}
                   >
-                    <Copy size={13} />
+                    <Copy size={SIDEBAR_ICON} />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>{t("termTab.dockerCopy")}</TooltipContent>
@@ -954,7 +976,7 @@ export function DockerPane({
                 <TooltipTrigger asChild>
                   <Button
                     type="button"
-                    size="icon-sm"
+                    size="icon-xs"
                     variant="ghost"
                     aria-label={t("termTab.dockerRemove")}
                     disabled={busy === v.name}
@@ -966,7 +988,7 @@ export function DockerPane({
                       )
                     }
                   >
-                    <Trash2 size={13} />
+                    <Trash2 size={SIDEBAR_ICON} />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>{t("termTab.dockerRemove")}</TooltipContent>
@@ -987,9 +1009,20 @@ export function DockerPane({
           headerActions={
             <div className="flex items-center gap-1">
               {logsLive ? (
-                <Badge variant="secondary" className="text-xs">
+                <Badge size="sm" variant="secondary">
                   {t("termTab.dockerLogsLive")}
                 </Badge>
+              ) : null}
+              {logsLive && !logsFollow ? (
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="secondary"
+                  onClick={scrollLogsToBottom}
+                >
+                  <ArrowDown size={12} />
+                  {t("termTab.dockerLogsJumpBottom")}
+                </Button>
               ) : null}
               <Button
                 type="button"
@@ -1024,11 +1057,13 @@ export function DockerPane({
         >
           <div
             ref={logsScrollRef}
-            className="min-h-0 flex-1 overflow-auto bg-zinc-950 px-3 py-2"
+            className="select-text min-h-0 flex-1 overflow-auto bg-zinc-950 px-3 py-2"
             onScroll={(e) => {
               const el = e.currentTarget;
-              stickBottomRef.current =
+              const atBottom =
                 el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+              stickBottomRef.current = atBottom;
+              setLogsFollow(atBottom);
             }}
           >
             {logsLoading && !logsView.body ? (
@@ -1037,7 +1072,7 @@ export function DockerPane({
                 {t("termTab.dockerLogsLoading")}
               </div>
             ) : (
-              <pre className="whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-zinc-200">
+              <pre className="select-text whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-zinc-200">
                 {logsView.body || t("termTab.dockerLogsEmpty")}
               </pre>
             )}

@@ -42,7 +42,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
     function: {
       name: "terminal_tail",
       description:
-        "读取交互终端最近输出。长任务（docker pull/compose 等）可设 wait_ms 为最长等待；出现 shell 提示符或输出稳定后会自动提前返回。",
+        "读取 Agent 下栏终端最近输出（与 terminal_run/session_exec 同一会话）。长任务可设 wait_ms 为最长等待；出现 shell 提示符或输出稳定后会自动提前返回。",
       parameters: {
         type: "object",
         properties: {
@@ -137,7 +137,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
     function: {
       name: "terminal_run",
       description:
-        "在【当前焦点交互终端】中执行命令。优先用此工具代替 session_exec。长任务设较大 wait_ms（上限），命令结束或输出稳定后自动返回。",
+        "在【Agent 下栏终端】中执行命令（用户可见）。长任务设较大 wait_ms，命令结束或输出稳定后自动返回。",
       parameters: {
         type: "object",
         properties: {
@@ -158,7 +158,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
     function: {
       name: "session_exec",
       description:
-        "旁路一次性执行（不显示在交互终端）。仅在当前焦点标签会话中执行。",
+        "在【Agent 下栏终端】执行命令（与 terminal_run 相同，用户可见）。仅在当前焦点标签对应环境下执行。",
       parameters: {
         type: "object",
         properties: {
@@ -174,7 +174,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
     type: "function",
     function: {
       name: "run_script",
-      description: "将脚本库中的脚本写入可见终端执行。",
+      description: "将脚本库中的脚本写入 Agent 下栏终端执行（用户可见）。",
       parameters: {
         type: "object",
         properties: {
@@ -246,7 +246,10 @@ export const TOOL_DEFS: AgentToolDef[] = [
         properties: {
           ...EXEC_TARGET_PROPS,
           session_id: { type: "string" },
-          compose_file: { type: "string", description: "可选 compose 文件路径" },
+          compose_file: {
+            type: "string",
+            description: "可选 compose 文件路径",
+          },
           detach: { type: "boolean", description: "默认 true（-d）" },
         },
       },
@@ -256,8 +259,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
     type: "function",
     function: {
       name: "list_files",
-      description:
-        "列出当前焦点标签文件端点下的目录（local/WSL/SFTP）。",
+      description: "列出当前焦点标签文件端点下的目录（local/WSL/SFTP）。",
       parameters: {
         type: "object",
         properties: {
@@ -556,44 +558,6 @@ export const TOOL_DEFS: AgentToolDef[] = [
       },
     },
   },
-  {
-    type: "function",
-    function: {
-      name: "list_pipelines",
-      description:
-        "列出已保存的多阶段 Pipeline。返回 stages_summary（含每步 prompt 意图说明）。",
-      parameters: { type: "object", properties: {} },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_pipeline",
-      description:
-        "读取 Pipeline 完整定义。各阶段含 prompt 字段（意图/成功标准），执行前务必阅读 stages_summary。",
-      parameters: {
-        type: "object",
-        properties: { pipeline_id: { type: "number" } },
-        required: ["pipeline_id"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "run_pipeline",
-      description:
-        "按顺序执行 Pipeline。执行前用 get_pipeline 阅读各阶段 prompt；运行日志会输出 [意图] 行。支持 dry_run。",
-      parameters: {
-        type: "object",
-        properties: {
-          pipeline_id: { type: "number" },
-          dry_run: { type: "boolean" },
-        },
-        required: ["pipeline_id"],
-      },
-    },
-  },
 ];
 
 export const READ_TOOL_NAMES = new Set([
@@ -621,8 +585,6 @@ export const READ_TOOL_NAMES = new Set([
   "search_cmd_history",
   "port_snapshot",
   "disk_snapshot",
-  "list_pipelines",
-  "get_pipeline",
 ]);
 
 export const WRITE_TOOL_NAMES = new Set([
@@ -636,5 +598,4 @@ export const WRITE_TOOL_NAMES = new Set([
   "sync_to_remote",
   "write_remote_file",
   "deploy",
-  "run_pipeline",
 ]);

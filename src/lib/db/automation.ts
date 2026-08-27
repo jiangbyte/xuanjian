@@ -152,7 +152,11 @@ export async function updateScheduledJob(
         ? input.host_group_id
         : existing.host_group_id,
       hostIdsJson,
-      input.enabled === false ? 0 : input.enabled === true ? 1 : existing.enabled,
+      input.enabled === false
+        ? 0
+        : input.enabled === true
+          ? 1
+          : existing.enabled,
       id,
     ],
   );
@@ -274,8 +278,14 @@ export async function updateAlertRule(
         ? input.host_group_id
         : existing.host_group_id,
       input.session_id !== undefined ? input.session_id : existing.session_id,
-      input.webhook_url !== undefined ? input.webhook_url : existing.webhook_url,
-      input.enabled === false ? 0 : input.enabled === true ? 1 : existing.enabled,
+      input.webhook_url !== undefined
+        ? input.webhook_url
+        : existing.webhook_url,
+      input.enabled === false
+        ? 0
+        : input.enabled === true
+          ? 1
+          : existing.enabled,
       id,
     ],
   );

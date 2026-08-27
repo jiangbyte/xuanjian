@@ -574,5 +574,116 @@ DELETE FROM app_settings WHERE key IN ('agent.gateway_port', 'agent.default_runt
 "#,
             kind: MigrationKind::Up,
         },
+        // —— 迁移 v23：MCP 工具偏好 + 清理废弃 backend 设置 ——
+        Migration {
+            version: 23,
+            description: "mcp_tool_prefs",
+            sql: r#"
+CREATE TABLE IF NOT EXISTS mcp_tool_prefs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  mcp_server_id INTEGER NOT NULL,
+  tool_name TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  UNIQUE(mcp_server_id, tool_name),
+  FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_mcp_tool_prefs_server ON mcp_tool_prefs(mcp_server_id);
+DELETE FROM app_settings WHERE key LIKE 'backend.%';
+"#,
+            kind: MigrationKind::Up,
+        },
+        // —— 迁移 v24：工作流草稿/发布列 ——
+        Migration {
+            version: 24,
+            description: "workflow_draft_publish",
+            sql: r#"
+ALTER TABLE pipelines ADD COLUMN status TEXT NOT NULL DEFAULT 'draft';
+ALTER TABLE pipelines ADD COLUMN published_definition_json TEXT;
+ALTER TABLE pipeline_runs ADD COLUMN context_json TEXT;
+INSERT OR IGNORE INTO app_settings (key, value) VALUES ('workflow.session_policy', 'interactive');
+INSERT OR IGNORE INTO app_settings (key, value) VALUES ('workflow.max_parallel', '4');
+INSERT OR IGNORE INTO app_settings (key, value) VALUES ('workflow.output_truncate', '20000');
+"#,
+            kind: MigrationKind::Up,
+        },
+        // —— 迁移 v25：pipelines → workflows 破坏性重命名 ——
+        Migration {
+            version: 25,
+            description: "rename_pipelines_to_workflows",
+            sql: r#"
+CREATE TABLE workflows (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  description TEXT,
+  definition_json TEXT,
+  published_definition_json TEXT,
+  status TEXT NOT NULL DEFAULT 'draft',
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+INSERT INTO workflows (
+  id, name, description, definition_json, published_definition_json,
+  status, enabled, created_at, updated_at
+)
+SELECT
+  id, name, description, definition_json, published_definition_json,
+  COALESCE(status, 'draft'), enabled, created_at, updated_at
+FROM pipelines;
+
+DROP TABLE pipelines;
+
+CREATE TABLE workflow_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workflow_id INTEGER NOT NULL,
+  dry_run INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'running',
+  result_json TEXT,
+  context_json TEXT,
+  started_at TEXT NOT NULL DEFAULT (datetime('now')),
+  finished_at TEXT,
+  FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE CASCADE
+);
+
+INSERT INTO workflow_runs (
+  id, workflow_id, dry_run, status, result_json, context_json, started_at, finished_at
+)
+SELECT
+  id, pipeline_id, dry_run, status, result_json, context_json, started_at, finished_at
+FROM pipeline_runs;
+
+DROP TABLE pipeline_runs;
+CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow ON workflow_runs(workflow_id, started_at DESC);
+INSERT OR IGNORE INTO app_settings (key, value) VALUES ('migration.workflow_v1_converted', '0');
+"#,
+            kind: MigrationKind::Up,
+        },
+        // —— 迁移 v26：移除工作流表与相关设置 ——
+        Migration {
+            version: 26,
+            description: "drop_workflows",
+            sql: r#"
+DROP TABLE IF EXISTS workflow_runs;
+DROP TABLE IF EXISTS workflows;
+DELETE FROM app_settings WHERE key LIKE 'workflow.%';
+DELETE FROM app_settings WHERE key = 'migration.workflow_v1_converted';
+"#,
+            kind: MigrationKind::Up,
+        },
+        // —— 迁移 v27：兜底删除遗留 pipeline / workflow 表 ——
+        Migration {
+            version: 27,
+            description: "drop_legacy_pipeline_workflow_tables",
+            sql: r#"
+DROP TABLE IF EXISTS workflow_runs;
+DROP TABLE IF EXISTS workflows;
+DROP TABLE IF EXISTS pipeline_runs;
+DROP TABLE IF EXISTS pipelines;
+DELETE FROM app_settings WHERE key LIKE 'workflow.%';
+DELETE FROM app_settings WHERE key = 'migration.workflow_v1_converted';
+"#,
+            kind: MigrationKind::Up,
+        },
     ]
 }

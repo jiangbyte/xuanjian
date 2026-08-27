@@ -17,9 +17,9 @@ import { type PingSample, type PingSummary, pushPingSample } from "./types";
 /** Ping：原文 + 延迟可视化，状态与其它模式隔离 */
 export function PingPage() {
   const { t } = useTranslation();
-  const [target, setTarget] = useState("1.1.1.1");
+  const [target, setTarget] = useState("");
   const [count, setCount] = useState<number | null>(4);
-  const [countText, setCountText] = useState("4");
+  const [countText, setCountText] = useState("");
   const [lines, setLines] = useState<string[]>([]);
   const [samples, setSamples] = useState<PingSample[]>([]);
   const [summary, setSummary] = useState<PingSummary | null>(null);
@@ -83,7 +83,9 @@ export function PingPage() {
     clear();
     setBusy(true);
     try {
-      const id = await api.networkPing(host, count === null ? 0 : count);
+      const effectiveCount =
+        countText.trim() === "" ? 4 : count === null ? 0 : count;
+      const id = await api.networkPing(host, effectiveCount);
       jobRef.current = id;
       setJobId(id);
       await addNetworkHistory("ping", host);
@@ -100,7 +102,7 @@ export function PingPage() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
+    <div className="flex h-full min-h-0 w-full flex-col gap-3">
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-[200px] flex-1 space-y-1.5">
           <Label htmlFor="ping-target">{t("network.host")}</Label>
@@ -110,6 +112,7 @@ export function PingPage() {
             value={target}
             onChange={(e) => setTarget(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && start()}
+            placeholder={t("network.hostPlaceholder")}
           />
         </div>
         <div className="w-28 space-y-1.5">

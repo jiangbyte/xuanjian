@@ -26,7 +26,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SettingField } from "@/features/settings/SettingField";
-import { formatTokenCount, parseContextWindow } from "@/lib/agent/contextBudget";
+import {
+  formatTokenCount,
+  parseContextWindow,
+} from "@/lib/agent/contextBudget";
 import {
   createAiModel,
   createAiProvider,
@@ -284,7 +287,9 @@ export function ModelsSettingsSection() {
 
           {cur && !adding ? (
             <div className="space-y-2 border-t border-border pt-3">
-              <div className="text-xs font-medium">{t("settings.modelList")}</div>
+              <div className="text-xs font-medium">
+                {t("settings.modelList")}
+              </div>
               <ul className="space-y-1">
                 {models
                   .filter((m) => m.provider_id === cur.id)

@@ -143,6 +143,19 @@ export const TERM_FONT_FAMILIES = [
   },
 ] as const;
 
+/** 默认终端字体（与 TERM_FONT_FAMILIES 首项一致） */
+export const DEFAULT_TERM_FONT_FAMILY = TERM_FONT_FAMILIES[0].id;
+
+/** 将存储值规范为已知字体 id，无效时回退默认 */
+export function resolveTermFontFamily(
+  value: string | null | undefined,
+): string {
+  const trimmed = value?.trim();
+  if (!trimmed) return DEFAULT_TERM_FONT_FAMILY;
+  const known = TERM_FONT_FAMILIES.find((f) => f.id === trimmed);
+  return known?.id ?? DEFAULT_TERM_FONT_FAMILY;
+}
+
 /**
  * 设置 Zustand store；setter 多数会同步 localStorage。
  */
@@ -155,8 +168,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     TERM_FONT_MIN,
     TERM_FONT_MAX,
   ),
-  termFontFamily:
-    localStorage.getItem("xuanjian.termFontFamily") || TERM_FONT_FAMILIES[0].id,
+  termFontFamily: resolveTermFontFamily(
+    localStorage.getItem("xuanjian.termFontFamily"),
+  ),
   editorFontSize: clamp(
     readNum("xuanjian.editorFontSize", 12),
     EDITOR_FONT_MIN,
@@ -184,8 +198,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     set({ termFontSize: next });
   },
   setTermFontFamily: (family) => {
-    localStorage.setItem("xuanjian.termFontFamily", family);
-    set({ termFontFamily: family });
+    const next = resolveTermFontFamily(family);
+    localStorage.setItem("xuanjian.termFontFamily", next);
+    set({ termFontFamily: next });
   },
   setEditorFontSize: (size) => {
     const next = clamp(Math.round(size), EDITOR_FONT_MIN, EDITOR_FONT_MAX);
@@ -207,18 +222,30 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   /** 用外部数据（如 DB）合并覆盖当前设置 */
   hydrate: (data) => {
     if (data.theme) applyTheme(data.theme);
-    set((s) => ({
-      ...s,
-      ...data,
-      termFontSize:
-        data.termFontSize != null
-          ? clamp(data.termFontSize, TERM_FONT_MIN, TERM_FONT_MAX)
-          : s.termFontSize,
-      editorFontSize:
-        data.editorFontSize != null
-          ? clamp(data.editorFontSize, EDITOR_FONT_MIN, EDITOR_FONT_MAX)
-          : s.editorFontSize,
-    }));
+    set((s) => {
+      const termFontFamily =
+        data.termFontFamily != null && data.termFontFamily.trim() !== ""
+          ? resolveTermFontFamily(data.termFontFamily)
+          : s.termFontFamily;
+
+      if (data.termFontFamily != null && data.termFontFamily.trim() !== "") {
+        localStorage.setItem("xuanjian.termFontFamily", termFontFamily);
+      }
+
+      return {
+        ...s,
+        ...data,
+        termFontFamily,
+        termFontSize:
+          data.termFontSize != null
+            ? clamp(data.termFontSize, TERM_FONT_MIN, TERM_FONT_MAX)
+            : s.termFontSize,
+        editorFontSize:
+          data.editorFontSize != null
+            ? clamp(data.editorFontSize, EDITOR_FONT_MIN, EDITOR_FONT_MAX)
+            : s.editorFontSize,
+      };
+    });
   },
 }));
 

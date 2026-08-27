@@ -3,10 +3,7 @@
  * @author Charlie
  */
 
-import {
-  parseExcludePatterns,
-  type WorkspaceRow,
-} from "@/lib/db/workspaces";
+import { parseExcludePatterns, type WorkspaceRow } from "@/lib/db/workspaces";
 import {
   mapLocalToRemote,
   sandboxLocalPath,
@@ -47,7 +44,11 @@ function shouldExclude(relPath: string, patterns: string[]) {
     if (pat.endsWith("*")) {
       const prefix = pat.slice(0, -1);
       if (norm.startsWith(prefix) || norm.includes(`/${prefix}`)) return true;
-    } else if (norm === pat || norm.endsWith(`/${pat}`) || norm.includes(`/${pat}/`)) {
+    } else if (
+      norm === pat ||
+      norm.endsWith(`/${pat}`) ||
+      norm.includes(`/${pat}/`)
+    ) {
       return true;
     }
   }

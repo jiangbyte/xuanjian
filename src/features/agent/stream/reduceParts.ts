@@ -10,11 +10,7 @@ export function reduceParts(
   parts: MessagePart[],
   e: RuntimeEvent,
 ): MessagePart[] {
-  if (
-    e.type === "usage" ||
-    e.type === "activity" ||
-    e.type === "done"
-  ) {
+  if (e.type === "usage" || e.type === "activity" || e.type === "done") {
     return parts;
   }
 
@@ -34,9 +30,7 @@ export function reduceParts(
   const findRunningSubagent = (agent?: string) => {
     const si = cur.findIndex(
       (p) =>
-        p.type === "subagent" &&
-        p.status === "running" &&
-        p.agent === agent,
+        p.type === "subagent" && p.status === "running" && p.agent === agent,
     );
     if (si < 0) return null;
     const sub = cur[si];
@@ -209,8 +203,7 @@ export function reduceParts(
     removePendingEverywhere(e.id);
     const i = cur.findIndex(
       (p) =>
-        (p.type === "tool_call" || p.type === "tool_pending") &&
-        p.id === e.id,
+        (p.type === "tool_call" || p.type === "tool_pending") && p.id === e.id,
     );
     if (i >= 0) cur[i] = pending;
     else cur.push(pending);

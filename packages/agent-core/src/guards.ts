@@ -30,8 +30,6 @@ export const READ_ONLY_AGENT_TOOLS = new Set([
   "get_script",
   "list_cmd_history",
   "host_metrics",
-  "list_pipelines",
-  "get_pipeline",
   "search_notes",
   "search_session_logs",
   "search_cmd_history",

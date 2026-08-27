@@ -28,7 +28,10 @@ function pct(used: number, total: number): number {
   return (used / total) * 100;
 }
 
-function metricValue(rule: AlertRuleRow, payload: MetricPayload): number | null {
+function metricValue(
+  rule: AlertRuleRow,
+  payload: MetricPayload,
+): number | null {
   switch (rule.metric_type) {
     case "cpu":
     case "cpuPct":
@@ -38,7 +41,9 @@ function metricValue(rule: AlertRuleRow, payload: MetricPayload): number | null 
       return payload.memPct ?? pct(payload.memUsed ?? 0, payload.memTotal ?? 0);
     case "disk":
     case "diskPct":
-      return payload.diskPct ?? pct(payload.diskUsed ?? 0, payload.diskTotal ?? 0);
+      return (
+        payload.diskPct ?? pct(payload.diskUsed ?? 0, payload.diskTotal ?? 0)
+      );
     default:
       return null;
   }
@@ -72,9 +77,7 @@ function ruleMatchesScope(
   if (rule.session_id && payload.session_id !== rule.session_id) return false;
   if (rule.host_id != null && payload.host_id !== rule.host_id) return false;
   if (rule.host_group_id != null) {
-    const gid = payload.host_id
-      ? hostGroupByHostId.get(payload.host_id)
-      : null;
+    const gid = payload.host_id ? hostGroupByHostId.get(payload.host_id) : null;
     if (gid !== rule.host_group_id) return false;
   }
   return true;
@@ -101,12 +104,9 @@ export async function checkAlertRules(
 
   const enriched: MetricPayload = {
     ...payload,
-    memPct:
-      payload.memPct ??
-      pct(payload.memUsed ?? 0, payload.memTotal ?? 0),
+    memPct: payload.memPct ?? pct(payload.memUsed ?? 0, payload.memTotal ?? 0),
     diskPct:
-      payload.diskPct ??
-      pct(payload.diskUsed ?? 0, payload.diskTotal ?? 0),
+      payload.diskPct ?? pct(payload.diskUsed ?? 0, payload.diskTotal ?? 0),
   };
 
   const events: { rule_id: number; message: string }[] = [];

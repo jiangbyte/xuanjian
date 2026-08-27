@@ -78,10 +78,8 @@ export function useFileListSelection(visible: SftpEntry[]) {
           anchorPath != null
             ? visible.findIndex((x) => x.path === anchorPath)
             : -1;
-        const start =
-          anchorIdx >= 0 ? Math.min(anchorIdx, index) : index;
-        const end =
-          anchorIdx >= 0 ? Math.max(anchorIdx, index) : index;
+        const start = anchorIdx >= 0 ? Math.min(anchorIdx, index) : index;
+        const end = anchorIdx >= 0 ? Math.max(anchorIdx, index) : index;
         setChecked((prev) => {
           const next = mod ? { ...prev } : {};
           for (let i = start; i <= end; i++) {

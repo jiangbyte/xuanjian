@@ -65,8 +65,8 @@ export const DARWIN_METRICS_CMD = [
   "printf '\\nIP '; (ipconfig getifaddr en0 2>/dev/null; ipconfig getifaddr en1 2>/dev/null; ifconfig 2>/dev/null | awk '/inet / && $2 != \"127.0.0.1\" {print $2}' | head -n 3) | tr '\\n' ' '",
   "printf '\\nLOAD '; sysctl -n vm.loadavg 2>/dev/null | tr -d '{}'",
   "printf '\\nUP '; boot=$(sysctl -n kern.boottime 2>/dev/null | awk -F'[ ,]' '{print $4}'); now=$(date +%s); echo $((now-boot))",
-  "printf '\\nMEM '; pagesize=$(pagesize 2>/dev/null || echo 4096); total=$(sysctl -n hw.memsize 2>/dev/null || echo 0); free_pages=$(vm_stat 2>/dev/null | awk '/Pages free/ {gsub(/\\./,\"\",$3); print $3+0}'); inactive=$(vm_stat 2>/dev/null | awk '/Pages inactive/ {gsub(/\\./,\"\",$3); print $3+0}'); speculative=$(vm_stat 2>/dev/null | awk '/Pages speculative/ {gsub(/\\./,\"\",$3); print $3+0}'); avail=$(( (free_pages+inactive+speculative)*pagesize )); used=$(( total>avail ? total-avail : 0 )); printf '%s %s %s' \"$total\" \"$used\" \"$avail\"",
-  "printf '\\nSWAP '; sysctl -n vm.swapusage 2>/dev/null | awk '{for(i=1;i<=NF;i++){if($i==\"total\"){t=$(i+1)} if($i==\"used\"){u=$(i+1)}} gsub(/M/,\"\",t); gsub(/M/,\"\",u); printf \"%d %d\", t*1024*1024+0, u*1024*1024+0}'",
+  'printf \'\\nMEM \'; pagesize=$(pagesize 2>/dev/null || echo 4096); total=$(sysctl -n hw.memsize 2>/dev/null || echo 0); free_pages=$(vm_stat 2>/dev/null | awk \'/Pages free/ {gsub(/\\./,"",$3); print $3+0}\'); inactive=$(vm_stat 2>/dev/null | awk \'/Pages inactive/ {gsub(/\\./,"",$3); print $3+0}\'); speculative=$(vm_stat 2>/dev/null | awk \'/Pages speculative/ {gsub(/\\./,"",$3); print $3+0}\'); avail=$(( (free_pages+inactive+speculative)*pagesize )); used=$(( total>avail ? total-avail : 0 )); printf \'%s %s %s\' "$total" "$used" "$avail"',
+  'printf \'\\nSWAP \'; sysctl -n vm.swapusage 2>/dev/null | awk \'{for(i=1;i<=NF;i++){if($i=="total"){t=$(i+1)} if($i=="used"){u=$(i+1)}} gsub(/M/,"",t); gsub(/M/,"",u); printf "%d %d", t*1024*1024+0, u*1024*1024+0}\'',
   "printf '\\nCPUPCT '; top -l 1 -n 0 2>/dev/null | awk -F'[ %]+' '/CPU usage/ {idle=$(NF-1)+0; printf \"%.1f\", 100-idle; exit}'",
   "printf '\\nCPU '; sysctl -n hw.ncpu 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 1; echo 'cpu 0 0 0 0'",
   "printf '\\nDF '; (df -k / 2>/dev/null | awk 'NR==2{print $2,$3,$9,$1}')",
@@ -180,7 +180,7 @@ export const DARWIN_DISK_CMD =
 export const WIN_DISK_CMD = [
   "$ErrorActionPreference='SilentlyContinue'",
   "Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Used -ne $null -and $_.Free -ne $null } |",
-  "ForEach-Object { Write-Output (\"{0}`t{1}`t{2}`t{3}\" -f $_.Name, [int64](($_.Used+$_.Free)/1024), [int64]($_.Used/1024), [int64]($_.Free/1024)) }",
+  'ForEach-Object { Write-Output ("{0}`t{1}`t{2}`t{3}" -f $_.Name, [int64](($_.Used+$_.Free)/1024), [int64]($_.Used/1024), [int64]($_.Free/1024)) }',
 ].join(" ");
 
 export function diskSnapshotCmd(env: ProbeEnv, shellId?: string | null) {

@@ -5,7 +5,7 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 const badgeVariants = cva(
-  "group/badge inline-flex h-6 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-colors [&>svg]:pointer-events-none [&>svg]:size-3.5!",
+  "group/badge inline-flex w-fit shrink-0 items-center justify-center gap-0.5 overflow-hidden border border-transparent font-medium whitespace-nowrap transition-colors [&>svg]:pointer-events-none",
   {
     variants: {
       variant: {
@@ -16,9 +16,14 @@ const badgeVariants = cva(
         ghost: "hover:bg-muted hover:text-muted-foreground",
         link: "text-primary underline-offset-2 hover:underline",
       },
+      size: {
+        default: "h-6 rounded-full px-2 py-0.5 text-xs [&>svg]:size-3.5",
+        sm: "h-5 rounded-md px-1.5 text-xs leading-tight [&>svg]:size-3",
+      },
     },
     defaultVariants: {
       variant: "default",
+      size: "default",
     },
   },
 );
@@ -26,6 +31,7 @@ const badgeVariants = cva(
 function Badge({
   className,
   variant = "default",
+  size = "default",
   asChild = false,
   ...props
 }: React.ComponentProps<"span"> &
@@ -36,7 +42,8 @@ function Badge({
     <Comp
       data-slot="badge"
       data-variant={variant}
-      className={cn(badgeVariants({ variant }), className)}
+      data-size={size}
+      className={cn(badgeVariants({ variant, size }), className)}
       {...props}
     />
   );

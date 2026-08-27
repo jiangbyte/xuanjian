@@ -9,7 +9,7 @@ export function toolLabel(name: string, args: unknown): string {
     typeof args === "object" &&
     "command" in args
   ) {
-    return `${name === "terminal_run" ? "终端执行" : "旁路执行"} · ${String((args as { command: string }).command)}`;
+    return `终端执行 · ${String((args as { command: string }).command)}`;
   }
   if (name === "run_script" && args && typeof args === "object") {
     const a = args as { script_name?: string; script_id?: number };

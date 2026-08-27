@@ -15,8 +15,8 @@ import { BlockAssembler } from "@/lib/agent/llm/assembler";
 import { mergeStreamToolCallDeltas } from "@/lib/agent/llm/stream-tool-calls";
 import { REACT_LIMITS } from "@xuanjian/agent-core";
 import type { AgentToolDef } from "@/lib/agent/tools";
-import type { ProviderBundle } from "@/lib/agent/provider";
-import type { RuntimeEvent } from "@/lib/agent/types";
+import type { ProviderBundle } from "@/lib/agent/runtime/provider";
+import type { AgentActivityPhase, RuntimeEvent } from "@xuanjian/agent-core";
 
 export type StreamCallbacks = {
   onThinkingDelta?: (text: string) => void;
@@ -75,8 +75,7 @@ export async function requestModelReply(
     apiKey: cfg.apiKey,
     model: cfg.model,
     messages,
-    tools:
-      cfg.apiFormat === "anthropic" ? toAnthropicTools(tools) : tools,
+    tools: cfg.apiFormat === "anthropic" ? toAnthropicTools(tools) : tools,
     stream: true,
     thinkingMode: cfg.thinkingMode ?? "high",
     maxTokens: cfg.maxTokens,
@@ -95,10 +94,7 @@ export async function requestModelReply(
         if (err) reject(err);
         else {
           resolve(
-            assembler.finalize(
-              cfg.apiFormat,
-              cfg.thinkingMode === "off",
-            ),
+            assembler.finalize(cfg.apiFormat, cfg.thinkingMode === "off"),
           );
         }
       };
@@ -168,7 +164,7 @@ export async function requestModelReply(
 
 export function emitActivity(
   emit: (e: RuntimeEvent) => void,
-  phase: import("@/lib/agent/types").AgentActivityPhase,
+  phase: AgentActivityPhase,
   label: string,
   detail?: string,
 ) {

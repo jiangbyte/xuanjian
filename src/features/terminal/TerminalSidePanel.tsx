@@ -28,7 +28,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   type ContextMenuItem,
@@ -38,9 +38,12 @@ import {
 import { PathBookmarkButton } from "@/components/PathBookmarkButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { FileEditorTarget } from "@/features/terminal/FileEditorModal";
+import {
+  FileEditorModal,
+  type FileEditorTarget,
+} from "@/features/terminal/FileEditorModal";
 import { PermissionsModal } from "@/features/terminal/PermissionsModal";
-import { SftpTransferModal } from "@/features/terminal/SftpTransferModal";
+import { SftpTransferModal } from "@/features/terminal/sftp/SftpTransferModal";
 import { clipboardWriteText } from "@/lib/ui/clipboard";
 import { useCwdState } from "@/features/terminal/sftp/useCwdState";
 import { dialogs } from "@/lib/ui/dialogs";
@@ -66,12 +69,6 @@ import { uploadLocalPathsToRemote } from "@/features/terminal/sftp/uploadLocalPa
 import { useFileDropZone } from "@/features/terminal/sftp/useFileDropZone";
 import { useFileListMarquee } from "@/features/terminal/sftp/useFileListMarquee";
 import { selectionRow } from "@/lib/core/selection";
-
-const FileEditorModal = lazy(() =>
-  import("@/features/terminal/FileEditorModal").then((m) => ({
-    default: m.FileEditorModal,
-  })),
-);
 
 /** 拆成面包屑段（名称 + 绝对路径） */
 function pathSegments(path: string, remote: boolean) {
@@ -203,7 +200,10 @@ export function TerminalSidePanel({
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
-  const segments = useMemo(() => pathSegments(cwd, unixPaths), [cwd, unixPaths]);
+  const segments = useMemo(
+    () => pathSegments(cwd, unixPaths),
+    [cwd, unixPaths],
+  );
 
   const visible = useMemo(() => {
     let list = [...entries];
@@ -278,14 +278,17 @@ export function TerminalSidePanel({
     dropEnabled,
   );
 
-  const { marquee, previewPaths, onMouseDown: onMarqueeMouseDown } =
-    useFileListMarquee({
-      containerRef: listRef,
-      visible,
-      onSelect: selectMany,
-      onClear: clearChecked,
-      enabled: !dragOver,
-    });
+  const {
+    marquee,
+    previewPaths,
+    onMouseDown: onMarqueeMouseDown,
+  } = useFileListMarquee({
+    containerRef: listRef,
+    visible,
+    onSelect: selectMany,
+    onClear: clearChecked,
+    enabled: !dragOver,
+  });
 
   const suggestions = useMemo(() => {
     if (!pathFocus) return [];
@@ -422,7 +425,8 @@ export function TerminalSidePanel({
     if (!name?.trim()) return;
     const target = joinPath(cwd, name.trim(), unixPaths);
     if (remote && sessionId) await api.sftpWrite(sessionId, target, "");
-    else if (wslMode && sessionId) await api.wslWriteFile(sessionId, target, "");
+    else if (wslMode && sessionId)
+      await api.wslWriteFile(sessionId, target, "");
     else await api.writeLocalFile(target, "");
     await reload();
     setEditorTarget({
@@ -724,128 +728,134 @@ export function TerminalSidePanel({
         )}
       </div>
 
-      {/* —— 工具条 —— */}
-      <div className="flex items-center gap-0.5 border-b border-border px-1.5 py-1">
-        <PathBookmarkButton
-          scope={bookmarkScope({ kind: wslMode ? "wsl" : kind, hostId, shellId })}
-          path={cwd}
-          onNavigate={(p) => {
-            setCwd(p);
-            setPathInput(p);
-          }}
-        />
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="ghost"
-          title={t("terminal.sftp")}
-          aria-label={t("terminal.sftp")}
-          onClick={() => setTransferOpen(true)}
-        >
-          <ArrowLeftRight size={14} />
-        </Button>
-        {kind === "ssh" && (
+      {/* —— 工具条（窄侧栏时可横向滚动） —— */}
+      <div className="min-w-0 border-b border-border">
+        <div className="flex items-center gap-0.5 overflow-x-auto overflow-y-hidden px-1.5 py-1 [scrollbar-width:thin] [&>*]:shrink-0">
+          <PathBookmarkButton
+            scope={bookmarkScope({
+              kind: wslMode ? "wsl" : kind,
+              hostId,
+              shellId,
+            })}
+            path={cwd}
+            onNavigate={(p) => {
+              setCwd(p);
+              setPathInput(p);
+            }}
+          />
           <Button
             type="button"
             size="icon-sm"
             variant="ghost"
-            title={t("terminal.batchDelete")}
-            aria-label={t("terminal.batchDelete")}
-            disabled={checkedList.length === 0}
-            onClick={() => {
-              deleteEntries(checkedList).catch(console.error);
-            }}
+            title={t("terminal.sftp")}
+            aria-label={t("terminal.sftp")}
+            onClick={() => setTransferOpen(true)}
           >
-            <Trash2 size={14} />
+            <ArrowLeftRight size={14} />
           </Button>
-        )}
-        {kind === "ssh" && checkedList.some((e) => !e.isDir) && (
+          {kind === "ssh" && (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              title={t("terminal.batchDelete")}
+              aria-label={t("terminal.batchDelete")}
+              disabled={checkedList.length === 0}
+              onClick={() => {
+                deleteEntries(checkedList).catch(console.error);
+              }}
+            >
+              <Trash2 size={14} />
+            </Button>
+          )}
+          {kind === "ssh" && checkedList.some((e) => !e.isDir) && (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              title={t("terminal.batchDownload")}
+              aria-label={t("terminal.batchDownload")}
+              onClick={() => {
+                downloadEntries(checkedList).catch(console.error);
+              }}
+            >
+              <Download size={14} />
+            </Button>
+          )}
+          {kind === "ssh" && (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              title={t("terminal.upload")}
+              aria-label={t("terminal.upload")}
+              onClick={() => {
+                onUpload().catch(console.error);
+              }}
+            >
+              <Upload size={14} />
+            </Button>
+          )}
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="secondary"
+            title={t("terminal.listView")}
+            aria-label={t("terminal.listView")}
+          >
+            <List size={14} />
+          </Button>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant={showSearch ? "secondary" : "ghost"}
+            title={t("terminal.search")}
+            aria-label={t("terminal.search")}
+            onClick={() => setShowSearch((v) => !v)}
+          >
+            <Search size={14} />
+          </Button>
           <Button
             type="button"
             size="icon-sm"
             variant="ghost"
-            title={t("terminal.batchDownload")}
-            aria-label={t("terminal.batchDownload")}
-            onClick={() => {
-              downloadEntries(checkedList).catch(console.error);
-            }}
+            title={t("terminal.newFolder")}
+            aria-label={t("terminal.newFolder")}
+            onClick={onNewFolder}
           >
-            <Download size={14} />
+            <FolderPlus size={14} />
           </Button>
-        )}
-        {kind === "ssh" && (
           <Button
             type="button"
             size="icon-sm"
             variant="ghost"
-            title={t("terminal.upload")}
-            aria-label={t("terminal.upload")}
-            onClick={() => {
-              onUpload().catch(console.error);
-            }}
+            title={t("terminal.newFile")}
+            aria-label={t("terminal.newFile")}
+            onClick={onNewFile}
           >
-            <Upload size={14} />
+            <FilePlus size={14} />
           </Button>
-        )}
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="secondary"
-          title={t("terminal.listView")}
-          aria-label={t("terminal.listView")}
-        >
-          <List size={14} />
-        </Button>
-        <Button
-          type="button"
-          size="icon-sm"
-          variant={showSearch ? "secondary" : "ghost"}
-          title={t("terminal.search")}
-          aria-label={t("terminal.search")}
-          onClick={() => setShowSearch((v) => !v)}
-        >
-          <Search size={14} />
-        </Button>
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="ghost"
-          title={t("terminal.newFolder")}
-          aria-label={t("terminal.newFolder")}
-          onClick={onNewFolder}
-        >
-          <FolderPlus size={14} />
-        </Button>
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="ghost"
-          title={t("terminal.newFile")}
-          aria-label={t("terminal.newFile")}
-          onClick={onNewFile}
-        >
-          <FilePlus size={14} />
-        </Button>
-        <Button
-          type="button"
-          size="icon-sm"
-          variant={showHidden ? "secondary" : "ghost"}
-          title={t("terminal.showHidden")}
-          aria-label={t("terminal.showHidden")}
-          onClick={() => setShowHidden((v) => !v)}
-        >
-          <Eye size={14} />
-        </Button>
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="ghost"
-          title={t("terminal.refresh")}
-          aria-label={t("terminal.refresh")}
-          onClick={() => reload()}
-        >
-          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-        </Button>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant={showHidden ? "secondary" : "ghost"}
+            title={t("terminal.showHidden")}
+            aria-label={t("terminal.showHidden")}
+            onClick={() => setShowHidden((v) => !v)}
+          >
+            <Eye size={14} />
+          </Button>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            title={t("terminal.refresh")}
+            aria-label={t("terminal.refresh")}
+            onClick={() => reload()}
+          >
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+          </Button>
+        </div>
       </div>
 
       {showSearch && (
@@ -882,9 +892,7 @@ export function TerminalSidePanel({
         ref={listRef}
         tabIndex={0}
         className={`relative min-h-0 flex-1 overflow-auto p-1 outline-none select-none ${
-          dragOver
-            ? "bg-primary/5 ring-2 ring-inset ring-primary/40"
-            : ""
+          dragOver ? "bg-primary/5 ring-2 ring-inset ring-primary/40" : ""
         }`}
         onContextMenu={(e) => openContextMenu(e, openMenu, blankMenuItems())}
         onMouseDown={onMarqueeMouseDown}
@@ -972,13 +980,11 @@ export function TerminalSidePanel({
         />
       )}
       {editorTarget && (
-        <Suspense fallback={null}>
-          <FileEditorModal
-            target={editorTarget}
-            onClose={() => setEditorTarget(null)}
-            onSaved={() => reload()}
-          />
-        </Suspense>
+        <FileEditorModal
+          target={editorTarget}
+          onClose={() => setEditorTarget(null)}
+          onSaved={() => reload()}
+        />
       )}
       {permTarget && (
         <PermissionsModal

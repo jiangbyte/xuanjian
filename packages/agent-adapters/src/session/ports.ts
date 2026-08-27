@@ -15,7 +15,7 @@ export function createExecutionContextPort(): ExecutionContextPort {
   return {
     async snapshot(): Promise<ExecutionSnapshot> {
       const { buildExecutionContextBlock } = await import(
-        "@/lib/agent/executionContext"
+        "@/lib/agent/runtime/executionContext"
       );
       const block = await buildExecutionContextBlock();
       return {
@@ -26,7 +26,7 @@ export function createExecutionContextPort(): ExecutionContextPort {
     },
     async snapshotIfChanged() {
       const { buildExecutionContextBlockIfChanged } = await import(
-        "@/lib/agent/executionContext"
+        "@/lib/agent/runtime/executionContext"
       );
       return buildExecutionContextBlockIfChanged();
     },
@@ -36,7 +36,7 @@ export function createExecutionContextPort(): ExecutionContextPort {
 export function createSessionPort(): SessionPort {
   return {
     async loadHistory(sessionId) {
-      const { buildAgentHistory } = await import("@/lib/agent/session");
+      const { buildAgentHistory } = await import("@/lib/agent/history");
       return (await buildAgentHistory(sessionId)) as CoreLlmMessage[];
     },
     async appendUser(sessionId, text) {
@@ -61,7 +61,7 @@ export function createSessionPort(): SessionPort {
 export function createProviderPort(): ProviderPort {
   return {
     async resolve(modelRef) {
-      const { resolveProvider } = await import("@/lib/agent/provider");
+      const { resolveProvider } = await import("@/lib/agent/runtime/provider");
       const p = await resolveProvider(modelRef);
       return {
         modelId: p.modelId,

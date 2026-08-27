@@ -37,9 +37,7 @@ export function findOpenLocalShellTab(shellId: string): TermTab | null {
 /** 查找任意本地 Shell 标签（含已断开） */
 export function findLocalShellTab(shellId: string): TermTab | null {
   const { tabs } = useUiStore.getState();
-  return (
-    tabs.find((t) => t.kind === "local" && t.shellId === shellId) ?? null
-  );
+  return tabs.find((t) => t.kind === "local" && t.shellId === shellId) ?? null;
 }
 
 /** 查找已就绪的 SSH 标签 */
@@ -59,9 +57,7 @@ export function findOpenSshTab(hostId: number): TermTab | null {
 /** 查找任意 SSH 标签（含已断开） */
 export function findSshTab(hostId: number): TermTab | null {
   const { tabs } = useUiStore.getState();
-  return (
-    tabs.find((t) => t.kind === "ssh" && t.hostId === hostId) ?? null
-  );
+  return tabs.find((t) => t.kind === "ssh" && t.hostId === hostId) ?? null;
 }
 
 function tabNotOpenError(shell: LocalShellInfo): string {
@@ -166,9 +162,7 @@ export async function ensureSshTab(
 
   const host = await getHost(hostId);
   if (!host) throw new Error(`Host #${hostId} not found`);
-  throw new Error(
-    sshTabNotOpenError(hostId, host.name || host.host),
-  );
+  throw new Error(sshTabNotOpenError(hostId, host.name || host.host));
 }
 
 /** 解析默认 WSL shell_id */

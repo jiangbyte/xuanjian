@@ -5,21 +5,27 @@
 
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import type { DnsRecordRow } from "@/lib/tauri";
 
-/** 将 DNS 输出拆成行展示 */
+/** 结构化 DNS 记录表 */
 export function DnsResults({
-  lines,
-  recordType,
+  records,
   busy,
 }: {
-  lines: string[];
-  recordType: string;
+  records: DnsRecordRow[];
   busy: boolean;
 }) {
   const { t } = useTranslation();
-  const rows = lines.map((l) => l.trim()).filter(Boolean);
 
-  if (rows.length === 0) {
+  if (records.length === 0) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center rounded-md border border-border bg-card text-sm text-muted-foreground">
         {busy ? t("network.running") : t("network.vizEmpty")}
@@ -29,24 +35,37 @@ export function DnsResults({
 
   return (
     <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border bg-card">
-      <ul className="divide-y divide-border">
-        {rows.map((row, i) => (
-          <li
-            key={`${i}-${row}`}
-            className="flex items-start gap-2 px-3 py-2.5 text-sm"
-          >
-            <Badge
-              variant="secondary"
-              className="mt-0.5 shrink-0 font-mono text-xs"
-            >
-              {recordType}
-            </Badge>
-            <span className="min-w-0 break-all font-mono text-xs leading-relaxed">
-              {row}
-            </span>
-          </li>
-        ))}
-      </ul>
+      <Table>
+        <TableHeader className="sticky top-0 z-10 bg-card">
+          <TableRow>
+            <TableHead>{t("network.dnsType")}</TableHead>
+            <TableHead>{t("network.dnsName")}</TableHead>
+            <TableHead>{t("network.dnsValue")}</TableHead>
+            <TableHead>TTL</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {records.map((row, i) => (
+            <TableRow key={`${row.recordType}-${row.value}-${i}`}>
+              <TableCell>
+                <Badge variant="secondary" className="font-mono text-xs">
+                  {row.recordType}
+                </Badge>
+              </TableCell>
+              <TableCell className="max-w-[140px] truncate font-mono text-xs">
+                {row.name}
+              </TableCell>
+              <TableCell className="break-all font-mono text-xs">
+                {row.priority != null ? `${row.priority} ` : ""}
+                {row.value}
+              </TableCell>
+              <TableCell className="font-mono text-xs">
+                {row.ttl ?? "—"}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   );
 }

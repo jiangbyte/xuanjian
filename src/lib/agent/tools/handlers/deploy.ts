@@ -4,15 +4,11 @@
  */
 
 import { stripAnsi } from "@/lib/agent/ansi";
-import {
-  activeSessionId,
-} from "@/lib/agent/tools/helpers";
+import { activeSessionId } from "@/lib/agent/tools/helpers";
 import { asNum } from "@/lib/agent/tools/types";
 import { getScript } from "@/lib/db";
 import { parseDeployRecipe } from "@/lib/db/workspaces";
-import {
-  resolveActiveWorkspace,
-} from "@/lib/workspace/context";
+import { resolveActiveWorkspace } from "@/lib/workspace/context";
 import {
   mapLocalToRemote,
   sandboxLocalPath,
@@ -110,13 +106,17 @@ export async function runDeployToolHandler(
       if (!wsRes.ok) return JSON.stringify(wsRes);
       const { ws } = wsRes;
       const sub =
-        typeof args.local_subpath === "string" ? args.local_subpath.trim() : ".";
+        typeof args.local_subpath === "string"
+          ? args.local_subpath.trim()
+          : ".";
       const local = sandboxLocalPath(ws, sub);
       if (!local.ok) return JSON.stringify({ ok: false, error: local.error });
       const manifest = await buildSyncManifest(ws, { dryRun: true });
-      const prefix = sub === "." ? "" : `${sub.replace(/\\/g, "/").replace(/\/$/, "")}/`;
+      const prefix =
+        sub === "." ? "" : `${sub.replace(/\\/g, "/").replace(/\/$/, "")}/`;
       const filtered = manifest.entries.filter(
-        (e) => e.action === "upload" && (!prefix || e.relPath.startsWith(prefix)),
+        (e) =>
+          e.action === "upload" && (!prefix || e.relPath.startsWith(prefix)),
       );
       const applyManifest = {
         ...manifest,
@@ -125,7 +125,10 @@ export async function runDeployToolHandler(
         skipCount: 0,
         dryRun: false,
       };
-      const { enqueued, jobIds, transfer } = await applySyncManifest(ws, applyManifest);
+      const { enqueued, jobIds, transfer } = await applySyncManifest(
+        ws,
+        applyManifest,
+      );
       if (enqueued > 0) useUiStore.getState().setTransferOpen(true);
       return JSON.stringify({
         ok: true,
@@ -145,7 +148,10 @@ export async function runDeployToolHandler(
         if (dryRun) {
           return JSON.stringify(summarizeSyncManifest(manifest), null, 2);
         }
-        const { enqueued, jobIds, transfer } = await applySyncManifest(ws, manifest);
+        const { enqueued, jobIds, transfer } = await applySyncManifest(
+          ws,
+          manifest,
+        );
         if (enqueued > 0) useUiStore.getState().setTransferOpen(true);
         return JSON.stringify({
           ok: true,
@@ -174,8 +180,7 @@ export async function runDeployToolHandler(
       }
       const remote = sandboxRemotePath(ws, remoteIn);
       if (!remote.ok) return JSON.stringify({ ok: false, error: remote.error });
-      const content =
-        typeof args.content === "string" ? args.content : "";
+      const content = typeof args.content === "string" ? args.content : "";
       const ep = resolveWorkspaceFsEndpoint(ws);
       if (!ep?.sessionId || ep.kind !== "sftp") {
         return JSON.stringify({
@@ -197,9 +202,10 @@ export async function runDeployToolHandler(
       const { ws } = wsRes;
       const dryRun = args.dry_run === true;
       const syncFirst = args.sync !== false;
-      const sid = activeSessionId(
-        typeof args.session_id === "string" ? args.session_id : undefined,
-      ) ?? resolveWorkspaceFsEndpoint(ws)?.sessionId;
+      const sid =
+        activeSessionId(
+          typeof args.session_id === "string" ? args.session_id : undefined,
+        ) ?? resolveWorkspaceFsEndpoint(ws)?.sessionId;
       if (!sid) {
         return JSON.stringify({ ok: false, error: "No active session" });
       }
@@ -285,7 +291,10 @@ export async function runDeployToolHandler(
   }
 }
 
-export function isDryRunAllowedInPlan(name: string, args: Record<string, unknown>) {
+export function isDryRunAllowedInPlan(
+  name: string,
+  args: Record<string, unknown>,
+) {
   if (name === "sync_to_remote" && args.dry_run !== false) return true;
   if (name === "deploy" && args.dry_run === true) return true;
   return false;

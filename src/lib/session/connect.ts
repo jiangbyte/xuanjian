@@ -7,11 +7,12 @@
 
 import { addKnownHost, getHost, HostRow, touchHostConnected } from "@/lib/db";
 import { dialogs } from "@/lib/ui/dialogs";
+import i18n from "@/i18n";
 import {
   endSessionRecording,
   startRecordingForOpenTab,
 } from "@/lib/session/recorder";
-import { api, type SshConnectParams } from "@/lib/tauri";
+import { api, type SessionInfo, type SshConnectParams } from "@/lib/tauri";
 import { type TermTab, useUiStore } from "@/stores/ui";
 
 export const SSH_HOST_KEY_UNKNOWN = "SSH_HOST_KEY_UNKNOWN";
@@ -46,7 +47,9 @@ function buildSshConnectParams(
   };
 }
 
-function parseHostKeyError(message: string):
+function parseHostKeyError(
+  message: string,
+):
   | { kind: "unknown"; host: string; port: number; fingerprint: string }
   | { kind: "mismatch"; host: string; port: number; detail: string }
   | null {
@@ -75,7 +78,13 @@ async function sshConnectWithHostKeyTrust(
   host: HostRow,
   opts?: { cols?: number; rows?: number },
 ) {
-  const params = buildSshConnectParams(host, opts);
+  return sshConnectWithTrust(buildSshConnectParams(host, opts));
+}
+
+/** SSH 连接；未知主机密钥时弹窗确认并写入 known_hosts */
+export async function sshConnectWithTrust(
+  params: SshConnectParams,
+): Promise<SessionInfo> {
   try {
     return await api.sshConnect(params);
   } catch (e) {
@@ -83,14 +92,15 @@ async function sshConnectWithHostKeyTrust(
     const parsed = parseHostKeyError(msg);
     if (parsed?.kind === "mismatch") {
       throw new Error(
-        `SSH host key mismatch for ${parsed.host}:${parsed.port} (${parsed.detail})`,
+        `${i18n.t("hosts.hostKeyMismatch")} (${parsed.host}:${parsed.port})`,
       );
     }
     if (parsed?.kind === "unknown") {
-      const ok = await dialogs.confirm(
-        `Trust SSH host key for ${parsed.host}:${parsed.port}?\n\nSHA256:${parsed.fingerprint}`,
-        { title: "Unknown SSH host key" },
-      );
+      const ok = await dialogs.hostKeyTrust({
+        host: parsed.host,
+        port: parsed.port,
+        fingerprint: parsed.fingerprint,
+      });
       if (!ok) throw e;
       await addKnownHost(parsed.host, parsed.port, parsed.fingerprint);
       return api.sshConnect(params);
@@ -198,7 +208,12 @@ export async function reconnectTermTab(
  */
 export function handleSessionClosed(sessionId: string) {
   void endSessionRecording(sessionId, "closed");
-  const { tabs, updateTab } = useUiStore.getState();
+  const { tabs, agentTabs, updateTab, updateAgentTab } = useUiStore.getState();
+  const agentTab = agentTabs.find((t) => t.sessionId === sessionId);
+  if (agentTab) {
+    updateAgentTab(agentTab.id, { status: "closed", sessionId: null });
+    return;
+  }
   const tab = tabs.find((t) => t.sessionId === sessionId);
   if (!tab) return;
   updateTab(tab.id, { status: "closed", sessionId: null });

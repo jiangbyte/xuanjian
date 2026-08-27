@@ -232,10 +232,7 @@ pub async fn session_exec_stream(
 
 /// 取消流式 exec。
 #[tauri::command]
-pub fn session_exec_cancel(
-    state: State<'_, SharedState>,
-    job_id: String,
-) -> Result<(), String> {
+pub fn session_exec_cancel(state: State<'_, SharedState>, job_id: String) -> Result<(), String> {
     use std::sync::atomic::Ordering;
     if let Some(flag) = state.exec_cancels.lock().get(&job_id) {
         flag.store(true, Ordering::SeqCst);

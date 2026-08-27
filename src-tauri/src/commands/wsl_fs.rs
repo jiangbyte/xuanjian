@@ -27,17 +27,17 @@ fn local_wsl_shell(
             if !s.shell_id.starts_with("local:wsl:") {
                 return Err("not a WSL session".into());
             }
-            Ok((s.shell_id.clone(), s.shell_path.clone(), s.shell_args.clone()))
+            Ok((
+                s.shell_id.clone(),
+                s.shell_path.clone(),
+                s.shell_args.clone(),
+            ))
         }
         SessionHandle::Ssh(_) => Err("not a local session".into()),
     }
 }
 
-async fn wsl_exec(
-    state: &SharedState,
-    session_id: &str,
-    command: &str,
-) -> Result<String, String> {
+async fn wsl_exec(state: &SharedState, session_id: &str, command: &str) -> Result<String, String> {
     let (shell_id, shell_path, shell_args) = local_wsl_shell(state, session_id)?;
     local::exec_with_shell(&shell_id, &shell_path, &shell_args, command)
         .await
@@ -170,9 +170,8 @@ pub async fn wsl_write_file(
     let q = sh_quote(&path);
     let b64 = B64.encode(content.as_bytes());
     let b64_q = sh_quote(&b64);
-    let script = format!(
-        "parent=$(dirname {q}); mkdir -p \"$parent\"; echo {b64_q} | base64 -d > {q}"
-    );
+    let script =
+        format!("parent=$(dirname {q}); mkdir -p \"$parent\"; echo {b64_q} | base64 -d > {q}");
     wsl_exec(&state, &session_id, &script).await?;
     Ok(())
 }

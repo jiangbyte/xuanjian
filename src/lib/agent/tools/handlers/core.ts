@@ -6,7 +6,6 @@
 import { stripAnsi } from "@/lib/agent/ansi";
 import { waitForTerminalOutput } from "@/lib/agent/tools/terminalWait";
 import { runDeployToolHandler } from "@/lib/agent/tools/handlers/deploy";
-import { runPipelineToolHandler } from "@/lib/agent/tools/handlers/pipeline";
 import { runReadToolHandler } from "@/lib/agent/tools/handlers/read";
 import {
   getHost,
@@ -24,8 +23,12 @@ import { applyScriptVars, extractScriptVars } from "@/lib/session/scriptVars";
 import { getTranscriptTail } from "@/lib/session/recorder";
 import { api } from "@/lib/tauri";
 import { getHostOs } from "@/lib/core/platform";
-import { serializeSessionsForAgent, describePlane } from "@/lib/agent/executionContext";
 import {
+  serializeSessionsForAgent,
+  describePlane,
+} from "@/lib/agent/runtime/executionContext";
+import {
+  activeAgentSessionIdAsync,
   activeSessionIdAsync,
   activeTabHostId,
   formatResolveError,
@@ -34,6 +37,50 @@ import {
 } from "@/lib/agent/tools/helpers";
 import { asNum } from "@/lib/agent/tools/types";
 import { useCmdHistory } from "@/stores/cmdHistory";
+
+async function runVisibleAgentCommand(
+  args: Record<string, unknown>,
+  cmd: string,
+  opts?: { defaultWaitMs?: number; historyLabel?: string },
+): Promise<string> {
+  const target = await activeAgentSessionIdAsync(args);
+  if (!target) return formatResolveError(args);
+  const { sessionId: sid, tab, parentTab, provisioned } = target;
+  const before = await getTranscriptTail(sid, 2000);
+  await api.sessionWrite(sid, `${cmd}\n`);
+  useCmdHistory.getState().push({
+    cmd,
+    sessionId: sid,
+    label: opts?.historyLabel,
+  });
+  const wait =
+    typeof args.wait_ms === "number"
+      ? Math.min(Math.max(args.wait_ms, 200), 600_000)
+      : (opts?.defaultWaitMs ?? 900);
+  const waited = await waitForTerminalOutput({
+    sessionId: sid,
+    maxChars: 12_000,
+    waitMs: wait,
+    stableMs: 1200,
+  });
+  const after = waited.output;
+  let delta = after;
+  if (before && after.startsWith(before)) delta = after.slice(before.length);
+  return JSON.stringify({
+    ok: true,
+    visible_in_terminal: true,
+    terminal_plane: "agent_bottom_panel",
+    tab_id: parentTab.id,
+    agent_tab_id: tab.id,
+    plane: describePlane(parentTab),
+    auto_opened: provisioned,
+    command: cmd,
+    waited_ms: waited.waited_ms,
+    finish_reason: waited.finish_reason,
+    likely_finished: waited.likely_finished,
+    output: stripAnsi((delta || after).slice(0, 16_000)),
+  });
+}
 
 function parseProbeMetrics(raw: string) {
   let cpuPct = 0;
@@ -62,11 +109,13 @@ function parseProbeMetrics(raw: string) {
 function resolveScriptVars(
   body: string,
   varsArg: unknown,
-): { ok: true; body: string; values: Record<string, string> } | {
-  ok: false;
-  need_vars: string[];
-  vars: ReturnType<typeof extractScriptVars>;
-} {
+):
+  | { ok: true; body: string; values: Record<string, string> }
+  | {
+      ok: false;
+      need_vars: string[];
+      vars: ReturnType<typeof extractScriptVars>;
+    } {
   const needed = extractScriptVars(body);
   const provided =
     varsArg && typeof varsArg === "object" && !Array.isArray(varsArg)
@@ -94,13 +143,13 @@ export async function runToolHandler(
   name: string,
   args: Record<string, unknown>,
 ): Promise<string> {
-  const cmd =
-    typeof args.command === "string" ? args.command.trim() : "";
+  const cmd = typeof args.command === "string" ? args.command.trim() : "";
 
   switch (name) {
     case "terminal_tail": {
-      const target = await activeSessionIdAsync(args);
-      if (!target) return formatResolveError(args, "No active terminal session");
+      const target = await activeAgentSessionIdAsync(args);
+      if (!target)
+        return formatResolveError(args, "No active agent terminal session");
       const maxChars =
         typeof args.max_chars === "number"
           ? Math.min(Math.max(args.max_chars, 256), 32_000)
@@ -123,7 +172,10 @@ export async function runToolHandler(
 
       return JSON.stringify({
         ok: true,
-        tab_id: target.tab.id,
+        visible_in_terminal: true,
+        terminal_plane: "agent_bottom_panel",
+        tab_id: target.parentTab.id,
+        agent_tab_id: target.tab.id,
         waited_ms: waited.waited_ms,
         finish_reason: waited.finish_reason,
         likely_finished: waited.likely_finished,
@@ -132,8 +184,7 @@ export async function runToolHandler(
       });
     }
     case "host_info": {
-      let hostId =
-        typeof args.host_id === "number" ? args.host_id : undefined;
+      let hostId = typeof args.host_id === "number" ? args.host_id : undefined;
       if (hostId == null) {
         const resolved = await resolveTabForExecution(args);
         hostId = resolved?.tab.hostId ?? activeTabHostId(tabIdFromArgs(args));
@@ -206,7 +257,10 @@ export async function runToolHandler(
             package_name: r.package_name ?? null,
             vars: extractScriptVars(r.body).map((v) => v.name),
             ...(includeBody
-              ? { body_preview: r.body.slice(0, 240), body_chars: r.body.length }
+              ? {
+                  body_preview: r.body.slice(0, 240),
+                  body_chars: r.body.length,
+                }
               : {}),
           })),
           count: rows.length,
@@ -265,37 +319,7 @@ export async function runToolHandler(
     }
     case "terminal_run": {
       if (!cmd) return "command required";
-      const target = await activeSessionIdAsync(args);
-      if (!target) return formatResolveError(args);
-      const { sessionId: sid, tab, provisioned } = target;
-      const before = await getTranscriptTail(sid, 2000);
-      await api.sessionWrite(sid, `${cmd}\n`);
-      useCmdHistory.getState().push({ cmd, sessionId: sid });
-      const wait =
-        typeof args.wait_ms === "number"
-          ? Math.min(Math.max(args.wait_ms, 200), 600_000)
-          : 900;
-      const waited = await waitForTerminalOutput({
-        sessionId: sid,
-        maxChars: 12_000,
-        waitMs: wait,
-        stableMs: 1200,
-      });
-      const after = waited.output;
-      let delta = after;
-      if (before && after.startsWith(before)) delta = after.slice(before.length);
-      return JSON.stringify({
-        ok: true,
-        visible_in_terminal: true,
-        tab_id: tab.id,
-        plane: describePlane(tab),
-        auto_opened: provisioned,
-        command: cmd,
-        waited_ms: waited.waited_ms,
-        finish_reason: waited.finish_reason,
-        likely_finished: waited.likely_finished,
-        output: stripAnsi((delta || after).slice(0, 16_000)),
-      });
+      return runVisibleAgentCommand(args, cmd);
     }
     case "run_script": {
       const scriptId = asNum(args.script_id);
@@ -315,7 +339,7 @@ export async function runToolHandler(
           vars: resolved.vars,
         });
       }
-      const target = await activeSessionIdAsync(args);
+      const target = await activeAgentSessionIdAsync(args);
       if (!target) return formatResolveError(args);
       const { sessionId: sid } = target;
       const before = await getTranscriptTail(sid, 2000);
@@ -340,9 +364,12 @@ export async function runToolHandler(
       });
       const after = waited.output;
       let delta = after;
-      if (before && after.startsWith(before)) delta = after.slice(before.length);
+      if (before && after.startsWith(before))
+        delta = after.slice(before.length);
       return JSON.stringify({
         ok: true,
+        visible_in_terminal: true,
+        terminal_plane: "agent_bottom_panel",
         script_id: script.id,
         script_name: script.name,
         waited_ms: waited.waited_ms,
@@ -355,24 +382,17 @@ export async function runToolHandler(
       if (!resolved?.tab.sessionId) return formatResolveError(args);
       const { tab } = resolved;
       const sid = tab.sessionId!;
-      const env = resolveProbeEnv(tab.kind ?? "local", tab.shellId, getHostOs());
+      const env = resolveProbeEnv(
+        tab.kind ?? "local",
+        tab.shellId,
+        getHostOs(),
+      );
       const out = await api.sessionExec(sid, metricsCmd(env, tab.shellId));
       return out.slice(0, 12_000);
     }
     case "session_exec": {
       if (!cmd) return "command required";
-      const target = await activeSessionIdAsync(args);
-      if (!target) return formatResolveError(args);
-      const { sessionId: sid, tab, provisioned } = target;
-      const out = await api.sessionExec(sid, cmd);
-      return JSON.stringify({
-        ok: true,
-        tab_id: tab.id,
-        plane: describePlane(tab),
-        auto_opened: provisioned,
-        command: cmd,
-        output: stripAnsi(out.slice(0, 20_000)),
-      });
+      return runVisibleAgentCommand(args, cmd, { defaultWaitMs: 1200 });
     }
     case "run_batch": {
       const scriptId = asNum(args.script_id);
@@ -458,8 +478,6 @@ export async function runToolHandler(
     default: {
       const readResult = await runReadToolHandler(name, args);
       if (readResult != null) return readResult;
-      const pipelineResult = await runPipelineToolHandler(name, args);
-      if (pipelineResult != null) return pipelineResult;
       const deployResult = await runDeployToolHandler(name, args);
       if (deployResult != null) return deployResult;
       return `Unknown tool: ${name}`;

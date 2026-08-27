@@ -1,6 +1,6 @@
 [package]
 name = "xuanjian"
-version = "1.2.0"
+version = "1.3.0"
 description = "玄鉴 / Xuanjian - Agent O&M tool"
 authors = ["Charlie"]
 license = "MIT"
@@ -47,6 +47,9 @@ which = "7"
 regex = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
 tauri-plugin-clipboard-manager = "2.3.2"
+hickory-resolver = { version = "0.24", features = ["tokio-runtime"] }
+sysinfo = "0.33"
+netstat2 = "0.11"
 
 [target.'cfg(windows)'.dependencies]
 tauri-plugin-prevent-default = { version = "5.0.2", features = ["platform-windows"] }

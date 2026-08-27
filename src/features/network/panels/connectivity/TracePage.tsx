@@ -17,7 +17,7 @@ import { type TraceHop, upsertTraceHop } from "./types";
 /** Traceroute：原文 + hop 路径，状态与其它模式隔离 */
 export function TracePage() {
   const { t } = useTranslation();
-  const [target, setTarget] = useState("1.1.1.1");
+  const [target, setTarget] = useState("");
   const [lines, setLines] = useState<string[]>([]);
   const [hops, setHops] = useState<TraceHop[]>([]);
   const [jobId, setJobId] = useState<string | null>(null);
@@ -88,7 +88,7 @@ export function TracePage() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
+    <div className="flex h-full min-h-0 w-full flex-col gap-3">
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-[200px] flex-1 space-y-1.5">
           <Label htmlFor="trace-target">{t("network.host")}</Label>
@@ -98,6 +98,7 @@ export function TracePage() {
             value={target}
             onChange={(e) => setTarget(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && start()}
+            placeholder={t("network.hostPlaceholder")}
           />
         </div>
         {!busy ? (

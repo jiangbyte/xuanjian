@@ -162,7 +162,9 @@ export function AuditConsole() {
                     {row.action}
                   </Badge>
                   {row.target ? (
-                    <span className="truncate text-sm font-medium">{row.target}</span>
+                    <span className="truncate text-sm font-medium">
+                      {row.target}
+                    </span>
                   ) : null}
                   <span className="ml-auto shrink-0 text-xs text-muted-foreground">
                     {row.created_at}

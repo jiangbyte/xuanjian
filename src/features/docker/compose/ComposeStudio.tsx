@@ -284,7 +284,10 @@ export function ComposeStudio({
       return;
     }
     try {
-      const out = await api.sessionExec(activeSessionId, "docker compose up -d");
+      const out = await api.sessionExec(
+        activeSessionId,
+        "docker compose up -d",
+      );
       toast.success(t("docker.composeUpDone"));
       if (out.trim()) toast.message(out.slice(0, 400));
     } catch (e) {

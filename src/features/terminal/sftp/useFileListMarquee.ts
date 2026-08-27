@@ -3,12 +3,7 @@
  * @author Charlie
  */
 
-import {
-  useCallback,
-  useRef,
-  useState,
-  type RefObject,
-} from "react";
+import { useCallback, useRef, useState, type RefObject } from "react";
 import type { SftpEntry } from "@/lib/tauri";
 
 export type MarqueeRect = {
@@ -41,7 +36,9 @@ export function useFileListMarquee(opts: {
 }) {
   const { containerRef, visible, onSelect, onClear, enabled = true } = opts;
   const [marquee, setMarquee] = useState<MarqueeRect | null>(null);
-  const [previewPaths, setPreviewPaths] = useState<Set<string>>(() => new Set());
+  const [previewPaths, setPreviewPaths] = useState<Set<string>>(
+    () => new Set(),
+  );
   const dragRef = useRef<{
     startX: number;
     startY: number;

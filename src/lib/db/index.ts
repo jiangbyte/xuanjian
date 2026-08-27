@@ -17,6 +17,5 @@ export * from "@/lib/db/networkHistory";
 export * from "@/lib/db/notes";
 export * from "@/lib/db/scripts";
 export * from "@/lib/db/sessionLogs";
-export * from "@/lib/db/pipelines";
 export * from "@/lib/db/settings";
 export * from "@/lib/db/workspaces";

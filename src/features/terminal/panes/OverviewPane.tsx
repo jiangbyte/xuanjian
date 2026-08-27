@@ -34,6 +34,7 @@ import { checkAlertRules } from "@/lib/automation/alerts";
 import { insertMetricSnapshot } from "@/lib/db/metrics";
 import { metricsCmd, resolveProbeEnv } from "@/lib/session/probeEnv";
 import { api } from "@/lib/tauri";
+import { SIDEBAR_ICON } from "./sidebarUi";
 
 type Sample = {
   t: number;
@@ -415,12 +416,15 @@ export function OverviewPane({
           <TooltipTrigger asChild>
             <Button
               type="button"
-              size="icon-sm"
+              size="icon-xs"
               variant="ghost"
               className="ml-auto"
               onClick={() => refresh()}
             >
-              <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+              <RefreshCw
+                size={SIDEBAR_ICON}
+                className={loading ? "animate-spin" : ""}
+              />
             </Button>
           </TooltipTrigger>
           <TooltipContent>{t("terminal.refresh")}</TooltipContent>
@@ -440,7 +444,7 @@ export function OverviewPane({
               <div className="flex items-start gap-2">
                 <Server size={14} className="mt-0.5 shrink-0 text-primary" />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold">
+                  <div className="truncate text-xs font-semibold">
                     {metrics?.host || "-"}
                   </div>
                   <p className="mt-0.5 truncate text-xs text-muted-foreground">

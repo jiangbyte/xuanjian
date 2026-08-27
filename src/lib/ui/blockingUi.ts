@@ -55,9 +55,7 @@ export function setBlockingUi(
   source?: BlockingSource,
   detail?: string,
 ) {
-  state = active
-    ? { active: true, source, detail }
-    : { active: false };
+  state = active ? { active: true, source, detail } : { active: false };
   syncWallClock();
   emit();
 }

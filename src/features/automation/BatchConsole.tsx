@@ -3,11 +3,22 @@
  * @author Charlie
  */
 
-import { CheckCircle2, Loader2, Play, RefreshCw, Server, XCircle, Zap } from "lucide-react";
+import {
+  CheckCircle2,
+  Loader2,
+  Play,
+  RefreshCw,
+  Server,
+  XCircle,
+  Zap,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { ConsoleEmptyState, ConsolePageHeader } from "@/components/ConsolePageHeader";
+import {
+  ConsoleEmptyState,
+  ConsolePageHeader,
+} from "@/components/ConsolePageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -62,12 +73,18 @@ function PanelHead({
 /** 批量脚本执行主界面 */
 export function BatchConsole() {
   const { t } = useTranslation();
-  const [scripts, setScripts] = useState<Awaited<ReturnType<typeof listScripts>>>([]);
+  const [scripts, setScripts] = useState<
+    Awaited<ReturnType<typeof listScripts>>
+  >([]);
   const [hosts, setHosts] = useState<HostRow[]>([]);
-  const [groups, setGroups] = useState<Awaited<ReturnType<typeof listGroups>>>([]);
+  const [groups, setGroups] = useState<Awaited<ReturnType<typeof listGroups>>>(
+    [],
+  );
   const [scriptId, setScriptId] = useState<number | null>(null);
   const [groupFilter, setGroupFilter] = useState<string>(ALL_GROUPS);
-  const [selectedHostIds, setSelectedHostIds] = useState<Set<number>>(new Set());
+  const [selectedHostIds, setSelectedHostIds] = useState<Set<number>>(
+    new Set(),
+  );
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<BatchRunResult | null>(null);
   const [runs, setRuns] = useState<JobRunRow[]>([]);
@@ -211,11 +228,21 @@ export function BatchConsole() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Button type="button" size="sm" variant="outline" onClick={selectAllShown}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={selectAllShown}
+                  >
                     {t("batch.selectAll")}
                   </Button>
                   {selectedHostIds.size > 0 ? (
-                    <Button type="button" size="sm" variant="ghost" onClick={clearSelection}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={clearSelection}
+                    >
                       {t("automation.clearSelection")}
                     </Button>
                   ) : null}
@@ -224,7 +251,9 @@ export function BatchConsole() {
 
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>{groupName}</span>
-                <span>{t("batch.selected", { count: selectedHostIds.size })}</span>
+                <span>
+                  {t("batch.selected", { count: selectedHostIds.size })}
+                </span>
               </div>
 
               <div className="max-h-72 overflow-auto border border-border">
@@ -248,9 +277,14 @@ export function BatchConsole() {
                           className={selectionCheckboxClass}
                           onCheckedChange={() => toggleHost(h.id)}
                         />
-                        <Server size={15} className="shrink-0 text-muted-foreground" />
+                        <Server
+                          size={15}
+                          className="shrink-0 text-muted-foreground"
+                        />
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-medium">{h.name}</div>
+                          <div className="truncate text-sm font-medium">
+                            {h.name}
+                          </div>
                           <div className="truncate text-xs text-muted-foreground">
                             {h.username}@{h.host}:{h.port}
                           </div>
@@ -283,7 +317,10 @@ export function BatchConsole() {
             title={t("automation.results")}
             description={
               result
-                ? t("automation.resultsSummary", { ok: okCount, total: totalCount })
+                ? t("automation.resultsSummary", {
+                    ok: okCount,
+                    total: totalCount,
+                  })
                 : t("automation.noResults")
             }
             actions={
@@ -316,11 +353,19 @@ export function BatchConsole() {
                   >
                     <div className="flex items-center gap-2">
                       {r.ok ? (
-                        <CheckCircle2 size={14} className="shrink-0 text-emerald-600" />
+                        <CheckCircle2
+                          size={14}
+                          className="shrink-0 text-emerald-600"
+                        />
                       ) : (
-                        <XCircle size={14} className="shrink-0 text-destructive" />
+                        <XCircle
+                          size={14}
+                          className="shrink-0 text-destructive"
+                        />
                       )}
-                      <span className="truncate text-sm font-medium">{r.host_name}</span>
+                      <span className="truncate text-sm font-medium">
+                        {r.host_name}
+                      </span>
                       <Badge
                         variant={r.ok ? "secondary" : "destructive"}
                         className="ml-auto text-[10px]"
@@ -357,12 +402,19 @@ export function BatchConsole() {
                       key={r.id}
                       className="grid grid-cols-[56px_1fr_72px_1fr] items-center gap-2 border-b border-border px-4 py-2 text-xs last:border-b-0"
                     >
-                      <span className="font-mono text-muted-foreground">#{r.id}</span>
+                      <span className="font-mono text-muted-foreground">
+                        #{r.id}
+                      </span>
                       <span>{r.job_type}</span>
-                      <Badge variant={jobStatusVariant(r.status)} className="w-fit text-[10px]">
+                      <Badge
+                        variant={jobStatusVariant(r.status)}
+                        className="w-fit text-[10px]"
+                      >
                         {r.status}
                       </Badge>
-                      <span className="truncate text-muted-foreground">{r.started_at}</span>
+                      <span className="truncate text-muted-foreground">
+                        {r.started_at}
+                      </span>
                     </div>
                   ))}
                 </div>

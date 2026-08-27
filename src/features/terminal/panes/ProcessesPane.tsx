@@ -24,6 +24,15 @@ import {
 import { dialogs } from "@/lib/ui/dialogs";
 import { killCmd, processesCmd, resolveProbeEnv } from "@/lib/session/probeEnv";
 import { api } from "@/lib/tauri";
+import {
+  SIDEBAR_ICON,
+  sidebarItemRowClass,
+  sidebarItemSubClass,
+  sidebarItemTitleClass,
+  sidebarPanelMetaClass,
+  sidebarPanelTitleClass,
+  sidebarTagRowClass,
+} from "./sidebarUi";
 
 type Proc = {
   pid: string;
@@ -187,21 +196,24 @@ export function ProcessesPane({
     <div className="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground">
       {/* —— 标题与刷新 —— */}
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
-        <span className="text-xs font-medium">{t("termTab.processes")}</span>
-        <span className="text-xs text-muted-foreground">
+        <span className={sidebarPanelTitleClass}>{t("termTab.processes")}</span>
+        <span className={sidebarPanelMetaClass}>
           {t("termTab.procCount", { count: filtered.length })}
         </span>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               type="button"
-              size="icon-sm"
+              size="icon-xs"
               variant="ghost"
               className="ml-auto"
               aria-label={t("terminal.refresh")}
               onClick={() => refresh()}
             >
-              <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+              <RefreshCw
+                size={SIDEBAR_ICON}
+                className={loading ? "animate-spin" : ""}
+              />
             </Button>
           </TooltipTrigger>
           <TooltipContent>{t("terminal.refresh")}</TooltipContent>
@@ -254,12 +266,9 @@ export function ProcessesPane({
             const tags = buildTags(p, t);
             const name = shortProcName(p.cmd);
             return (
-              <div
-                key={p.pid}
-                className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
-              >
+              <div key={p.pid} className={sidebarItemRowClass}>
                 <div
-                  className={`mt-1.5 size-2 shrink-0 rounded-full ${
+                  className={`mt-1 size-1.5 shrink-0 rounded-full ${
                     p.cpu >= 30
                       ? "bg-destructive"
                       : p.cpu >= 10
@@ -268,25 +277,26 @@ export function ProcessesPane({
                   }`}
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium truncate" title={p.cmd}>
+                  <div className={sidebarItemTitleClass} title={p.cmd}>
                     {name}
                   </div>
                   {name !== p.cmd && (
-                    <div
-                      className="text-xs text-muted-foreground truncate"
-                      title={p.cmd}
-                    >
+                    <div className={sidebarItemSubClass} title={p.cmd}>
                       {p.cmd}
                     </div>
                   )}
-                  <div className="text-xs text-muted-foreground">
+                  <div className={sidebarItemSubClass}>
                     PID {p.pid} · CPU {p.cpu.toFixed(1)}% · MEM{" "}
                     {p.mem.toFixed(1)}%
                   </div>
                   {tags.length > 0 && (
-                    <div className="mt-1.5 flex flex-wrap gap-1">
+                    <div className={sidebarTagRowClass}>
                       {tags.map((tag) => (
-                        <Badge key={tag.id} variant={badgeVariant(tag.tone)}>
+                        <Badge
+                          key={tag.id}
+                          size="sm"
+                          variant={badgeVariant(tag.tone)}
+                        >
                           {tag.label}
                         </Badge>
                       ))}
@@ -297,12 +307,12 @@ export function ProcessesPane({
                   <TooltipTrigger asChild>
                     <Button
                       type="button"
-                      size="icon-sm"
+                      size="icon-xs"
                       variant="ghost"
                       aria-label={t("termTab.tipTerm")}
                       onClick={() => signal(p.pid, "TERM")}
                     >
-                      <XCircle size={13} />
+                      <XCircle size={SIDEBAR_ICON} />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>{t("termTab.tipTerm")}</TooltipContent>
@@ -311,12 +321,12 @@ export function ProcessesPane({
                   <TooltipTrigger asChild>
                     <Button
                       type="button"
-                      size="icon-sm"
+                      size="icon-xs"
                       variant="ghost"
                       aria-label={t("termTab.tipKill")}
                       onClick={() => signal(p.pid, "KILL")}
                     >
-                      <Skull size={13} />
+                      <Skull size={SIDEBAR_ICON} />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>{t("termTab.tipKill")}</TooltipContent>

@@ -3,10 +3,7 @@
  * @author Charlie
  */
 
-import {
-  createAlertRule,
-  listAlertRules,
-} from "@/lib/db/automation";
+import { createAlertRule, listAlertRules } from "@/lib/db/automation";
 import {
   createDockerProject,
   listDockerProjects,

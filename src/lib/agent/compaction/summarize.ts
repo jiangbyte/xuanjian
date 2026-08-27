@@ -5,7 +5,7 @@
 
 import type { LlmMessage } from "@/lib/agent/llm";
 import { chatCompletion } from "@/lib/agent/llm";
-import type { ProviderBundle } from "@/lib/agent/provider";
+import type { ProviderBundle } from "@/lib/agent/runtime/provider";
 import { selectCompactableRange } from "@/lib/agent/compaction/region";
 import {
   sanitizeLlmMessagesForApi,
@@ -77,11 +77,11 @@ function snippetFromMessages(msgs: LlmMessage[]): string {
     } else if (m.role === "assistant") {
       const t = typeof m.content === "string" ? m.content : "";
       const toolNames = m.tool_calls?.map((tc) => tc.function.name).join(", ");
-      lines.push(`[assistant] ${t.slice(0, 400)}${toolNames ? ` tools:${toolNames}` : ""}`);
-    } else if (m.role === "tool") {
       lines.push(
-        `[tool:${m.name ?? "?"}] ${String(m.content).slice(0, 600)}`,
+        `[assistant] ${t.slice(0, 400)}${toolNames ? ` tools:${toolNames}` : ""}`,
       );
+    } else if (m.role === "tool") {
+      lines.push(`[tool:${m.name ?? "?"}] ${String(m.content).slice(0, 600)}`);
     }
   }
   return lines.join("\n").slice(0, 12_000);
@@ -100,7 +100,7 @@ export function applyCompactionToMessages(
   const head = messages.slice(0, range.start);
   const tail = messages.slice(range.keepFrom);
   const merged = [
-    ...system.length ? system : head.filter((m) => m.role === "system"),
+    ...(system.length ? system : head.filter((m) => m.role === "system")),
     ...head.filter((m) => m.role !== "system"),
     {
       role: "user" as const,
@@ -109,21 +109,22 @@ export function applyCompactionToMessages(
     ...tail,
   ];
   return sanitizeLlmMessagesForApi(
-    stripLeadingOrphanTools(merged, system.length + head.filter((m) => m.role !== "system").length + 1),
+    stripLeadingOrphanTools(
+      merged,
+      system.length + head.filter((m) => m.role !== "system").length + 1,
+    ),
   );
 }
 
-export async function compactIfNeeded(
-  input: {
-    provider: ProviderBundle;
-    system: string;
-    tools: AgentToolDef[];
-    messages: LlmMessage[];
-    signal?: AbortSignal;
-    retainRatio?: number;
-    force?: boolean;
-  },
-): Promise<{ messages: LlmMessage[]; summary?: string } | null> {
+export async function compactIfNeeded(input: {
+  provider: ProviderBundle;
+  system: string;
+  tools: AgentToolDef[];
+  messages: LlmMessage[];
+  signal?: AbortSignal;
+  retainRatio?: number;
+  force?: boolean;
+}): Promise<{ messages: LlmMessage[]; summary?: string } | null> {
   const { pruneOldToolResults } = await import("@/lib/agent/compaction/prune");
   let msgs = sanitizeLlmMessagesForApi(input.messages);
   msgs = pruneOldToolResults(msgs);

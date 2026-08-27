@@ -43,9 +43,7 @@ describe("dsh-aligned estimateTokens", () => {
 
 describe("projectedTokensFromSample", () => {
   it("uses surface estimate when no API sample", () => {
-    expect(
-      projectedTokensFromSample({ surfaceTokens: 12_000 }),
-    ).toBe(12_000);
+    expect(projectedTokensFromSample({ surfaceTokens: 12_000 })).toBe(12_000);
   });
 
   it("adds surface delta after API sample (dsh formula)", () => {

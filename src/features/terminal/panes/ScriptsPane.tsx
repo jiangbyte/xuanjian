@@ -18,6 +18,11 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   listScriptPackages,
   listScripts,
   ScriptPackageRow,
@@ -27,9 +32,15 @@ import { dialogs } from "@/lib/ui/dialogs";
 import { runScriptOnSession } from "@/lib/session/runScript";
 import { previewScriptBody } from "@/lib/session/scriptVars";
 import { cn } from "@/lib/utils";
-
-const listRowClass =
-  "flex w-full items-center gap-2 rounded-md p-2 text-left hover:bg-accent";
+import {
+  SIDEBAR_ICON,
+  sidebarGroupTitleClass,
+  sidebarItemRowClass,
+  sidebarItemSubClass,
+  sidebarItemTitleClass,
+  sidebarListRowClass,
+  sidebarPanelTitleClass,
+} from "./sidebarUi";
 
 /** 包分组：有名包或未分组 */
 type PackageGroup = {
@@ -129,7 +140,7 @@ export function ScriptsPane({ sessionId }: { sessionId: string | null }) {
     <div className="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground">
       {/* —— 标题与管理入口 —— */}
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
-        <span className="text-xs font-medium">{t("termTab.scripts")}</span>
+        <span className={sidebarPanelTitleClass}>{t("termTab.scripts")}</span>
         <Button
           type="button"
           size="xs"
@@ -169,7 +180,7 @@ export function ScriptsPane({ sessionId }: { sessionId: string | null }) {
               <div key={String(group.id)} className="mb-1">
                 <button
                   type="button"
-                  className={cn(listRowClass, "py-1.5")}
+                  className={cn(sidebarListRowClass, "py-1")}
                   onClick={() => toggle(group.id)}
                 >
                   {closed ? (
@@ -183,43 +194,59 @@ export function ScriptsPane({ sessionId }: { sessionId: string | null }) {
                       className="shrink-0 text-muted-foreground"
                     />
                   )}
-                  <span className="min-w-0 flex-1 truncate text-left text-xs font-medium">
-                    {group.name}
-                  </span>
-                  <Badge variant="secondary">{group.scripts.length}</Badge>
+                  <span className={sidebarGroupTitleClass}>{group.name}</span>
+                  <Badge size="sm" variant="secondary">
+                    {group.scripts.length}
+                  </Badge>
                 </button>
                 {!closed &&
                   group.scripts.map((s) => (
-                    <button
+                    <div
                       key={s.id}
-                      type="button"
                       className={cn(
-                        listRowClass,
-                        "items-start pl-6",
-                        runningId != null && "opacity-60",
+                        sidebarItemRowClass,
+                        "pl-4",
+                        runningId != null && runningId !== s.id && "opacity-60",
                       )}
-                      disabled={runningId != null}
-                      onClick={() => run(s)}
                     >
-                      <Zap size={14} className="mt-0.5 shrink-0 text-primary" />
-                      <div className="min-w-0 flex-1 space-y-0.5 text-left">
-                        <div className="truncate text-sm font-semibold">
+                      <Zap
+                        size={SIDEBAR_ICON}
+                        className="mt-1 shrink-0 text-primary"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className={sidebarItemTitleClass} title={s.name}>
                           {s.name}
                         </div>
-                        <div className="truncate font-mono text-xs text-muted-foreground">
+                        <div
+                          className={cn(sidebarItemSubClass, "font-mono")}
+                          title={previewScriptBody(s.body, 120)}
+                        >
                           {previewScriptBody(s.body, 48)}
                         </div>
                       </div>
-                      <Play
-                        size={13}
-                        className={cn(
-                          "mt-0.5 shrink-0",
-                          runningId === s.id
-                            ? "text-primary opacity-100"
-                            : "opacity-50",
-                        )}
-                      />
-                    </button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            size="icon-xs"
+                            variant="ghost"
+                            disabled={runningId != null}
+                            aria-label={t("termTab.historyRun")}
+                            onClick={() => run(s)}
+                          >
+                            <Play
+                              size={SIDEBAR_ICON}
+                              className={cn(
+                                runningId === s.id && "text-primary",
+                              )}
+                            />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {t("termTab.historyRun")}
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                   ))}
               </div>
             );

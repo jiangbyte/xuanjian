@@ -74,10 +74,12 @@ export function NetworkHistoryPanel() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <div className="flex h-full min-h-0 w-full flex-col bg-background">
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2.5">
         <History size={16} className="text-muted-foreground" />
-        <span className="text-sm font-semibold">{t("networkHistory.title")}</span>
+        <span className="text-sm font-semibold">
+          {t("networkHistory.title")}
+        </span>
         <Badge variant="outline" className="ml-1 text-[10px] font-normal">
           {filtered.length}
         </Badge>
@@ -87,7 +89,9 @@ export function NetworkHistoryPanel() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={ALL_KINDS}>{t("networkHistory.allKinds")}</SelectItem>
+              <SelectItem value={ALL_KINDS}>
+                {t("networkHistory.allKinds")}
+              </SelectItem>
               {kinds.map((k) => (
                 <SelectItem key={k} value={k}>
                   {k}
@@ -110,8 +114,7 @@ export function NetworkHistoryPanel() {
       <div className="min-h-0 flex-1 overflow-auto">
         {loading ? (
           <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-            <Loader2 size={16} className="animate-spin" />
-            …
+            <Loader2 size={16} className="animate-spin" />…
           </div>
         ) : filtered.length === 0 ? (
           <div className="p-3">
@@ -137,7 +140,9 @@ export function NetworkHistoryPanel() {
                   >
                     {r.kind}
                   </span>
-                  <span className="min-w-0 flex-1 truncate font-medium">{r.target}</span>
+                  <span className="min-w-0 flex-1 truncate font-medium">
+                    {r.target}
+                  </span>
                   <span className="shrink-0 text-[11px] text-muted-foreground">
                     {r.created_at}
                   </span>

@@ -74,17 +74,17 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 /** IPv4 CIDR 与子网划分面板 */
-export function IpCalcPanel() {
+export function IpCalcPanel({ embedded = false }: { embedded?: boolean }) {
   const { t } = useTranslation();
-  const [cidr, setCidr] = useState("192.168.1.0/24");
+  const [cidr, setCidr] = useState("");
   const [mask, setMask] = useState("");
-  const [checkIp, setCheckIp] = useState("192.168.1.10");
-  const [subnetCount, setSubnetCount] = useState(4);
-  const [hostsPer, setHostsPer] = useState(50);
-  const [tree, setTree] = useState<SubnetTreeNode | null>(() =>
-    buildRootNode("192.168.1.0/24"),
-  );
-  const [selectedId, setSelectedId] = useState<string | null>("192.168.1.0/24");
+  const [checkIp, setCheckIp] = useState("");
+  const [subnetCountText, setSubnetCountText] = useState("");
+  const [hostsPerText, setHostsPerText] = useState("");
+  const subnetCount = Number(subnetCountText) || 0;
+  const hostsPer = Number(hostsPerText) || 0;
+  const [tree, setTree] = useState<SubnetTreeNode | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [splitError, setSplitError] = useState<string | null>(null);
 
   const result = useMemo(() => calcCidr(cidr, mask || undefined), [cidr, mask]);
@@ -124,7 +124,7 @@ export function IpCalcPanel() {
   }, [tree]);
 
   const splitByCount = () => {
-    if (!tree || !selectedId) return;
+    if (!tree || !selectedId || subnetCount < 1) return;
     const { tree: next, error } = splitNode(tree, selectedId, {
       mode: "count",
       count: subnetCount,
@@ -138,7 +138,7 @@ export function IpCalcPanel() {
   };
 
   const splitByHosts = () => {
-    if (!tree || !selectedId) return;
+    if (!tree || !selectedId || hostsPer < 1) return;
     const { tree: next, error } = splitNode(tree, selectedId, {
       mode: "hosts",
       hostsPer,
@@ -203,7 +203,12 @@ export function IpCalcPanel() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden p-5">
+    <div
+      className={cn(
+        "flex h-full min-h-0 w-full flex-col gap-4 overflow-hidden",
+        embedded ? "p-0" : "p-5",
+      )}
+    >
       {/* —— 输入条 —— */}
       <div className="flex shrink-0 flex-wrap items-end gap-3">
         <div className="min-w-[200px] flex-[1.2] space-y-1.5">
@@ -213,6 +218,7 @@ export function IpCalcPanel() {
             className="h-8 font-mono"
             value={cidr}
             onChange={(e) => setCidr(e.target.value)}
+            placeholder={t("network.cidrPlaceholder")}
           />
         </div>
         <div className="min-w-[160px] flex-1 space-y-1.5">
@@ -233,6 +239,7 @@ export function IpCalcPanel() {
               className="h-8 font-mono"
               value={checkIp}
               onChange={(e) => setCheckIp(e.target.value)}
+              placeholder={t("network.ipPlaceholder")}
             />
             <Badge
               variant={
@@ -376,10 +383,9 @@ export function IpCalcPanel() {
                         className="h-8"
                         type="number"
                         min={1}
-                        value={subnetCount}
-                        onChange={(e) =>
-                          setSubnetCount(Number(e.target.value) || 1)
-                        }
+                        value={subnetCountText}
+                        onChange={(e) => setSubnetCountText(e.target.value)}
+                        placeholder="4"
                       />
                     </div>
                     <Button
@@ -401,10 +407,9 @@ export function IpCalcPanel() {
                         className="h-8"
                         type="number"
                         min={1}
-                        value={hostsPer}
-                        onChange={(e) =>
-                          setHostsPer(Number(e.target.value) || 1)
-                        }
+                        value={hostsPerText}
+                        onChange={(e) => setHostsPerText(e.target.value)}
+                        placeholder="50"
                       />
                     </div>
                     <Button

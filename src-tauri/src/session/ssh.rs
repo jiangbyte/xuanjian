@@ -69,7 +69,9 @@ impl client::Handler for ClientHandler {
         server_public_key: &key::PublicKey,
     ) -> Result<bool, Self::Error> {
         let fingerprint = server_public_key.fingerprint();
-        match ssh_service::lookup_fingerprint(&self.host, self.port).map_err(SshClientError::Other)? {
+        match ssh_service::lookup_fingerprint(&self.host, self.port)
+            .map_err(SshClientError::Other)?
+        {
             Some(stored) if stored == fingerprint => Ok(true),
             Some(stored) => Err(SshClientError::HostKey {
                 code: ERR_HOST_KEY_MISMATCH,
@@ -291,27 +293,15 @@ pub async fn connect(app: AppHandle, params: SshConnectParams) -> Result<SshSess
         let jump = ssh_service::load_host(jump_id)
             .map_err(SshClientError::Other)?
             .ok_or_else(|| SshClientError::Other(anyhow!("jump host #{jump_id} not found")))?;
-        connect_via_jump(
-            &jump,
-            &params.host,
-            params.port,
-            &auth,
-            proxy.as_ref(),
-        )
-        .await?
+        connect_via_jump(&jump, &params.host, params.port, &auth, proxy.as_ref()).await?
     } else {
-        connect_handle_direct(
-            &params.host,
-            params.port,
-            &auth,
-            proxy.as_ref(),
-        )
-        .await?
+        connect_handle_direct(&params.host, params.port, &auth, proxy.as_ref()).await?
     };
 
-    let mut channel = handle.channel_open_session().await.map_err(|e| {
-        SshClientError::Russh(e)
-    })?;
+    let mut channel = handle
+        .channel_open_session()
+        .await
+        .map_err(|e| SshClientError::Russh(e))?;
     let cols = params.cols.unwrap_or(120);
     let rows = params.rows.unwrap_or(30);
     let term = params

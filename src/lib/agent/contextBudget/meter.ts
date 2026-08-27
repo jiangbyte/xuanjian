@@ -11,13 +11,13 @@ import {
   parseContextWindow,
   promptTokensFromUsage,
   type LlmUsage,
-} from "@/lib/agent/contextBudget";
+} from "@/lib/agent/contextBudget/core";
 import { measureLlmMessageTokens } from "@/lib/agent/contextBudget/projected";
 import {
   buildHistoryFromMessageRows,
   deriveMessages,
   messageRowToEvents,
-} from "@/lib/agent/session";
+} from "@/lib/agent/history";
 import type { MessagePart } from "@/lib/db";
 
 /** 下一次请求的完整 prompt 表层 token（system + tools + messages） */

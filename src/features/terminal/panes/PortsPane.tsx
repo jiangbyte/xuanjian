@@ -25,6 +25,15 @@ import { clipboardWriteText } from "@/lib/ui/clipboard";
 import { dialogs } from "@/lib/ui/dialogs";
 import { killCmd, portsCmd, resolveProbeEnv } from "@/lib/session/probeEnv";
 import { api } from "@/lib/tauri";
+import {
+  SIDEBAR_ICON,
+  sidebarItemRowClass,
+  sidebarItemSubClass,
+  sidebarItemTitleClass,
+  sidebarPanelMetaClass,
+  sidebarPanelTitleClass,
+  sidebarTagRowClass,
+} from "./sidebarUi";
 
 type PortRow = {
   id: string;
@@ -294,21 +303,24 @@ export function PortsPane({
     <div className="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground">
       {/* —— 标题与刷新 —— */}
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
-        <span className="text-xs font-medium">{t("termTab.ports")}</span>
-        <span className="text-xs text-muted-foreground">
+        <span className={sidebarPanelTitleClass}>{t("termTab.ports")}</span>
+        <span className={sidebarPanelMetaClass}>
           {t("termTab.portCount", { count: filtered.length })}
         </span>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               type="button"
-              size="icon-sm"
+              size="icon-xs"
               variant="ghost"
               className="ml-auto"
               aria-label={t("terminal.refresh")}
               onClick={() => refresh()}
             >
-              <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+              <RefreshCw
+                size={SIDEBAR_ICON}
+                className={loading ? "animate-spin" : ""}
+              />
             </Button>
           </TooltipTrigger>
           <TooltipContent>{t("terminal.refresh")}</TooltipContent>
@@ -376,37 +388,32 @@ export function PortsPane({
                 ? `PID ${row.pid}`
                 : t("termTab.unknownProc");
             return (
-              <div
-                key={row.id}
-                className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
-              >
+              <div key={row.id} className={sidebarItemRowClass}>
                 <div
-                  className={`mt-1.5 size-2 shrink-0 rounded-full ${
+                  className={`mt-1 size-1.5 shrink-0 rounded-full ${
                     isPublic(row.addr) ? "bg-destructive" : "bg-success"
                   }`}
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="flex min-w-0 items-baseline gap-2">
-                    <span className="shrink-0 font-mono text-sm font-medium">
+                  <div className="flex min-w-0 items-baseline gap-1.5">
+                    <span className="shrink-0 font-mono text-xs font-medium">
                       :{row.port}
                     </span>
-                    <span
-                      className="text-sm font-medium truncate"
-                      title={procLabel}
-                    >
+                    <span className={sidebarItemTitleClass} title={procLabel}>
                       {procLabel}
                     </span>
                   </div>
-                  <div
-                    className="text-xs text-muted-foreground truncate"
-                    title={endpoint}
-                  >
+                  <div className={sidebarItemSubClass} title={endpoint}>
                     {endpoint} · {row.state}
                     {row.process && row.pid ? ` · PID ${row.pid}` : ""}
                   </div>
-                  <div className="mt-1.5 flex flex-wrap gap-1">
+                  <div className={sidebarTagRowClass}>
                     {tags.map((tag) => (
-                      <Badge key={tag.id} variant={badgeVariant(tag.tone)}>
+                      <Badge
+                        key={tag.id}
+                        size="sm"
+                        variant={badgeVariant(tag.tone)}
+                      >
                         {tag.label}
                       </Badge>
                     ))}
@@ -416,12 +423,12 @@ export function PortsPane({
                   <TooltipTrigger asChild>
                     <Button
                       type="button"
-                      size="icon-sm"
+                      size="icon-xs"
                       variant="ghost"
                       aria-label={t("termTab.tipCopyPort")}
                       onClick={() => copyText(String(row.port))}
                     >
-                      <Copy size={13} />
+                      <Copy size={SIDEBAR_ICON} />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>{t("termTab.tipCopyPort")}</TooltipContent>
@@ -430,13 +437,13 @@ export function PortsPane({
                   <TooltipTrigger asChild>
                     <Button
                       type="button"
-                      size="icon-sm"
+                      size="icon-xs"
                       variant="ghost"
                       disabled={!row.pid}
                       aria-label={t("termTab.tipTerm")}
                       onClick={() => signal(row, "TERM")}
                     >
-                      <XCircle size={13} />
+                      <XCircle size={SIDEBAR_ICON} />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>{t("termTab.tipTerm")}</TooltipContent>
@@ -445,13 +452,13 @@ export function PortsPane({
                   <TooltipTrigger asChild>
                     <Button
                       type="button"
-                      size="icon-sm"
+                      size="icon-xs"
                       variant="ghost"
                       disabled={!row.pid}
                       aria-label={t("termTab.tipKill")}
                       onClick={() => signal(row, "KILL")}
                     >
-                      <Skull size={13} />
+                      <Skull size={SIDEBAR_ICON} />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>{t("termTab.tipKill")}</TooltipContent>

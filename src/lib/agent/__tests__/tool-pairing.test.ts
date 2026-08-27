@@ -65,8 +65,18 @@ describe("tool-pairing", () => {
           },
         ],
       },
-      { role: "tool", tool_call_id: "c1", name: "shell", content: "x".repeat(3000) },
-      { role: "tool", tool_call_id: "c2", name: "shell", content: "y".repeat(3000) },
+      {
+        role: "tool",
+        tool_call_id: "c1",
+        name: "shell",
+        content: "x".repeat(3000),
+      },
+      {
+        role: "tool",
+        tool_call_id: "c2",
+        name: "shell",
+        content: "y".repeat(3000),
+      },
       { role: "user", content: "next" },
     ];
     const out = applyCompactionToMessages(messages, "checkpoint", 0.16);
@@ -79,8 +89,7 @@ describe("tool-pairing", () => {
       const prior = sanitized.slice(0, i);
       const hasUse = prior.some(
         (m) =>
-          m.role === "assistant" &&
-          m.tool_calls?.some((tc) => tc.id === id),
+          m.role === "assistant" && m.tool_calls?.some((tc) => tc.id === id),
       );
       expect(hasUse).toBe(true);
     }

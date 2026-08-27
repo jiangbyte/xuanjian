@@ -150,9 +150,10 @@ export async function updateAiProvider(
 ) {
   const db = await getDb();
   const cur = (
-    await db.select<AiProviderRow[]>("SELECT * FROM ai_providers WHERE id = $1", [
-      id,
-    ])
+    await db.select<AiProviderRow[]>(
+      "SELECT * FROM ai_providers WHERE id = $1",
+      [id],
+    )
   )[0];
   if (!cur) throw new Error("provider not found");
   await db.execute(
@@ -322,6 +323,40 @@ export async function updateMcpServer(
 export async function deleteMcpServer(id: number) {
   const db = await getDb();
   await db.execute("DELETE FROM mcp_servers WHERE id = $1", [id]);
+}
+
+export type McpToolPrefRow = {
+  id: number;
+  mcp_server_id: number;
+  tool_name: string;
+  enabled: number;
+};
+
+export async function listMcpToolPrefs(
+  serverId?: number,
+): Promise<McpToolPrefRow[]> {
+  const db = await getDb();
+  if (serverId != null) {
+    return db.select<McpToolPrefRow[]>(
+      "SELECT * FROM mcp_tool_prefs WHERE mcp_server_id = $1",
+      [serverId],
+    );
+  }
+  return db.select<McpToolPrefRow[]>("SELECT * FROM mcp_tool_prefs");
+}
+
+export async function setMcpToolPref(
+  serverId: number,
+  toolName: string,
+  enabled: boolean,
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `INSERT INTO mcp_tool_prefs (mcp_server_id, tool_name, enabled)
+     VALUES ($1,$2,$3)
+     ON CONFLICT(mcp_server_id, tool_name) DO UPDATE SET enabled=$3`,
+    [serverId, toolName, enabled ? 1 : 0],
+  );
 }
 
 export async function findAgentSessionByTabId(

@@ -239,14 +239,17 @@ export function PaneBrowser({
     dropEnabled,
   );
 
-  const { marquee, previewPaths, onMouseDown: onMarqueeMouseDown } =
-    useFileListMarquee({
-      containerRef: listRef,
-      visible,
-      onSelect: selectMany,
-      onClear: clearChecked,
-      enabled: !dragOver,
-    });
+  const {
+    marquee,
+    previewPaths,
+    onMouseDown: onMarqueeMouseDown,
+  } = useFileListMarquee({
+    containerRef: listRef,
+    visible,
+    onSelect: selectMany,
+    onClear: clearChecked,
+    enabled: !dragOver,
+  });
 
   snapshotRef.current = {
     cwd,
@@ -525,123 +528,125 @@ export function PaneBrowser({
         />
       </div>
 
-      <div className="flex shrink-0 items-center gap-0.5 border-b border-border px-1.5 py-1">
-        <PathBookmarkButton
-          scope={bookmarkScope({
-            kind: remote ? "host" : "local",
-            hostId: tab.hostId,
-          })}
-          path={cwd}
-          onNavigate={(p) => {
-            setCwd(p);
-            reload(p).catch(console.error);
-          }}
-        />
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="ghost"
-          title={t("context.copyToOther")}
-          aria-label={t("context.copyToOther")}
-          disabled={checkedList.length === 0 && !selected}
-          onClick={() =>
-            onTransferEntry(
-              checkedList.length ? checkedList : selected ? [selected] : [],
-            )
-          }
-        >
-          <ArrowLeftRight size={14} />
-        </Button>
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="ghost"
-          title={t("terminal.batchDelete")}
-          aria-label={t("terminal.batchDelete")}
-          disabled={checkedList.length === 0}
-          onClick={() => {
-            deleteEntries(checkedList).catch(console.error);
-          }}
-        >
-          <Trash2 size={14} />
-        </Button>
-        {remote && (
+      <div className="min-w-0 border-b border-border">
+        <div className="flex items-center gap-0.5 overflow-x-auto overflow-y-hidden px-1.5 py-1 [scrollbar-width:thin] [&>*]:shrink-0">
+          <PathBookmarkButton
+            scope={bookmarkScope({
+              kind: remote ? "host" : "local",
+              hostId: tab.hostId,
+            })}
+            path={cwd}
+            onNavigate={(p) => {
+              setCwd(p);
+              reload(p).catch(console.error);
+            }}
+          />
           <Button
             type="button"
             size="icon-sm"
             variant="ghost"
-            title={t("terminal.upload")}
-            aria-label={t("terminal.upload")}
+            title={t("context.copyToOther")}
+            aria-label={t("context.copyToOther")}
+            disabled={checkedList.length === 0 && !selected}
+            onClick={() =>
+              onTransferEntry(
+                checkedList.length ? checkedList : selected ? [selected] : [],
+              )
+            }
+          >
+            <ArrowLeftRight size={14} />
+          </Button>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            title={t("terminal.batchDelete")}
+            aria-label={t("terminal.batchDelete")}
+            disabled={checkedList.length === 0}
             onClick={() => {
-              onUpload().catch(console.error);
+              deleteEntries(checkedList).catch(console.error);
             }}
           >
-            <Upload size={14} />
+            <Trash2 size={14} />
           </Button>
-        )}
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="secondary"
-          title={t("terminal.listView")}
-          aria-label={t("terminal.listView")}
-        >
-          <List size={14} />
-        </Button>
-        <Button
-          type="button"
-          size="icon-sm"
-          variant={showSearch ? "secondary" : "ghost"}
-          title={t("terminal.search")}
-          aria-label={t("terminal.search")}
-          onClick={() => setShowSearch((v) => !v)}
-        >
-          <Search size={14} />
-        </Button>
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="ghost"
-          title={t("terminal.newFolder")}
-          aria-label={t("terminal.newFolder")}
-          onClick={() => {
-            onNewFolder().catch(console.error);
-          }}
-        >
-          <FolderPlus size={14} />
-        </Button>
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="ghost"
-          title={t("terminal.newFile")}
-          aria-label={t("terminal.newFile")}
-          onClick={() => {
-            onNewFile().catch(console.error);
-          }}
-        >
-          <FilePlus size={14} />
-        </Button>
-        <Button
-          type="button"
-          size="icon-sm"
-          variant={showHidden ? "secondary" : "ghost"}
-          title={t("terminal.showHidden")}
-          aria-label={t("terminal.showHidden")}
-          onClick={() => setShowHidden((v) => !v)}
-        >
-          <Eye size={14} />
-        </Button>
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="ghost"
-          title={t("terminal.refresh")}
-          aria-label={t("terminal.refresh")}
-          onClick={() => reload(cwd)}
-        >
-          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-        </Button>
+          {remote && (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              title={t("terminal.upload")}
+              aria-label={t("terminal.upload")}
+              onClick={() => {
+                onUpload().catch(console.error);
+              }}
+            >
+              <Upload size={14} />
+            </Button>
+          )}
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="secondary"
+            title={t("terminal.listView")}
+            aria-label={t("terminal.listView")}
+          >
+            <List size={14} />
+          </Button>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant={showSearch ? "secondary" : "ghost"}
+            title={t("terminal.search")}
+            aria-label={t("terminal.search")}
+            onClick={() => setShowSearch((v) => !v)}
+          >
+            <Search size={14} />
+          </Button>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            title={t("terminal.newFolder")}
+            aria-label={t("terminal.newFolder")}
+            onClick={() => {
+              onNewFolder().catch(console.error);
+            }}
+          >
+            <FolderPlus size={14} />
+          </Button>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            title={t("terminal.newFile")}
+            aria-label={t("terminal.newFile")}
+            onClick={() => {
+              onNewFile().catch(console.error);
+            }}
+          >
+            <FilePlus size={14} />
+          </Button>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant={showHidden ? "secondary" : "ghost"}
+            title={t("terminal.showHidden")}
+            aria-label={t("terminal.showHidden")}
+            onClick={() => setShowHidden((v) => !v)}
+          >
+            <Eye size={14} />
+          </Button>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            title={t("terminal.refresh")}
+            aria-label={t("terminal.refresh")}
+            onClick={() => reload(cwd)}
+          >
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+          </Button>
+        </div>
       </div>
 
       {showSearch && (
@@ -668,9 +673,7 @@ export function PaneBrowser({
         ref={listRef}
         tabIndex={0}
         className={`relative min-h-0 flex-1 overflow-auto p-1 outline-none select-none ${
-          dragOver
-            ? "bg-primary/5 ring-2 ring-inset ring-primary/40"
-            : ""
+          dragOver ? "bg-primary/5 ring-2 ring-inset ring-primary/40" : ""
         }`}
         onMouseDown={onMarqueeMouseDown}
         {...dropBind}

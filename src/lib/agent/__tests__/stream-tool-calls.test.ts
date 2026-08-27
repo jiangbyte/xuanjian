@@ -3,10 +3,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import {
-  normalizeSubAgentArgs,
-  parseArgs,
-} from "@xuanjian/agent-core";
+import { normalizeSubAgentArgs, parseArgs } from "@xuanjian/agent-core";
 import { mergeStreamToolCallDeltas } from "@/lib/agent/llm/stream-tool-calls";
 
 describe("mergeStreamToolCallDeltas", () => {

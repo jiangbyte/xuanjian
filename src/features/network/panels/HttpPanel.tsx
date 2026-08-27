@@ -20,6 +20,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { addNetworkHistory } from "@/lib/db";
 import { api, type HttpResponse, type TlsCertInfo } from "@/lib/tauri";
+import { cn } from "@/lib/utils";
 
 /** 将多行 `Key: Value` 文本解析为请求头数组 */
 function parseHeaders(raw: string): [string, string][] {
@@ -35,18 +36,18 @@ function parseHeaders(raw: string): [string, string][] {
 }
 
 /** HTTP / TLS / Whois 综合面板 */
-export function HttpPanel() {
+export function HttpPanel({ embedded = false }: { embedded?: boolean }) {
   const { t } = useTranslation();
   const [sub, setSub] = useState<"http" | "tls" | "whois">("http");
   const [method, setMethod] = useState("GET");
-  const [url, setUrl] = useState("https://example.com");
-  const [headers, setHeaders] = useState("User-Agent: Xuanjian");
+  const [url, setUrl] = useState("");
+  const [headers, setHeaders] = useState("");
   const [body, setBody] = useState("");
   const [follow, setFollow] = useState(true);
   const [resp, setResp] = useState<HttpResponse | null>(null);
-  const [tlsHost, setTlsHost] = useState("example.com:443");
+  const [tlsHost, setTlsHost] = useState("");
   const [cert, setCert] = useState<TlsCertInfo | null>(null);
-  const [whoisQ, setWhoisQ] = useState("example.com");
+  const [whoisQ, setWhoisQ] = useState("");
   const [whoisOut, setWhoisOut] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,7 +104,12 @@ export function HttpPanel() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 overflow-auto p-4">
+    <div
+      className={cn(
+        "flex h-full min-h-0 w-full flex-col gap-4 overflow-auto",
+        !embedded && "p-4",
+      )}
+    >
       <div className="flex w-fit" data-slot="button-group">
         {(["http", "tls", "whois"] as const).map((m) => (
           <Button
@@ -147,6 +153,7 @@ export function HttpPanel() {
                 id="http-url"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
+                placeholder={t("network.urlPlaceholder")}
               />
             </div>
             <div className="flex items-center gap-2 pb-1">
@@ -168,6 +175,7 @@ export function HttpPanel() {
               className="font-mono"
               value={headers}
               onChange={(e) => setHeaders(e.target.value)}
+              placeholder={t("network.headersPlaceholder")}
             />
           </div>
           <div className="space-y-1.5">
@@ -204,7 +212,7 @@ export function HttpPanel() {
                 id="tls-host"
                 value={tlsHost}
                 onChange={(e) => setTlsHost(e.target.value)}
-                placeholder={t("network.tlsHost")}
+                placeholder={t("network.tlsHostPlaceholder")}
               />
             </div>
             <Button disabled={busy} onClick={fetchCert}>
@@ -232,6 +240,7 @@ export function HttpPanel() {
                 id="whois-query"
                 value={whoisQ}
                 onChange={(e) => setWhoisQ(e.target.value)}
+                placeholder={t("network.whoisPlaceholder")}
               />
             </div>
             <Button disabled={busy} onClick={runWhois}>

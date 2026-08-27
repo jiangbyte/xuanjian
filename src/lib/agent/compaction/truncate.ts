@@ -41,9 +41,7 @@ function resolveToolKeepFull(opts?: TruncateOpts): number {
     messages: [],
   });
   const used =
-    opts?.lastUsage != null
-      ? promptTokensFromUsage(opts.lastUsage)
-      : estimated;
+    opts?.lastUsage != null ? promptTokensFromUsage(opts.lastUsage) : estimated;
   const ratio = used / limit;
   if (ratio > 0.85) return 3;
   if (ratio > 0.7) return 5;
@@ -65,7 +63,9 @@ export function compactLlmMessagesForModel(
   const budgetLeft = Math.max(
     0,
     limit * 0.92 -
-      (opts?.lastUsage ? promptTokensFromUsage(opts.lastUsage) : totalEst * 0.5),
+      (opts?.lastUsage
+        ? promptTokensFromUsage(opts.lastUsage)
+        : totalEst * 0.5),
   );
 
   const TOOL_KEEP_FULL = resolveToolKeepFull({ ...opts, contextLimit: limit });

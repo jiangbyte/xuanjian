@@ -24,9 +24,8 @@ fn open_db() -> Result<Connection> {
 
 pub fn lookup_fingerprint(host: &str, port: u16) -> Result<Option<String>> {
     let conn = open_db()?;
-    let mut stmt = conn.prepare(
-        "SELECT fingerprint FROM known_hosts WHERE host = ?1 AND port = ?2 LIMIT 1",
-    )?;
+    let mut stmt =
+        conn.prepare("SELECT fingerprint FROM known_hosts WHERE host = ?1 AND port = ?2 LIMIT 1")?;
     let mut rows = stmt.query(params![host, i64::from(port)])?;
     if let Some(row) = rows.next()? {
         return Ok(Some(row.get(0)?));
@@ -36,9 +35,8 @@ pub fn lookup_fingerprint(host: &str, port: u16) -> Result<Option<String>> {
 
 pub fn list_known_hosts() -> Result<Vec<KnownHostRow>> {
     let conn = open_db()?;
-    let mut stmt = conn.prepare(
-        "SELECT id, host, port, fingerprint FROM known_hosts ORDER BY host, port",
-    )?;
+    let mut stmt =
+        conn.prepare("SELECT id, host, port, fingerprint FROM known_hosts ORDER BY host, port")?;
     let rows = stmt.query_map([], |row| {
         Ok(KnownHostRow {
             id: row.get(0)?,
@@ -47,7 +45,8 @@ pub fn list_known_hosts() -> Result<Vec<KnownHostRow>> {
             fingerprint: row.get(3)?,
         })
     })?;
-    rows.collect::<Result<Vec<_>, _>>().context("list known_hosts")
+    rows.collect::<Result<Vec<_>, _>>()
+        .context("list known_hosts")
 }
 
 pub fn add_known_host(host: &str, port: u16, fingerprint: &str) -> Result<i64> {

@@ -32,7 +32,8 @@ describe("overflow compaction path", () => {
     expect(
       out.some(
         (m) =>
-          typeof m.content === "string" && m.content.includes("overflow checkpoint"),
+          typeof m.content === "string" &&
+          m.content.includes("overflow checkpoint"),
       ),
     ).toBe(true);
   });

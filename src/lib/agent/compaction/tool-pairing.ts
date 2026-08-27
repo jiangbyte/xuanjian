@@ -57,9 +57,7 @@ export function stripLeadingOrphanTools(
     }
     const id = m.tool_call_id ?? "";
     const hasUse = head.some(
-      (h) =>
-        h.role === "assistant" &&
-        h.tool_calls?.some((tc) => tc.id === id),
+      (h) => h.role === "assistant" && h.tool_calls?.some((tc) => tc.id === id),
     );
     if (hasUse) {
       tail.push(m);
@@ -67,9 +65,7 @@ export function stripLeadingOrphanTools(
     }
     // 也检查 tail 中已保留的 assistant
     const hasUseInTail = tail.some(
-      (h) =>
-        h.role === "assistant" &&
-        h.tool_calls?.some((tc) => tc.id === id),
+      (h) => h.role === "assistant" && h.tool_calls?.some((tc) => tc.id === id),
     );
     if (hasUseInTail) tail.push(m);
   }

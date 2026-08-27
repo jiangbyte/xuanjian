@@ -146,30 +146,25 @@ fn extract_time_ms(line: &str) -> Option<f64> {
 
 fn extract_ttl(line: &str) -> Option<u32> {
     let re = regex::Regex::new(r"(?i)ttl[=:]?\s*(\d+)").ok()?;
-    re.captures(line)
-        .and_then(|c| c[1].parse().ok())
+    re.captures(line).and_then(|c| c[1].parse().ok())
 }
 
 fn extract_icmp_seq(line: &str) -> Option<u32> {
     let re = regex::Regex::new(r"(?i)icmp_seq[=:]?\s*(\d+)").ok()?;
-    re.captures(line)
-        .and_then(|c| c[1].parse().ok())
+    re.captures(line).and_then(|c| c[1].parse().ok())
 }
 
 fn parse_ping_summary_win(line: &str) -> Option<NetworkToolEvent> {
     let sent_re = regex::Regex::new(r"(?i)(?:sent|已发送)\s*=\s*(\d+)").ok()?;
     let recv_re = regex::Regex::new(r"(?i)(?:received|已接收)\s*=\s*(\d+)").ok()?;
-    let loss_re =
-        regex::Regex::new(r"(?i)(?:lost|丢失)\s*=\s*(\d+)\s*\((\d+(?:\.\d+)?)%").ok()?;
+    let loss_re = regex::Regex::new(r"(?i)(?:lost|丢失)\s*=\s*(\d+)\s*\((\d+(?:\.\d+)?)%").ok()?;
     let sent_c = sent_re.captures(line)?;
     let sent: u32 = sent_c[1].parse().ok()?;
     let recv: u32 = recv_re
         .captures(line)
         .and_then(|c| c[1].parse().ok())
         .unwrap_or(0);
-    let loss_pct = loss_re
-        .captures(line)
-        .and_then(|c| c[2].parse().ok());
+    let loss_pct = loss_re.captures(line).and_then(|c| c[2].parse().ok());
     Some(NetworkToolEvent {
         kind: "ping_summary".into(),
         seq: None,
@@ -244,12 +239,8 @@ fn parse_rtt_stats_win(line: &str) -> Option<NetworkToolEvent> {
     let max_re = regex::Regex::new(r"(?i)(?:maximum|最长)\s*=\s*([\d.]+)\s*ms").ok()?;
     let avg_re = regex::Regex::new(r"(?i)(?:average|平均)\s*=\s*([\d.]+)\s*ms").ok()?;
     let min_ms = min_re.captures(line)?.get(1)?.as_str().parse().ok()?;
-    let max_ms = max_re
-        .captures(line)
-        .and_then(|c| c[1].parse().ok());
-    let avg_ms = avg_re
-        .captures(line)
-        .and_then(|c| c[1].parse().ok());
+    let max_ms = max_re.captures(line).and_then(|c| c[1].parse().ok());
+    let avg_ms = avg_re.captures(line).and_then(|c| c[1].parse().ok());
     if max_ms.is_none() && avg_ms.is_none() {
         return None;
     }
@@ -309,10 +300,7 @@ fn parse_ms_token(tok: &str) -> Option<Option<f64>> {
 }
 
 fn parse_tracert_win(line: &str) -> Option<NetworkToolEvent> {
-    let re = regex::Regex::new(
-        r"(?i)^\s*(\d+)\s+(?:(<\d+\s*ms|\d+\s*ms|\*)\s+){1,3}(.*)$",
-    )
-    .ok()?;
+    let re = regex::Regex::new(r"(?i)^\s*(\d+)\s+(?:(<\d+\s*ms|\d+\s*ms|\*)\s+){1,3}(.*)$").ok()?;
     let c = re.captures(line)?;
     let hop: u32 = c[1].parse().ok()?;
 
@@ -329,8 +317,9 @@ fn parse_tracert_win(line: &str) -> Option<NetworkToolEvent> {
             let t = "*";
             remaining = remaining[1..].trim_start();
             t.to_string()
-        } else if let Some(m) =
-            regex::Regex::new(r"(?i)^<?\d+\s*ms").ok().and_then(|r| r.find(remaining))
+        } else if let Some(m) = regex::Regex::new(r"(?i)^<?\d+\s*ms")
+            .ok()
+            .and_then(|r| r.find(remaining))
         {
             let t = m.as_str().to_string();
             remaining = remaining[m.end()..].trim_start();
@@ -408,8 +397,7 @@ fn parse_traceroute_unix(line: &str) -> Option<NetworkToolEvent> {
     }
 
     // host (ip) 1.2 ms 1.3 ms ...
-    let host_re =
-        regex::Regex::new(r"^(\S+)\s+\(([^)]+)\)\s+(.*)$").ok()?;
+    let host_re = regex::Regex::new(r"^(\S+)\s+\(([^)]+)\)\s+(.*)$").ok()?;
     let (host, ip, rtt_part) = if let Some(hc) = host_re.captures(rest) {
         (
             Some(hc[1].to_string()),

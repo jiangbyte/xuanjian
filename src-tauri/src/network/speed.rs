@@ -1,4 +1,4 @@
-﻿//! å¤šè¿žæŽ¥å¹¶è¡Œç½‘ç»œæµ‹é€Ÿï¼šå»¶è¿Ÿ + ä¸‹è½½ + ä¸Šä¼ ã€‚
+//! å¤šè¿žæŽ¥å¹¶è¡Œç½‘ç»œæµ‹é€Ÿï¼šå»¶è¿Ÿ + ä¸‹è½½ + ä¸Šä¼ ã€‚
 //!
 //! Author: Charlie
 
@@ -28,6 +28,7 @@ const UPLOAD_CHUNK: u64 = 64 * 1024;
 #[serde(rename_all = "camelCase")]
 pub struct SpeedResult {
     pub latency_ms: f64,
+    pub jitter_ms: f64,
     pub download_mbps: f64,
     pub upload_mbps: f64,
     pub downloaded_bytes: u64,
@@ -44,6 +45,8 @@ pub struct SpeedProgressPayload {
     pub phase: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub latency_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jitter_ms: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bytes_done: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -64,6 +67,27 @@ pub struct SpeedProgressPayload {
 
 fn emit_progress(app: &AppHandle, payload: SpeedProgressPayload) {
     let _ = app.emit("network-speed-progress", payload);
+}
+
+/// 取消测速时立即通知前端，避免 UI 等待后台任务结束。
+pub fn emit_speed_cancelled(app: &AppHandle, job_id: &str) {
+    emit_progress(
+        app,
+        SpeedProgressPayload {
+            job_id: job_id.to_string(),
+            phase: "error".into(),
+            latency_ms: None,
+            jitter_ms: None,
+            bytes_done: None,
+            bytes_total: None,
+            mbps: None,
+            concurrency: None,
+            round: None,
+            rounds: None,
+            result: None,
+            message: Some("cancelled".into()),
+        },
+    );
 }
 
 fn mbps(bytes: u64, elapsed: Duration) -> f64 {
@@ -123,9 +147,12 @@ async fn wait_cancel(cancel: &AtomicBool) {
 async fn measure_latency(
     client: &reqwest::Client,
     url: &str,
+    ping_url: Option<&str>,
     cancel: &AtomicBool,
-) -> Result<f64, String> {
-    let probe = if url.contains("/__down") {
+) -> Result<(f64, f64), String> {
+    let probe = if let Some(p) = ping_url.filter(|s| !s.is_empty()) {
+        p.to_string()
+    } else if url.contains("/__down") {
         if let Some(idx) = url.find('?') {
             format!("{}?bytes=0", &url[..idx])
         } else if url.contains("{bytes}") {
@@ -135,11 +162,16 @@ async fn measure_latency(
         }
     } else if url.contains("{bytes}") {
         url.replace("{bytes}", "65536")
+    } else if url.contains("garbage.php") {
+        url.split('?')
+            .next()
+            .unwrap_or(url)
+            .replace("garbage.php", "empty.php")
     } else {
         url.to_string()
     };
-    let mut samples = Vec::with_capacity(5);
-    for _ in 0..5 {
+    let mut samples = Vec::with_capacity(10);
+    for _ in 0..10 {
         if cancel.load(Ordering::SeqCst) {
             return Err("cancelled".into());
         }
@@ -156,8 +188,14 @@ async fn measure_latency(
         };
         samples.push(start.elapsed().as_secs_f64() * 1000.0);
     }
-    samples.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    Ok(samples[samples.len() / 2])
+    let n = samples.len() as f64;
+    let latency = samples.iter().sum::<f64>() / n;
+    let jitter = if samples.len() > 1 {
+        samples.windows(2).map(|w| (w[1] - w[0]).abs()).sum::<f64>() / (n - 1.0)
+    } else {
+        0.0
+    };
+    Ok((latency, jitter))
 }
 
 async fn download_worker(
@@ -333,6 +371,7 @@ fn emit_error(
             job_id: job.to_string(),
             phase: "error".into(),
             latency_ms,
+            jitter_ms: None,
             bytes_done,
             bytes_total,
             mbps: mbps_v,
@@ -394,6 +433,7 @@ async fn run_download_pass(
                     job_id: job_c.clone(),
                     phase: phase_s.clone(),
                     latency_ms: Some(latency_ms),
+                    jitter_ms: None,
                     bytes_done: Some(bytes_done),
                     bytes_total: Some(total),
                     mbps: Some(mbps(bytes_done, start.elapsed())),
@@ -410,6 +450,24 @@ async fn run_download_pass(
             tokio::time::sleep(Duration::from_millis(PROGRESS_INTERVAL_MS)).await;
         }
     });
+    // 首帧进度：避免等待首个 tick 间隔才更新 UI
+    emit_progress(
+        app,
+        SpeedProgressPayload {
+            job_id: job.to_string(),
+            phase: phase.to_string(),
+            latency_ms: Some(latency_ms),
+            jitter_ms: None,
+            bytes_done: Some(0),
+            bytes_total: Some(total),
+            mbps: Some(0.0),
+            concurrency: Some(n),
+            round,
+            rounds,
+            result: None,
+            message: None,
+        },
+    );
     let err = settle_workers(handles, cancel.clone()).await;
     tick.abort();
     if cancel.load(Ordering::SeqCst) {
@@ -474,6 +532,7 @@ async fn run_upload_pass(
                     job_id: job_c.clone(),
                     phase: phase_s.clone(),
                     latency_ms: Some(latency_ms),
+                    jitter_ms: None,
                     bytes_done: Some(bytes_done),
                     bytes_total: Some(total),
                     mbps: Some(mbps(bytes_done, start.elapsed())),
@@ -490,6 +549,23 @@ async fn run_upload_pass(
             tokio::time::sleep(Duration::from_millis(PROGRESS_INTERVAL_MS)).await;
         }
     });
+    emit_progress(
+        app,
+        SpeedProgressPayload {
+            job_id: job.to_string(),
+            phase: phase.to_string(),
+            latency_ms: Some(latency_ms),
+            jitter_ms: None,
+            bytes_done: Some(0),
+            bytes_total: Some(total),
+            mbps: Some(0.0),
+            concurrency: Some(n),
+            round,
+            rounds,
+            result: None,
+            message: None,
+        },
+    );
     let err = settle_workers(handles, cancel.clone()).await;
     tick.abort();
     if cancel.load(Ordering::SeqCst) {
@@ -512,6 +588,7 @@ pub async fn network_speed_test(
     state: State<'_, Arc<NetworkState>>,
     download_url: String,
     upload_url: String,
+    latency_url: Option<String>,
     download_bytes: Option<u64>,
     upload_bytes: Option<u64>,
     concurrency: Option<u32>,
@@ -529,6 +606,9 @@ pub async fn network_speed_test(
     let st = state.inner().clone();
     let dl_url = download_url.trim().to_string();
     let ul_url = upload_url.trim().to_string();
+    let ping_url = latency_url
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
 
     if dl_url.is_empty() || ul_url.is_empty() {
         st.cancels.lock().remove(&job_id);
@@ -536,6 +616,24 @@ pub async fn network_speed_test(
     }
 
     tokio::spawn(async move {
+        emit_progress(
+            &app,
+            SpeedProgressPayload {
+                job_id: job.clone(),
+                phase: "starting".into(),
+                latency_ms: None,
+                jitter_ms: None,
+                bytes_done: None,
+                bytes_total: None,
+                mbps: None,
+                concurrency: Some(conc),
+                round: None,
+                rounds: Some(rounds_n),
+                result: None,
+                message: None,
+            },
+        );
+
         let overall = Instant::now();
         let client = match reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(5))
@@ -557,6 +655,7 @@ pub async fn network_speed_test(
                 job_id: job.clone(),
                 phase: "latency".into(),
                 latency_ms: None,
+                jitter_ms: None,
                 bytes_done: None,
                 bytes_total: None,
                 mbps: None,
@@ -568,33 +667,35 @@ pub async fn network_speed_test(
             },
         );
 
-        // More latency samples for stability
-        let latency_ms = match measure_latency(&client, &dl_url, &cancel).await {
-            Ok(v) => {
-                emit_progress(
-                    &app,
-                    SpeedProgressPayload {
-                        job_id: job.clone(),
-                        phase: "latency".into(),
-                        latency_ms: Some(v),
-                        bytes_done: None,
-                        bytes_total: None,
-                        mbps: None,
-                        concurrency: Some(conc),
-                        round: None,
-                        rounds: Some(rounds_n),
-                        result: None,
-                        message: None,
-                    },
-                );
-                v
-            }
-            Err(e) => {
-                emit_error(&app, &job, None, conc, e, None, None, None);
-                st.cancels.lock().remove(&job);
-                return;
-            }
-        };
+        // Latency + jitter (LibreSpeed-style)
+        let (latency_ms, jitter_ms) =
+            match measure_latency(&client, &dl_url, ping_url.as_deref(), &cancel).await {
+                Ok((lat, jit)) => {
+                    emit_progress(
+                        &app,
+                        SpeedProgressPayload {
+                            job_id: job.clone(),
+                            phase: "latency".into(),
+                            latency_ms: Some(lat),
+                            jitter_ms: Some(jit),
+                            bytes_done: None,
+                            bytes_total: None,
+                            mbps: None,
+                            concurrency: Some(conc),
+                            round: None,
+                            rounds: Some(rounds_n),
+                            result: None,
+                            message: None,
+                        },
+                    );
+                    (lat, jit)
+                }
+                Err(e) => {
+                    emit_error(&app, &job, None, conc, e, None, None, None);
+                    st.cancels.lock().remove(&job);
+                    return;
+                }
+            };
 
         // â€”â€” warmup (discard) â€”â€”
         let warm_dl = (dl_total / 4).clamp(MIN_BYTES, dl_total);
@@ -605,6 +706,7 @@ pub async fn network_speed_test(
                 job_id: job.clone(),
                 phase: "warmup".into(),
                 latency_ms: Some(latency_ms),
+                jitter_ms: Some(jitter_ms),
                 bytes_done: None,
                 bytes_total: None,
                 mbps: None,
@@ -624,7 +726,7 @@ pub async fn network_speed_test(
             conc,
             &cancel,
             latency_ms,
-            "warmup",
+            "warmup_download",
             Some(0),
             Some(rounds_n),
         )
@@ -643,7 +745,7 @@ pub async fn network_speed_test(
             conc,
             &cancel,
             latency_ms,
-            "warmup",
+            "warmup_upload",
             Some(0),
             Some(rounds_n),
         )
@@ -733,6 +835,7 @@ pub async fn network_speed_test(
                 job_id: job.clone(),
                 phase: "done".into(),
                 latency_ms: Some(latency_ms),
+                jitter_ms: Some(jitter_ms),
                 bytes_done: Some(uploaded_sum),
                 bytes_total: Some(ul_total * rounds_n as u64),
                 mbps: Some(upload_mbps),
@@ -741,6 +844,7 @@ pub async fn network_speed_test(
                 rounds: Some(rounds_n),
                 result: Some(SpeedResult {
                     latency_ms,
+                    jitter_ms,
                     download_mbps,
                     upload_mbps,
                     downloaded_bytes: downloaded_sum,

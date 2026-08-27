@@ -48,9 +48,7 @@ export type OrchestratorConfig = {
     parent: OrchestratorConfig;
   }) => Promise<{ ok: boolean; summary: string; children: MessagePart[] }>;
   /** 可选：每步前压缩消息 */
-  compactMessages?: (
-    messages: CoreLlmMessage[],
-  ) => Promise<CoreLlmMessage[]>;
+  compactMessages?: (messages: CoreLlmMessage[]) => Promise<CoreLlmMessage[]>;
 };
 
 const AgentState = Annotation.Root({
@@ -92,9 +90,7 @@ function checkAbort(signal?: AbortSignal) {
 
 function isEmptyReply(reply: NormalizedLlmReply): boolean {
   return (
-    !reply.thinking.trim() &&
-    !reply.text.trim() &&
-    reply.toolCalls.length === 0
+    !reply.thinking.trim() && !reply.text.trim() && reply.toolCalls.length === 0
   );
 }
 
@@ -125,7 +121,9 @@ export function buildOrchestratorGraph(config: OrchestratorConfig) {
       : REACT_LIMITS.SUB_MAX_TOOL_CALLS,
   );
 
-  const preStep = async (state: AgentGraphState): Promise<Partial<AgentGraphState>> => {
+  const preStep = async (
+    state: AgentGraphState,
+  ): Promise<Partial<AgentGraphState>> => {
     checkAbort(config.signal);
     if (guard.shouldWrapUp || guard.checkWallClock()) {
       return { wrapUp: true, finished: true };
@@ -166,31 +164,27 @@ export function buildOrchestratorGraph(config: OrchestratorConfig) {
     ];
 
     try {
-      const reply = await config.ports.llm.stream(
-        preMessages,
-        config.tools,
-        {
-          thinkingMode: config.thinkingMode,
-          signal: config.signal,
-          stream: true,
-          callbacks: {
-            onTextDelta: (d) =>
-              config.emit({
-                type: "text_delta",
-                text: d,
-                agent: config.agentTag,
-              }),
-            onThinkingDelta: (d) =>
-              config.emit({
-                type: "thinking_delta",
-                text: d,
-                agent: config.agentTag,
-              }),
-            onUsage: (u) =>
-              config.emit({ type: "usage", usage: u, agent: config.agentTag }),
-          },
+      const reply = await config.ports.llm.stream(preMessages, config.tools, {
+        thinkingMode: config.thinkingMode,
+        signal: config.signal,
+        stream: true,
+        callbacks: {
+          onTextDelta: (d) =>
+            config.emit({
+              type: "text_delta",
+              text: d,
+              agent: config.agentTag,
+            }),
+          onThinkingDelta: (d) =>
+            config.emit({
+              type: "thinking_delta",
+              text: d,
+              agent: config.agentTag,
+            }),
+          onUsage: (u) =>
+            config.emit({ type: "usage", usage: u, agent: config.agentTag }),
         },
-      );
+      });
       return { lastReply: reply };
     } catch (e) {
       const msg = String(e);
@@ -528,7 +522,10 @@ export function buildOrchestratorGraph(config: OrchestratorConfig) {
       }
     }
 
-    if (state.wrapUp && !parts.some((p) => p.type === "text" && p.text.trim())) {
+    if (
+      state.wrapUp &&
+      !parts.some((p) => p.type === "text" && p.text.trim())
+    ) {
       const fallback =
         "根据目前掌握的信息，我还无法给出完整结论。你可以补充目标环境，或告诉我希望优先排查哪一块。";
       parts.push({ type: "text", text: fallback, agent: config.agentTag });
@@ -586,10 +583,7 @@ export async function runOrchestratorGraph(
 ): Promise<MessagePart[]> {
   const compiled = buildOrchestratorGraph(config);
   const initial: AgentGraphState = {
-    messages: [
-      ...history,
-      { role: "user", content: config.userText },
-    ],
+    messages: [...history, { role: "user", content: config.userText }],
     assistantParts: [],
     rounds: 0,
     emptyRounds: 0,

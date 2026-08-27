@@ -57,10 +57,10 @@ pub fn list_local_shells() -> Vec<LocalShellInfo> {
     {
         list_windows_shells()
     }
-#[cfg(target_os = "macos")]
-{
-    list_macos_shells()
-}
+    #[cfg(target_os = "macos")]
+    {
+        list_macos_shells()
+    }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
         list_linux_shells()

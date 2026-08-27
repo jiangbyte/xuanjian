@@ -4,15 +4,18 @@
  */
 
 import { resolveFsEndpoint, type FsEndpoint } from "@/lib/fs";
+import { ensureAgentTerminal } from "@/lib/session/agentTerminal";
 import {
   reconnectLocalShellTabInPlace,
   reconnectSshTabInPlace,
 } from "@/lib/session/ensureSession";
-import type { TermTab } from "@/stores/ui";
+import type { AgentTermTab, TermTab } from "@/stores/ui";
 import { useUiStore } from "@/stores/ui";
 
 /** 从工具参数解析 tab_id */
-export function tabIdFromArgs(args: Record<string, unknown>): string | undefined {
+export function tabIdFromArgs(
+  args: Record<string, unknown>,
+): string | undefined {
   return typeof args.tab_id === "string" && args.tab_id.trim()
     ? args.tab_id.trim()
     : undefined;
@@ -169,6 +172,34 @@ export function formatResolveError(
   return takeLastResolveError() ?? fallback;
 }
 
+export async function activeAgentSessionIdAsync(
+  args: Record<string, unknown>,
+): Promise<{
+  sessionId: string;
+  tab: AgentTermTab;
+  parentTab: TermTab;
+  provisioned: boolean;
+} | null> {
+  const resolved = await resolveTabForExecution(args);
+  if (!resolved) return null;
+  try {
+    const agentTab = await ensureAgentTerminal(resolved.tab);
+    if (!agentTab.sessionId || agentTab.status !== "open") {
+      lastResolveError = "Agent 下栏终端未连接";
+      return null;
+    }
+    return {
+      sessionId: agentTab.sessionId,
+      tab: agentTab,
+      parentTab: resolved.tab,
+      provisioned: resolved.provisioned,
+    };
+  } catch (e) {
+    lastResolveError = String(e);
+    return null;
+  }
+}
+
 export async function activeSessionIdAsync(
   args: Record<string, unknown>,
 ): Promise<{ sessionId: string; tab: TermTab; provisioned: boolean } | null> {
@@ -222,7 +253,11 @@ export function activeFsEndpoint(tabId?: string): FsEndpoint | null {
 
 export async function activeFsEndpointAsync(
   args: Record<string, unknown>,
-): Promise<{ endpoint: FsEndpoint; tab: TermTab; provisioned: boolean } | null> {
+): Promise<{
+  endpoint: FsEndpoint;
+  tab: TermTab;
+  provisioned: boolean;
+} | null> {
   const resolved = await resolveTabForExecution(args);
   if (!resolved) return null;
   const endpoint = resolveFsEndpoint(resolved.tab);

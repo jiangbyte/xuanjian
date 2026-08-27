@@ -26,6 +26,7 @@ import {
   formatLogTimeRange,
 } from "@/features/logs/logExport";
 import { clipboardWriteText } from "@/lib/ui/clipboard";
+import { attachTerminalClipboard } from "@/lib/ui/terminalClipboard";
 import { modKeyLabel } from "@/lib/core/platform";
 import {
   getSessionLog,
@@ -239,25 +240,14 @@ export function LogDetailView() {
     const ro = new ResizeObserver(() => doFit());
     ro.observe(el);
 
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey) || !e.shiftKey) return;
-      const key = e.key.toLowerCase();
-      if (key === "c") {
-        const text = term.getSelection();
-        if (!text) return;
-        e.preventDefault();
-        e.stopPropagation();
-        clipboardWriteText(text).catch(() => undefined);
-      }
-    };
-    el.addEventListener("keydown", onKeyDown, true);
+    const detachClipboard = attachTerminalClipboard(term);
 
     setTermReady((n) => n + 1);
     return () => {
       dumpGenRef.current += 1;
       clearTimer();
       ro.disconnect();
-      el.removeEventListener("keydown", onKeyDown, true);
+      detachClipboard();
       term.dispose();
       if (termRef.current === term) termRef.current = null;
       fitRef.current = null;
@@ -440,7 +430,7 @@ export function LogDetailView() {
       </div>
       <div
         ref={containerRef}
-        className="min-h-0 flex-1 bg-background p-2"
+        className="terminal-surface min-h-0 flex-1 bg-background p-2"
         onContextMenu={(e) => {
           const term = termRef.current;
           const hasSelection = !!(term && term.hasSelection());

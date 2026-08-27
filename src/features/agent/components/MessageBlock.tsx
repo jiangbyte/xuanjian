@@ -32,13 +32,13 @@ export function MessageBlock({
       .map((p) => p.text)
       .join("\n");
     return (
-      <div className="ml-4 rounded-lg rounded-br-sm bg-primary/10 px-2.5 py-1.5 text-[12px] leading-[1.55] text-foreground">
+      <div className="ml-4 max-w-full min-w-0 rounded-lg rounded-br-sm bg-primary/10 px-2.5 py-1.5 text-[12px] leading-[1.55] text-foreground break-words [overflow-wrap:anywhere]">
         {text}
       </div>
     );
   }
   return (
-    <div className="mr-1 space-y-1.5 text-[12px] leading-[1.55]">
+    <div className="mr-1 min-w-0 max-w-full space-y-1.5 text-[12px] leading-[1.55]">
       {parts.map((p, i) => (
         <PartView
           key={i}

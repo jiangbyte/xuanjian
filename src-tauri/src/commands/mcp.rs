@@ -59,7 +59,10 @@ fn read_response(
             if let Some(err) = msg.get("error") {
                 return Err(err.to_string());
             }
-            return Ok(msg.get("result").cloned().unwrap_or(serde_json::Value::Null));
+            return Ok(msg
+                .get("result")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null));
         }
     }
 }

@@ -6,7 +6,7 @@
 import { useHook } from "@/lib/agent/hooks";
 import { checkContextPressure } from "@/lib/agent/compaction/pressure";
 import { compactIfNeeded } from "@/lib/agent/compaction/summarize";
-import type { ProviderBundle } from "@/lib/agent/provider";
+import type { ProviderBundle } from "@/lib/agent/runtime/provider";
 import type { LlmUsage } from "@/lib/agent/contextBudget";
 import type { MessagePart } from "@/lib/db";
 import type { LlmMessage } from "@/lib/agent/llm";

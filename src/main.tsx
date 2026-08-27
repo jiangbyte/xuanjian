@@ -6,6 +6,7 @@
 
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { registerDefaultToolHooks } from "@/lib/agent/hooks/defaultTools";
 import App from "@/App";
 import { ContextMenuProvider } from "@/components/ContextMenu";
 import { Toaster } from "@/components/ui/sonner";
@@ -29,7 +30,11 @@ document.addEventListener(
       e.stopPropagation();
       return;
     }
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (key === "i" || key === "j")) {
+    if (
+      (e.ctrlKey || e.metaKey) &&
+      e.shiftKey &&
+      (key === "i" || key === "j")
+    ) {
       e.preventDefault();
       e.stopPropagation();
       return;
@@ -41,6 +46,8 @@ document.addEventListener(
   },
   true,
 );
+
+registerDefaultToolHooks();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

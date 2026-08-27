@@ -238,9 +238,9 @@ export function DockerfileStudio({ dockerfiles, onChange, onExport }: Props) {
       <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
         <ResizablePanel defaultSize={42} minSize={28}>
           <div className="flex h-full min-h-0 flex-col">
-            <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-2 py-1.5">
+            <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-border px-2 py-1.5">
               <Select value={activePath} onValueChange={setActivePath}>
-                <SelectTrigger className="h-7 w-40">
+                <SelectTrigger size="sm" className="w-40">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -252,30 +252,28 @@ export function DockerfileStudio({ dockerfiles, onChange, onExport }: Props) {
                 </SelectContent>
               </Select>
               <Input
-                className="h-7 w-36 text-xs"
+                className="h-8 w-36 text-xs"
                 key={activePath}
                 defaultValue={activePath}
                 onBlur={(e) => renameFile(e.target.value.trim())}
               />
               <Button
                 type="button"
-                size="sm"
+                size="icon-sm"
                 variant="ghost"
-                className="h-7"
                 onClick={addFile}
               >
-                <FilePlus size={13} />
+                <FilePlus size={14} />
               </Button>
               <Button
                 type="button"
-                size="sm"
+                size="icon-sm"
                 variant="ghost"
-                className="h-7"
                 onClick={removeFile}
               >
-                <Trash2 size={13} />
+                <Trash2 size={14} />
               </Button>
-              <div className="ml-auto flex gap-1">
+              <div className="ml-auto flex items-center gap-1.5">
                 <Select
                   onValueChange={(k) => {
                     const ins = createInstruction(
@@ -285,7 +283,7 @@ export function DockerfileStudio({ dockerfiles, onChange, onExport }: Props) {
                     setSelectedId(ins.id);
                   }}
                 >
-                  <SelectTrigger className="h-7 w-36">
+                  <SelectTrigger size="sm" className="w-36">
                     <SelectValue placeholder={t("docker.addInstruction")} />
                   </SelectTrigger>
                   <SelectContent>
@@ -300,14 +298,13 @@ export function DockerfileStudio({ dockerfiles, onChange, onExport }: Props) {
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-7"
                   onClick={() => {
                     const ins = createInstruction("RUN");
                     commitInstructions([...instructions, ins]);
                     setSelectedId(ins.id);
                   }}
                 >
-                  <Plus size={13} className="mr-1" />
+                  <Plus size={14} className="mr-1" />
                   {t("docker.add")}
                 </Button>
               </div>
@@ -388,7 +385,7 @@ export function DockerfileStudio({ dockerfiles, onChange, onExport }: Props) {
               sourceError && "ring-1 ring-inset ring-destructive/40",
             )}
           >
-            <div className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-1.5">
+            <div className="flex shrink-0 items-center gap-1.5 border-b border-border px-2 py-1.5">
               <span className="truncate text-xs font-medium text-muted-foreground">
                 {activePath}
                 {sourceError ? ` · ${sourceError}` : ""}
@@ -494,29 +491,16 @@ function InstructionForm({
       <div className="flex items-center gap-1">
         <div className="text-sm font-semibold">{ins.kind}</div>
         <div className="ml-auto flex gap-1">
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="size-7"
-            onClick={onUp}
-          >
+          <Button type="button" size="icon-sm" variant="ghost" onClick={onUp}>
             <ArrowUp size={12} />
           </Button>
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="size-7"
-            onClick={onDown}
-          >
+          <Button type="button" size="icon-sm" variant="ghost" onClick={onDown}>
             <ArrowDown size={12} />
           </Button>
           <Button
             type="button"
-            size="icon"
+            size="icon-sm"
             variant="ghost"
-            className="size-7"
             onClick={onDelete}
           >
             <Trash2 size={12} />
@@ -749,7 +733,7 @@ function InstructionForm({
                 onChange({ ...ins, form: v as "exec" | "shell" })
               }
             >
-              <SelectTrigger className="h-8">
+              <SelectTrigger size="sm" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

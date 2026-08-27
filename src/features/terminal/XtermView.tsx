@@ -17,9 +17,11 @@ import {
   useContextMenu,
 } from "@/components/ContextMenu";
 import { clipboardReadText, clipboardWriteText } from "@/lib/ui/clipboard";
+import { attachTerminalClipboard } from "@/lib/ui/terminalClipboard";
 import { dialogs } from "@/lib/ui/dialogs";
 import { modKeyLabel } from "@/lib/core/platform";
 import { canReconnect, reconnectTermTab } from "@/lib/session/connect";
+import { getTranscriptTail } from "@/lib/session/recorder";
 import { api, onSessionClosed, onSessionOutput } from "@/lib/tauri";
 import { useSettingsStore } from "@/stores/settings";
 import type { TermTab } from "@/stores/ui";
@@ -42,6 +44,7 @@ export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
   const activeRef = useRef(active);
   const statusRef = useRef(tab.status);
   const wasReconnectRef = useRef(false);
+  const hydratedSessionRef = useRef<string | null>(null);
   const tRef = useRef(t);
   const [busy, setBusy] = useState(false);
 
@@ -99,7 +102,10 @@ export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
       await api.sessionWrite(sid, text);
     };
 
-    // 优先 paste 事件 / Tauri 剪贴板，不使用 navigator.clipboard（避免浏览器授权提示）
+    const detachClipboard = attachTerminalClipboard(term, {
+      onPaste: (text) => pasteToSession(text),
+    });
+
     const onPaste = (e: ClipboardEvent) => {
       e.preventDefault();
       e.stopPropagation();
@@ -113,58 +119,6 @@ export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
         .catch(() => undefined);
     };
     el.addEventListener("paste", onPaste);
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (!activeRef.current) return;
-      const key = e.key.toLowerCase();
-      const mod = e.ctrlKey || e.metaKey;
-      if (!mod || !e.shiftKey || e.altKey) return;
-
-      if (key === "c") {
-        const text = term.getSelection();
-        if (!text) return;
-        e.preventDefault();
-        e.stopPropagation();
-        clipboardWriteText(text).catch(() => undefined);
-        return;
-      }
-      if (key === "v") {
-        e.preventDefault();
-        e.stopPropagation();
-        clipboardReadText()
-          .then((txt) => pasteToSession(txt))
-          .catch(() => undefined);
-      }
-    };
-    // 捕获阶段，优先于残留的浏览器 / 插件处理器
-    el.addEventListener("keydown", onKeyDown, true);
-
-    term.attachCustomKeyEventHandler((ev) => {
-      if (ev.type !== "keydown") return true;
-      const key = ev.key.toLowerCase();
-      const mod = ev.ctrlKey || ev.metaKey;
-
-      // 已在捕获监听里处理；阻止 xterm 再向 PTY 发送
-      if (mod && ev.shiftKey && (key === "c" || key === "v")) {
-        return false;
-      }
-      if (mod && !ev.shiftKey && !ev.altKey && ev.key === "Insert") {
-        const text = term.getSelection();
-        if (text) {
-          ev.preventDefault();
-          clipboardWriteText(text).catch(() => undefined);
-          return false;
-        }
-      }
-      if (ev.shiftKey && !mod && ev.key === "Insert") {
-        ev.preventDefault();
-        clipboardReadText()
-          .then((txt) => pasteToSession(txt))
-          .catch(() => undefined);
-        return false;
-      }
-      return true;
-    });
 
     // —— 按行缓冲输入，写入命令历史 ——
     const lineBuf = { current: "" };
@@ -219,7 +173,7 @@ export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
       onData.dispose();
       ro.disconnect();
       el.removeEventListener("paste", onPaste);
-      el.removeEventListener("keydown", onKeyDown, true);
+      detachClipboard();
       unOut?.();
       unClose?.();
       term.dispose();
@@ -265,6 +219,24 @@ export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
     if (!tab.sessionId || !active) return;
     requestAnimationFrame(() => safeFitRef.current(true));
   }, [tab.sessionId, active]);
+
+  useEffect(() => {
+    if (!tab.sessionId) return;
+    if (hydratedSessionRef.current === tab.sessionId) return;
+    hydratedSessionRef.current = tab.sessionId;
+    let cancelled = false;
+    void getTranscriptTail(tab.sessionId, 32_000).then((tail) => {
+      if (cancelled || !tail) return;
+      const term = termRef.current;
+      if (!term) return;
+      term.clear();
+      term.write(tail);
+      requestAnimationFrame(() => safeFitRef.current(false));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab.sessionId]);
 
   useEffect(() => {
     if (!active) return;
@@ -325,7 +297,7 @@ export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
     >
       <div
         ref={containerRef}
-        className="h-full w-full p-1"
+        className="terminal-surface h-full w-full p-1"
         onContextMenu={(e) => {
           const term = termRef.current;
           const hasSelection = !!(term && term.hasSelection());

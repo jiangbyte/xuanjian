@@ -108,7 +108,9 @@ function StatCell({
         <Icon size={14} />
         {label}
       </div>
-      <div className={cn("mt-1 text-2xl font-semibold tabular-nums", toneClass)}>
+      <div
+        className={cn("mt-1 text-2xl font-semibold tabular-nums", toneClass)}
+      >
         {value}
       </div>
     </div>
@@ -118,7 +120,9 @@ function StatCell({
 /** 机群指标探测仪表盘 */
 export function FleetDashboard() {
   const { t } = useTranslation();
-  const [groups, setGroups] = useState<Awaited<ReturnType<typeof listGroups>>>([]);
+  const [groups, setGroups] = useState<Awaited<ReturnType<typeof listGroups>>>(
+    [],
+  );
   const [hosts, setHosts] = useState<HostRow[]>([]);
   const [groupId, setGroupId] = useState<string>(ALL_GROUPS);
   const [probes, setProbes] = useState<ProbeRow[]>([]);
@@ -173,7 +177,9 @@ export function FleetDashboard() {
         next += 1;
         const host = targets[idx];
         try {
-          const { session } = await connectSshHost(host.id, { runStartup: false });
+          const { session } = await connectSshHost(host.id, {
+            runStartup: false,
+          });
           try {
             const raw = await api.sessionExec(session.id, cmd);
             const parsed = parseProbeOutput(raw);
@@ -189,7 +195,9 @@ export function FleetDashboard() {
     }
 
     await Promise.all(
-      Array.from({ length: Math.min(concurrency, targets.length) }, () => worker()),
+      Array.from({ length: Math.min(concurrency, targets.length) }, () =>
+        worker(),
+      ),
     );
     setProbes(results);
     setRunning(false);
@@ -214,7 +222,9 @@ export function FleetDashboard() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={ALL_GROUPS}>{t("fleet.allGroups")}</SelectItem>
+                  <SelectItem value={ALL_GROUPS}>
+                    {t("fleet.allGroups")}
+                  </SelectItem>
                   {groups.map((g) => (
                     <SelectItem key={g.id} value={String(g.id)}>
                       {g.name}
@@ -242,7 +252,11 @@ export function FleetDashboard() {
       <div className="min-h-0 flex-1 overflow-auto">
         {probes.length > 0 ? (
           <div className="grid grid-cols-2 border-b border-border sm:grid-cols-4">
-            <StatCell label={t("fleet.statTotal")} value={stats.total} icon={Server} />
+            <StatCell
+              label={t("fleet.statTotal")}
+              value={stats.total}
+              icon={Server}
+            />
             <StatCell
               label={t("fleet.statOnline")}
               value={stats.ok}
@@ -277,11 +291,19 @@ export function FleetDashboard() {
             <table className="w-full min-w-[640px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/30 text-left text-xs text-muted-foreground">
-                  <th className="px-4 py-2.5 font-medium">{t("fleet.colHost")}</th>
+                  <th className="px-4 py-2.5 font-medium">
+                    {t("fleet.colHost")}
+                  </th>
                   <th className="px-4 py-2.5 font-medium">CPU</th>
-                  <th className="px-4 py-2.5 font-medium">{t("fleet.colMem")}</th>
-                  <th className="px-4 py-2.5 font-medium">{t("fleet.colDisk")}</th>
-                  <th className="px-4 py-2.5 font-medium">{t("fleet.colStatus")}</th>
+                  <th className="px-4 py-2.5 font-medium">
+                    {t("fleet.colMem")}
+                  </th>
+                  <th className="px-4 py-2.5 font-medium">
+                    {t("fleet.colDisk")}
+                  </th>
+                  <th className="px-4 py-2.5 font-medium">
+                    {t("fleet.colStatus")}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -292,9 +314,14 @@ export function FleetDashboard() {
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
-                        <Server size={15} className="shrink-0 text-muted-foreground" />
+                        <Server
+                          size={15}
+                          className="shrink-0 text-muted-foreground"
+                        />
                         <div className="min-w-0">
-                          <div className="truncate font-medium">{p.host.name}</div>
+                          <div className="truncate font-medium">
+                            {p.host.name}
+                          </div>
                           <div className="truncate text-xs text-muted-foreground">
                             {p.host.host}
                           </div>
@@ -303,7 +330,10 @@ export function FleetDashboard() {
                     </td>
                     <td className="px-4 py-3">
                       {p.pending ? (
-                        <Loader2 size={14} className="animate-spin text-muted-foreground" />
+                        <Loader2
+                          size={14}
+                          className="animate-spin text-muted-foreground"
+                        />
                       ) : p.ok ? (
                         <MetricBar value={p.cpuPct ?? 0} />
                       ) : (
@@ -312,7 +342,10 @@ export function FleetDashboard() {
                     </td>
                     <td className="px-4 py-3">
                       {p.pending ? (
-                        <Loader2 size={14} className="animate-spin text-muted-foreground" />
+                        <Loader2
+                          size={14}
+                          className="animate-spin text-muted-foreground"
+                        />
                       ) : p.ok ? (
                         <MetricBar value={p.memPct ?? 0} />
                       ) : (
@@ -321,7 +354,10 @@ export function FleetDashboard() {
                     </td>
                     <td className="px-4 py-3">
                       {p.pending ? (
-                        <Loader2 size={14} className="animate-spin text-muted-foreground" />
+                        <Loader2
+                          size={14}
+                          className="animate-spin text-muted-foreground"
+                        />
                       ) : p.ok ? (
                         <MetricBar value={p.diskPct ?? 0} />
                       ) : (
