@@ -203,7 +203,7 @@ export function NotesPane() {
       save().catch(console.error);
     }, 800);
     return () => window.clearTimeout(timer);
-  }, [title, body, noteCategoryId, dirty, editing, isEditing, save]);
+  }, [dirty, editing, isEditing, save]);
 
   const exitEdit = async () => {
     if (dirty) await save();

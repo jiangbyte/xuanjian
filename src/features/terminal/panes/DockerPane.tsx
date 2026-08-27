@@ -447,7 +447,7 @@ export function DockerPane({
     const el = logsScrollRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [logsView?.body, logsFollow]);
+  }, [logsView?.body, logsFollow, logsView]);
 
   useEffect(() => {
     return () => {

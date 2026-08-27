@@ -29,7 +29,7 @@ export function KnownHostsSection() {
 
   useEffect(() => {
     reload().catch(console.error);
-  }, []);
+  }, [reload]);
 
   const onRemove = async (row: KnownHostRow) => {
     try {

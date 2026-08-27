@@ -213,7 +213,7 @@ export function DockerConsole() {
       void saveProject();
     }, 1200);
     return () => window.clearTimeout(timer);
-  }, [dirty, doc, dockerfiles, name, description, activeId, saveProject]);
+  }, [dirty, activeId, saveProject]);
 
   const createFromTemplate = async (templateId: string) => {
     const tpl = DOCKER_TEMPLATES.find((x) => x.id === templateId);

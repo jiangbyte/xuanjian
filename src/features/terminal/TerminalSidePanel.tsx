@@ -242,7 +242,7 @@ export function TerminalSidePanel({
 
   useEffect(() => {
     clearChecked();
-  }, [cwd, clearChecked]);
+  }, [clearChecked]);
 
   useEffect(() => {
     const el = listRef.current;

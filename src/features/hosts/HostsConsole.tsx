@@ -62,7 +62,7 @@ export function HostsConsole() {
 
   useEffect(() => {
     reload().catch(console.error);
-  }, []);
+  }, [reload]);
 
   const sshTarget = useMemo(
     () => parseSshTarget(filter.search),

@@ -118,7 +118,7 @@ export function LogDetailView() {
       });
     };
     step();
-  }, []);
+  }, [clearTimer]);
 
   const writeUpToIndex = useCallback((endExclusive: number) => {
     const term = termRef.current;
@@ -172,7 +172,7 @@ export function LogDetailView() {
       }
       scheduleNext();
     }, wait);
-  }, []);
+  }, [clearTimer]);
 
   useEffect(() => {
     if (!Number.isFinite(logId)) {
@@ -252,7 +252,7 @@ export function LogDetailView() {
       if (termRef.current === term) termRef.current = null;
       fitRef.current = null;
     };
-  }, [loading, log?.id]);
+  }, [loading, log?.id, log, clearTimer]);
 
   useEffect(() => {
     const term = termRef.current;
@@ -264,7 +264,7 @@ export function LogDetailView() {
     } catch {
       /* ignore */
     }
-  }, [termFontSize, termFontFamily, termReady]);
+  }, [termFontSize, termFontFamily]);
 
   useEffect(() => {
     if (!termReady || !termRef.current) return;
@@ -284,14 +284,14 @@ export function LogDetailView() {
       /* ignore */
     }
     dumpAll();
-  }, [termReady, outChunks, playbackMode, dumpAll]);
+  }, [termReady, playbackMode, dumpAll, clearTimer]);
 
   useEffect(() => {
     if (!playbackMode) return;
     if (playing) scheduleNext();
     else clearTimer();
     return () => clearTimer();
-  }, [playing, speed, playbackMode, scheduleNext]);
+  }, [playing, playbackMode, scheduleNext, clearTimer]);
 
   const seekTo = (ms: number) => {
     clearTimer();

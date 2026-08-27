@@ -32,7 +32,11 @@ export function normalizeTerminalChunk(text: string): string {
     .join("\n");
 }
 
-const SHELL_PROMPT_RE = /(?:^|\n)(?:\x1b\][^\x07]*\x07)*[^\n]*[@#$%]\s*$/;
+const ESC = String.fromCharCode(27);
+const BEL = String.fromCharCode(7);
+const SHELL_PROMPT_RE = new RegExp(
+  `(?:^|\\n)(?:${ESC}\\][^${BEL}]*${BEL})*[^\\n]*[@#$%]\\s*$`,
+);
 
 const ERROR_TAIL_RE =
   /(?:dependency failed to start|is unhealthy|Error response from daemon|exit code \d+|✘|(?:^|\n)[^\n]*\berror\b[^\n]*$|(?:^|\n)[^\n]*\bfailed\b[^\n]*$)/im;

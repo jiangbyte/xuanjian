@@ -13,7 +13,7 @@ export function RawLog({ lines, busy }: { lines: string[]; busy: boolean }) {
 
   useEffect(() => {
     logRef.current?.scrollTo(0, logRef.current.scrollHeight);
-  }, [lines]);
+  }, []);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border">

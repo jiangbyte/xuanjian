@@ -72,7 +72,7 @@ const preRequestHooks: PreRequestHook[] = [];
 const preExecuteHooks: PreExecuteHook[] = [];
 const postExecuteHooks: PostExecuteHook[] = [];
 
-export function useHook<K extends HookPoint>(
+export function registerHook<K extends HookPoint>(
   point: K,
   fn: K extends "agent/pre-step"
     ? PreStepHook

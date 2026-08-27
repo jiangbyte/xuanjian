@@ -6,14 +6,14 @@ import { describe, expect, it, beforeEach } from "vitest";
 import {
   clearAllHooks,
   runPreExecuteHooks,
-  useHook,
+  registerHook,
 } from "@/lib/agent/hooks/registry";
 
 describe("hooks registry", () => {
   beforeEach(() => clearAllHooks());
 
   it("runs pre-execute deny", async () => {
-    useHook("tools/pre-execute", async (_ctx, _next) => {
+    registerHook("tools/pre-execute", async (_ctx, _next) => {
       return { kind: "deny", result: "blocked" };
     });
     const decision = await runPreExecuteHooks({
@@ -25,7 +25,7 @@ describe("hooks registry", () => {
   });
 
   it("falls through to allow", async () => {
-    useHook("tools/pre-execute", async (_ctx, next) => next());
+    registerHook("tools/pre-execute", async (_ctx, next) => next());
     const decision = await runPreExecuteHooks({
       name: "test",
       args: {},

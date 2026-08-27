@@ -195,7 +195,7 @@ export function NotesConsole() {
       save().catch(console.error);
     }, 700);
     return () => window.clearTimeout(timer);
-  }, [title, body, pinned, noteCategoryId, dirty, active, isEditing, save]);
+  }, [dirty, active, isEditing, save]);
 
   const create = async () => {
     try {

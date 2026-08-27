@@ -290,7 +290,7 @@ export function AiChatPanel() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, busy, activity.label, blockingUi.active]);
+  }, []);
 
   useEffect(() => {
     if (!busy) return;
@@ -306,7 +306,7 @@ export function AiChatPanel() {
     const s = Math.floor(ms / 1000);
     if (s < 60) return `${s}s`;
     return `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s`;
-  }, [busy, activityTick, activity.phase, activity.label]);
+  }, [busy, activityTick]);
 
   const activityStatusLabel = useMemo(() => {
     if (blockingUi.active) {
@@ -534,14 +534,13 @@ export function AiChatPanel() {
       sessionOutput: sessionUsage?.output,
     };
   }, [
-    messages,
-    text,
-    busy,
-    modelContextTag,
-    permissionMode,
-    lastUsage,
-    sessionUsage,
-    activityTick,
+    messages, 
+    text, 
+    busy, 
+    modelContextTag, 
+    permissionMode, 
+    lastUsage, 
+    sessionUsage
   ]);
 
   const agentShort = t("terminal.aiLocalAgent");

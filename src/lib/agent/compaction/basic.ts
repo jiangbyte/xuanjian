@@ -3,7 +3,7 @@
  * @author Charlie
  */
 
-import { useHook } from "@/lib/agent/hooks";
+import { registerHook } from "@/lib/agent/hooks";
 import { checkContextPressure } from "@/lib/agent/compaction/pressure";
 import { compactIfNeeded } from "@/lib/agent/compaction/summarize";
 import type { ProviderBundle } from "@/lib/agent/runtime/provider";
@@ -48,7 +48,7 @@ export function registerCompactionHook(): void {
   if (compactionHookRegistered) return;
   compactionHookRegistered = true;
 
-  useHook("agent/pre-step", async (ctx, next) => {
+  registerHook("agent/pre-step", async (ctx, next) => {
     const base = await next();
     if (base.kind !== "continue") return base;
     if (!compactionProvider) return base;

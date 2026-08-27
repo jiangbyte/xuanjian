@@ -9,7 +9,7 @@ export {
   runPreExecuteHooks,
   runPreRequestHooks,
   runPreStepHooks,
-  useHook,
+  registerHook,
 } from "@/lib/agent/hooks/registry";
 export type {
   HookPoint,

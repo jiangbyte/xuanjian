@@ -63,7 +63,6 @@ function compare(
       return value === threshold;
     case "gte":
       return value >= threshold;
-    case "gt":
     default:
       return value > threshold;
   }

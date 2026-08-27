@@ -40,18 +40,16 @@
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/agent-react.png" alt="Agent 查脚本并执行" /></td>
-    <td width="50%"><img src="docs/images/agent-history.png" alt="Agent 会话历史" /></td>
+    <td colspan="2" align="center"><img src="docs/images/terminal-agent.png" alt="终端工作区 · Agent 下栏与对话" width="90%" /></td>
   </tr>
   <tr>
-    <td align="center">ReAct：检索脚本库 → 下栏终端执行 → 可见输出</td>
-    <td align="center">会话历史 · 多轮排查与脚本查询</td>
+    <td colspan="2" align="center">SFTP 文件浏览 · 主终端 · Agent 下栏终端 · 右侧 Agent 对话</td>
   </tr>
   <tr>
-    <td colspan="2" align="center"><img src="docs/images/settings-models.png" alt="模型设置" width="70%" /></td>
+    <td colspan="2" align="center"><img src="docs/images/settings.png" alt="设置" width="70%" /></td>
   </tr>
   <tr>
-    <td colspan="2" align="center">模型设置 · OpenAI 兼容 / Anthropic Messages · MCP 扩展</td>
+    <td colspan="2" align="center">设置 · 外观 / 终端 / 模型 / MCP / Agent</td>
   </tr>
 </table>
 
@@ -60,61 +58,61 @@
 <table>
   <tr>
     <td width="50%"><img src="docs/images/hosts.png" alt="主机操作台" /></td>
-    <td width="50%"><img src="docs/images/network-ping.png" alt="连通性 Ping" /></td>
+    <td width="50%"><img src="docs/images/network.png" alt="网络工具" /></td>
   </tr>
   <tr>
-    <td align="center">主机操作台</td>
-    <td align="center">连通性 · Ping / DNS / 路由追踪</td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="docs/images/network-traceroute.png" alt="路由追踪" /></td>
-    <td width="50%"><img src="docs/images/network-ipcalc.png" alt="IP 计算与子网拓扑" /></td>
-  </tr>
-  <tr>
-    <td align="center">连通性 · 路由追踪</td>
-    <td align="center">IP 计算 · 子网拓扑 · 端口 / 连接 / 测速</td>
+    <td align="center">主机操作台 · 分组 / 标签 / 批量操作</td>
+    <td align="center">网络工具 · 网卡信息 / IP 计算 / 连通性 / 端口</td>
   </tr>
 </table>
 
-### Docker · 脚本 · 笔记 · 日志
+### Docker · 脚本 · 自动化 · 笔记
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/docker-compose.png" alt="Docker Compose" /></td>
-    <td width="50%"><img src="docs/images/docker-full.png" alt="Compose + Dockerfile" /></td>
-  </tr>
-  <tr>
-    <td align="center">Docker · Compose 编排工作室</td>
-    <td align="center">Compose + Dockerfile 可视化</td>
-  </tr>
-  <tr>
+    <td width="50%"><img src="docs/images/docker-dockerfile.png" alt="Dockerfile 编排" /></td>
     <td width="50%"><img src="docs/images/scripts.png" alt="脚本库" /></td>
-    <td width="50%"><img src="docs/images/logs.png" alt="会话日志" /></td>
   </tr>
   <tr>
-    <td align="center">脚本库 · 变量占位 · 批量执行</td>
-    <td align="center">会话录制 · 回放与导出</td>
+    <td align="center">Docker 编排工作室 · Dockerfile 可视化编辑</td>
+    <td align="center">脚本库 · 脚本包分类 · 变量占位</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/automation.png" alt="批量自动化" /></td>
+    <td width="50%"><img src="docs/images/notes.png" alt="笔记" /></td>
+  </tr>
+  <tr>
+    <td align="center">批量自动化 · 多主机脚本执行</td>
+    <td align="center">笔记 · 分类管理 · Markdown 编辑</td>
   </tr>
 </table>
 
-### 终端工作区
+### 终端侧栏
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/terminal-files.png" alt="文件 / SFTP" /></td>
+    <td width="50%"><img src="docs/images/terminal-overview.png" alt="主机概览" /></td>
     <td width="50%"><img src="docs/images/terminal-scripts.png" alt="侧栏脚本" /></td>
   </tr>
   <tr>
-    <td align="center">SFTP · 拖放上传 · 框选多选</td>
-    <td align="center">侧栏脚本 · 历史命令 · 笔记</td>
+    <td align="center">概览 · CPU / 内存 / 磁盘 / 网络</td>
+    <td align="center">侧栏脚本 · 一键执行</td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/images/terminal-overview.png" alt="主机概览" /></td>
+    <td width="50%"><img src="docs/images/terminal-processes.png" alt="进程列表" /></td>
+    <td width="50%"><img src="docs/images/terminal-ports.png" alt="端口列表" /></td>
+  </tr>
+  <tr>
+    <td align="center">进程 · 按 CPU / 内存排序</td>
+    <td align="center">端口 · TCP / UDP / 对外筛选</td>
+  </tr>
+  <tr>
     <td width="50%"><img src="docs/images/terminal-docker.png" alt="侧栏 Docker" /></td>
+    <td width="50%"><img src="docs/images/terminal-notes.png" alt="侧栏笔记" /></td>
   </tr>
   <tr>
-    <td align="center">概览 · 进程 · 端口</td>
-    <td align="center">Docker 侧栏 · 实时日志跟随</td>
+    <td align="center">Docker 侧栏 · 容器管理 · 实时日志</td>
+    <td align="center">侧栏笔记 · 会话内快速查阅</td>
   </tr>
 </table>
 

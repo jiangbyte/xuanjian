@@ -4,7 +4,7 @@
  */
 
 import { auditLog } from "@/lib/audit";
-import { useHook } from "@/lib/agent/hooks/registry";
+import { registerHook } from "@/lib/agent/hooks/registry";
 import { getScript } from "@/lib/db";
 import { isDryRunAllowedInPlan } from "@/lib/agent/tools/handlers/deploy";
 import {
@@ -104,7 +104,7 @@ export function registerDefaultToolHooks(): void {
   if (registered) return;
   registered = true;
 
-  useHook("tools/pre-execute", async (ctx, next) => {
+  registerHook("tools/pre-execute", async (ctx, next) => {
     const { name, args, execCtx } = ctx;
 
     if (name.startsWith("mcp__")) {
@@ -174,7 +174,7 @@ export function registerDefaultToolHooks(): void {
     return next();
   });
 
-  useHook("tools/post-execute", async (ctx, next) => {
+  registerHook("tools/post-execute", async (ctx, next) => {
     const result = await next();
     if (
       isWriteTool(ctx.name) &&

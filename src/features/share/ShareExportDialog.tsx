@@ -61,7 +61,7 @@ export function ShareExportDialog({
     setSections({ ...ALL_OFF, ...defaults });
     setIncludeSecrets(false);
     setEncryptPackage(false);
-  }, [open]); // 仅在打开时套用 defaults，避免勾选被重置
+  }, [open, defaults]); // 仅在打开时套用 defaults，避免勾选被重置
 
   const anySelected = Object.values(sections).some(Boolean);
 

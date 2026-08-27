@@ -95,7 +95,7 @@ export function ScriptsConsole() {
 
   useEffect(() => {
     reload().catch(console.error);
-  }, []);
+  }, [reload]);
 
   const packageCounts = useMemo(() => {
     const map = new Map<number | "none", number>();

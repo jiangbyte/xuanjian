@@ -64,7 +64,7 @@ export function McpSettingsSection() {
 
   useEffect(() => {
     reload().catch(console.error);
-  }, []);
+  }, [reload]);
 
   const runTest = async (row: McpServerRow) => {
     setTestingId(row.id);

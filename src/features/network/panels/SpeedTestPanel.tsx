@@ -138,7 +138,7 @@ export function SpeedTestPanel({ embedded = false }: { embedded?: boolean }) {
   useEffect(() => {
     setServerId("auto");
     setActiveServer(null);
-  }, [ipVersion]);
+  }, []);
 
   useEffect(() => {
     let disposed = false;

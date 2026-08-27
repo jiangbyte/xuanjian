@@ -122,7 +122,7 @@ export function DockerfileStudio({ dockerfiles, onChange, onExport }: Props) {
         next.some((i) => i.id === id) ? id : (next[0]?.id ?? null),
       );
     }
-  }, [activePath, dockerfiles]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activePath, dockerfiles, source]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selected = useMemo(
     () => instructions.find((i) => i.id === selectedId) ?? null,

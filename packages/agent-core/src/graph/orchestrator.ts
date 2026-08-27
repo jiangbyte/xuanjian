@@ -236,8 +236,8 @@ export function buildOrchestratorGraph(config: OrchestratorConfig) {
   ): Promise<Partial<AgentGraphState>> => {
     checkAbort(config.signal);
     const reply = state.lastReply!;
-    let messages = [...state.messages];
-    let parts = [...state.assistantParts];
+    const messages = [...state.messages];
+    const parts = [...state.assistantParts];
 
     const thinking = reply.thinking.trim();
     if (thinking) {
@@ -487,7 +487,7 @@ export function buildOrchestratorGraph(config: OrchestratorConfig) {
   const finalize = async (
     state: AgentGraphState,
   ): Promise<Partial<AgentGraphState>> => {
-    let parts = [...state.assistantParts];
+    const parts = [...state.assistantParts];
     const reply = state.lastReply;
 
     if (reply && !isEmptyReply(reply) && reply.toolCalls.length === 0) {

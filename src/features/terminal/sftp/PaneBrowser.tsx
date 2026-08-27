@@ -164,7 +164,7 @@ export function PaneBrowser({
         api.sessionClose(sessionIdRef.current).catch(() => {});
       }
     };
-  }, [tab.id, tab.kind]);
+  }, [tab.kind]);
 
   const visible = useMemo(() => {
     let list = [...entries];
@@ -194,7 +194,7 @@ export function PaneBrowser({
 
   useEffect(() => {
     clearChecked();
-  }, [cwd, clearChecked]);
+  }, [clearChecked]);
 
   useEffect(() => {
     const el = listRef.current;
