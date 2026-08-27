@@ -107,12 +107,13 @@ jobs:
           releaseBody: |
             ## Highlights
 
+            - **玄鉴 Agent（LangGraph）**
+              - 本地编排改为 LangGraph（`agent-core` / `agent-adapters`），移除 Remote Agent / agent-server
+              - 修复 Anthropic / DeepSeek 历史回放时 `tool_result` 缺少对应 `tool_use` 导致的 400
+              - 上下文占用对齐 deepseek-harness：chars÷4 启发式 + API prompt 样本投影
+              - 自动上下文压缩阈值可配置；WebView 使用 `@langchain/langgraph/web` 避免白屏
             - **启动体验**：启动闪屏、主题预加载，减少白屏等待
-            - **文件浏览器 / SFTP**：拖放上传、框选多选、批量删除/下载；上传后目录不再跳动
-            - **玄鉴 Agent**
-              - 终端长任务智能等待（docker compose 等结束即返回）
-              - 弹窗/传输等待状态与耗时提示
-              - **禁止自动新建终端标签**，仅在当前已打开标签执行
+            - **文件浏览器 / SFTP**：拖放上传、框选多选、批量删除/下载
             - **多阶段流水线**（v1.0.0 起）：可视化编排 WSL / SSH 跨环境部署
 
             ## 安装包
