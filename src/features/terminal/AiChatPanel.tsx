@@ -9,6 +9,7 @@ import {
   Brain,
   History,
   Loader2,
+  Play,
   Plus,
   Send,
   Sparkles,
@@ -38,19 +39,23 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  estimateContextBudget,
   formatTokenCount,
-  historyTextFromUiMessages,
-  inTurnPartsEstimate,
   loadThinkingMode,
   mergeUsage,
-  parseContextWindow,
   saveLastAgentSessionId,
   saveThinkingMode,
   type LlmUsage,
   type ThinkingMode,
 } from "@/lib/agent/contextBudget";
+import {
+  buildContextMeterView,
+  buildProjectedMessagesFromUi,
+  measureSurfaceTokens,
+} from "@/lib/agent/contextBudget/meter";
+import { buildAgentHistory } from "@/lib/agent/session";
+import { steerAgent } from "@/lib/agent/runtime";
 import { buildOrchestratorSystemPrompt } from "@/lib/agent/prompts";
+import { buildPlanExecutePrompt } from "@/lib/agent/agent-loop/graceful-stop";
 import { toolsForOrchestrator } from "@/lib/agent/subagents";
 import { runAgentTurn } from "@/lib/agent/runtime";
 import type { AgentActivityPhase } from "@/lib/agent/types";
@@ -131,6 +136,9 @@ export function AiChatPanel() {
   const [lastUsage, setLastUsage] = useState<LlmUsage | null>(null);
   /** 当前会话累计 usage（本轮 busy 内多次 ReAct） */
   const [sessionUsage, setSessionUsage] = useState<LlmUsage | null>(null);
+  const [executedPlanKeys, setExecutedPlanKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -140,6 +148,9 @@ export function AiChatPanel() {
   const confirmWaiters = useRef(
     new Map<string, (ok: boolean) => void>(),
   );
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const sampledSurfaceRef = useRef<number | null>(null);
 
   const resolveConfirm = useCallback((id: string, ok: boolean) => {
     const w = confirmWaiters.current.get(id);
@@ -357,265 +368,422 @@ export function AiChatPanel() {
     return sessions.filter((s) => s.title.toLowerCase().includes(q));
   }, [sessions, histQ]);
 
-  const send = async () => {
-    const content = text.trim();
-    if (!content || busy) return;
-    setText("");
-    setBusy(true);
-    setLastUsage(null);
-    setSessionUsage(null);
-    setActivity({ phase: "planning", label: t("terminal.aiActivityStarting") });
-    const ac = new AbortController();
-    abortRef.current = ac;
-    try {
-      const sid = await ensureSession();
-      await appendAgentMessage({
-        session_id: sid,
-        role: "user",
-        parts: [{ type: "text", text: content }],
+  const runTurn = useCallback(
+    async (opts: {
+      content: string;
+      permissionMode?: AgentPermissionMode;
+      titleHint?: string;
+    }) => {
+      const content = opts.content.trim();
+      if (!content) return;
+      const activeMode = opts.permissionMode ?? permissionMode;
+      if (opts.permissionMode) setPermissionMode(opts.permissionMode);
+
+      setBusy(true);
+      setLastUsage(null);
+      setSessionUsage(null);
+      sampledSurfaceRef.current = null;
+      setActivity({
+        phase: "planning",
+        label: t("terminal.aiActivityStarting"),
       });
-      const userMsg: LiveMsg = {
-        id: `u-${Date.now()}`,
-        role: "user",
-        parts: [{ type: "text", text: content }],
-      };
-      const asstId = `a-${Date.now()}`;
-      setMessages((prev) => [
-        ...prev,
-        userMsg,
-        { id: asstId, role: "assistant", parts: [] },
-      ]);
+      const ac = new AbortController();
+      abortRef.current = ac;
+      try {
+        const sid = await ensureSession();
 
-      await updateAgentSession(sid, {
-        runtime,
-        remote_agent_id: remoteAgentId || null,
-        model_ref: modelRef || null,
-        permission_mode: permissionMode,
-        title: content.slice(0, 40),
-      });
+        const history = await buildAgentHistory(sid);
 
-      const history = [...messages, userMsg]
-        .filter((m) => m.role === "user" || m.role === "assistant")
-        .map((m) => ({
-          role: m.role as "user" | "assistant",
-          content: m.parts
-            .filter((p): p is Extract<MessagePart, { type: "text" }> =>
-              p.type === "text",
-            )
-            .map((p) => p.text)
-            .join("\n"),
-        }))
-        .filter((m) => m.content.trim());
+        await appendAgentMessage({
+          session_id: sid,
+          role: "user",
+          parts: [{ type: "text", text: content }],
+        });
+        const userMsg: LiveMsg = {
+          id: `u-${Date.now()}`,
+          role: "user",
+          parts: [{ type: "text", text: content }],
+        };
+        const asstId = `a-${Date.now()}`;
+        setMessages((prev) => [
+          ...prev,
+          userMsg,
+          { id: asstId, role: "assistant", parts: [] },
+        ]);
 
-      await runAgentTurn({
-        sessionId: sid,
-        userText: content,
-        runtime,
-        remoteAgentId: remoteAgentId || null,
-        modelRef: modelRef || null,
-        permissionMode,
-        thinkingMode,
-        history: history.slice(0, -1),
-        signal: ac.signal,
-        onConfirmTool: (req) =>
-          new Promise<boolean>((resolve) => {
-            confirmWaiters.current.set(req.id, resolve);
-          }),
-        onEvent: (e) => {
-          if (e.type === "usage") {
-            setLastUsage(e.usage);
-            setSessionUsage((prev) => mergeUsage(prev, e.usage));
-            return;
-          }
-          if (e.type === "activity") {
-            activitySinceRef.current = Date.now();
-            setActivity({
-              phase: e.phase,
-              label: e.label,
-              detail: e.detail,
-            });
-            return;
-          }
-          if (e.type === "done") {
-            setActivity({ phase: "idle", label: "" });
-            return;
-          }
-          setMessages((prev) => {
-            const next = [...prev];
-            const idx = next.findIndex((m) => m.id === asstId);
-            if (idx < 0) return prev;
-            const cur = { ...next[idx], parts: [...next[idx].parts] };
+        await updateAgentSession(sid, {
+          runtime,
+          remote_agent_id: remoteAgentId || null,
+          model_ref: modelRef || null,
+          permission_mode: activeMode,
+          title: (opts.titleHint ?? content).slice(0, 40),
+        });
 
-            const agentOf =
-              "agent" in e ? (e as { agent?: string }).agent : undefined;
-            // 待确认必须顶层可见，不可塞进 SubAgent 折叠子轨迹
-            const nestIntoSub = Boolean(
-              agentOf &&
-                agentOf !== "orchestrator" &&
-                (e.type === "thinking" ||
-                  e.type === "text" ||
-                  e.type === "tool_call" ||
-                  e.type === "tool_result"),
-            );
+        await runAgentTurn({
+          sessionId: sid,
+          userText: content,
+          runtime,
+          remoteAgentId: remoteAgentId || null,
+          modelRef: modelRef || null,
+          permissionMode: activeMode,
+          thinkingMode,
+          history,
+          signal: ac.signal,
+          onConfirmTool: (req) =>
+            new Promise<boolean>((resolve) => {
+              confirmWaiters.current.set(req.id, resolve);
+            }),
+          onEvent: (e) => {
+            if (e.type === "usage") {
+              const system = buildOrchestratorSystemPrompt(activeMode);
+              const tools = toolsForOrchestrator(activeMode);
+              const projectedMsgs = buildProjectedMessagesFromUi({
+                messages: messagesRef.current,
+                busy: true,
+              });
+              sampledSurfaceRef.current = measureSurfaceTokens({
+                system,
+                tools,
+                messages: projectedMsgs,
+              });
+              setLastUsage(e.usage);
+              setSessionUsage((prev) => mergeUsage(prev, e.usage));
+              return;
+            }
+            if (e.type === "activity") {
+              activitySinceRef.current = Date.now();
+              setActivity({
+                phase: e.phase,
+                label: e.label,
+                detail: e.detail,
+              });
+              return;
+            }
+            if (e.type === "done") {
+              setActivity({ phase: "idle", label: "" });
+              return;
+            }
+            setMessages((prev) => {
+              const next = [...prev];
+              const idx = next.findIndex((m) => m.id === asstId);
+              if (idx < 0) return prev;
+              const cur = { ...next[idx], parts: [...next[idx].parts] };
 
-            const pushChild = (child: MessagePart) => {
-              const si = cur.parts.findIndex(
-                (p) =>
-                  p.type === "subagent" &&
-                  p.status === "running" &&
-                  p.agent === (e as { agent?: string }).agent,
+              const agentOf =
+                "agent" in e ? (e as { agent?: string }).agent : undefined;
+              // 待确认必须顶层可见，不可塞进 SubAgent 折叠子轨迹
+              const nestIntoSub = Boolean(
+                agentOf &&
+                  agentOf !== "orchestrator" &&
+                  (e.type === "thinking" ||
+                    e.type === "thinking_delta" ||
+                    e.type === "text" ||
+                    e.type === "text_delta" ||
+                    e.type === "tool_call" ||
+                    e.type === "tool_result"),
               );
-              if (si < 0) {
-                cur.parts.push(child);
-                return;
-              }
-              const sub = cur.parts[si];
-              if (sub.type !== "subagent") return;
-              cur.parts[si] = {
-                ...sub,
-                children: [...(sub.children ?? []), child],
+
+              const findRunningSubagent = (agent?: string) => {
+                const si = cur.parts.findIndex(
+                  (p) =>
+                    p.type === "subagent" &&
+                    p.status === "running" &&
+                    p.agent === agent,
+                );
+                if (si < 0) return null;
+                const sub = cur.parts[si];
+                if (sub.type !== "subagent") return null;
+                return { si, sub };
               };
-            };
 
-            const removePendingEverywhere = (id: string) => {
-              cur.parts = cur.parts.filter(
-                (p) => !(p.type === "tool_pending" && p.id === id),
-              );
-              for (let i = 0; i < cur.parts.length; i++) {
-                const p = cur.parts[i];
-                if (p.type !== "subagent" || !p.children?.length) continue;
-                cur.parts[i] = {
-                  ...p,
-                  children: p.children.filter(
-                    (c) => !(c.type === "tool_pending" && c.id === id),
-                  ),
+              const pushChild = (child: MessagePart, agent?: string) => {
+                const found = findRunningSubagent(agent ?? agentOf);
+                if (!found) {
+                  cur.parts.push(child);
+                  return;
+                }
+                const { si, sub } = found;
+                cur.parts[si] = {
+                  ...sub,
+                  children: [...(sub.children ?? []), child],
                 };
-              }
-            };
-
-            if (e.type === "thinking") {
-              const part: MessagePart = {
-                type: "thinking",
-                text: e.text,
-                agent: e.agent,
               };
-              if (nestIntoSub) pushChild(part);
-              else cur.parts.push(part);
-            } else if (e.type === "text") {
-              if (nestIntoSub) {
-                pushChild({
-                  type: "text",
-                  text: e.text,
-                  agent: e.agent,
-                });
-              } else {
-                const last = cur.parts[cur.parts.length - 1];
-                if (last?.type === "text" && last.agent === e.agent) {
-                  cur.parts[cur.parts.length - 1] = {
-                    type: "text",
-                    text: last.text + e.text,
-                    agent: e.agent,
+
+              const appendStreamInSub = (
+                kind: "thinking" | "text",
+                delta: string,
+                agent?: string,
+              ) => {
+                const found = findRunningSubagent(agent);
+                if (!found) {
+                  cur.parts.push({ type: kind, text: delta, agent });
+                  return;
+                }
+                const { si, sub } = found;
+                const children = [...(sub.children ?? [])];
+                const last = children[children.length - 1];
+                if (last?.type === kind && last.agent === agent) {
+                  children[children.length - 1] = {
+                    type: kind,
+                    text: last.text + delta,
+                    agent,
                   };
                 } else {
+                  children.push({ type: kind, text: delta, agent });
+                }
+                cur.parts[si] = { ...sub, children };
+              };
+
+              const upsertChildToolPart = (
+                part: MessagePart,
+                agent?: string,
+              ) => {
+                if (
+                  part.type !== "tool_call" &&
+                  part.type !== "tool_pending" &&
+                  part.type !== "tool_result"
+                ) {
+                  pushChild(part, agent);
+                  return;
+                }
+                const found = findRunningSubagent(agent);
+                if (!found) {
+                  const i = cur.parts.findIndex(
+                    (p) =>
+                      (p.type === "tool_call" || p.type === "tool_pending") &&
+                      p.id === part.id,
+                  );
+                  if (i >= 0) cur.parts[i] = part;
+                  else cur.parts.push(part);
+                  return;
+                }
+                const { si, sub } = found;
+                const children = [...(sub.children ?? [])];
+                const ci = children.findIndex(
+                  (c) =>
+                    (c.type === part.type ||
+                      (part.type === "tool_pending" &&
+                        (c.type === "tool_call" || c.type === "tool_pending")) ||
+                      (part.type === "tool_call" &&
+                        (c.type === "tool_call" || c.type === "tool_pending"))) &&
+                    c.id === part.id,
+                );
+                if (ci >= 0) children[ci] = part;
+                else children.push(part);
+                cur.parts[si] = { ...sub, children };
+              };
+
+              const removePendingEverywhere = (id: string) => {
+                cur.parts = cur.parts.filter(
+                  (p) => !(p.type === "tool_pending" && p.id === id),
+                );
+                for (let i = 0; i < cur.parts.length; i++) {
+                  const p = cur.parts[i];
+                  if (p.type !== "subagent" || !p.children?.length) continue;
+                  cur.parts[i] = {
+                    ...p,
+                    children: p.children.filter(
+                      (c) => !(c.type === "tool_pending" && c.id === id),
+                    ),
+                  };
+                }
+              };
+
+              const appendStreamPart = (
+                kind: "thinking" | "text",
+                delta: string,
+                agent?: string,
+              ) => {
+                if (nestIntoSub) {
+                  appendStreamInSub(kind, delta, agent);
+                  return;
+                }
+                const last = cur.parts[cur.parts.length - 1];
+                if (last?.type === kind && last.agent === agent) {
+                  cur.parts[cur.parts.length - 1] = {
+                    type: kind,
+                    text: last.text + delta,
+                    agent,
+                  };
+                  return;
+                }
+                cur.parts.push({ type: kind, text: delta, agent });
+              };
+
+              if (e.type === "thinking_delta") {
+                appendStreamPart("thinking", e.text, e.agent);
+              } else if (e.type === "text_delta") {
+                appendStreamPart("text", e.text, e.agent);
+              } else if (e.type === "thinking") {
+                if (nestIntoSub) {
+                  appendStreamInSub("thinking", e.text, e.agent);
+                } else {
                   cur.parts.push({
-                    type: "text",
+                    type: "thinking",
                     text: e.text,
                     agent: e.agent,
                   });
                 }
-              }
-            } else if (e.type === "tool_call") {
-              const part: MessagePart = {
-                type: "tool_call",
-                id: e.id,
-                name: e.name,
-                args: e.args,
-                agent: e.agent,
-              };
-              removePendingEverywhere(e.id);
-              if (nestIntoSub) pushChild(part);
-              else cur.parts.push(part);
-            } else if (e.type === "tool_pending") {
-              // 始终顶层展示，避免藏在「展开子轨迹」里
-              const pending: MessagePart = {
-                type: "tool_pending",
-                id: e.id,
-                name: e.name,
-                args: e.args,
-                dangerous: e.dangerous,
-                agent: e.agent,
-              };
-              removePendingEverywhere(e.id);
-              const i = cur.parts.findIndex(
-                (p) =>
-                  (p.type === "tool_call" || p.type === "tool_pending") &&
-                  p.id === e.id,
-              );
-              if (i >= 0) cur.parts[i] = pending;
-              else cur.parts.push(pending);
-            } else if (e.type === "tool_result") {
-              const resultPart: MessagePart = {
-                type: "tool_result",
-                id: e.id,
-                name: e.name,
-                result: e.result,
-                agent: e.agent,
-              };
-              removePendingEverywhere(e.id);
-              if (nestIntoSub) pushChild(resultPart);
-              else cur.parts.push(resultPart);
-            } else if (e.type === "subagent_start") {
-              cur.parts.push({
-                type: "subagent",
-                id: e.id,
-                agent: e.agent,
-                label: e.label,
-                task: e.task,
-                status: "running",
-                children: [],
-              });
-            } else if (e.type === "subagent_end") {
-              const i = cur.parts.findIndex(
-                (p) => p.type === "subagent" && p.id === e.id,
-              );
-              if (i >= 0 && cur.parts[i].type === "subagent") {
-                cur.parts[i] = {
-                  ...cur.parts[i],
-                  status: e.ok ? "done" : "error",
-                  summary: e.summary,
-                  children: e.children ?? cur.parts[i].children,
+              } else if (e.type === "text") {
+                if (nestIntoSub) {
+                  appendStreamInSub("text", e.text, e.agent);
+                } else {
+                  const last = cur.parts[cur.parts.length - 1];
+                  if (last?.type === "text" && last.agent === e.agent) {
+                    cur.parts[cur.parts.length - 1] = {
+                      type: "text",
+                      text: last.text + e.text,
+                      agent: e.agent,
+                    };
+                  } else {
+                    cur.parts.push({
+                      type: "text",
+                      text: e.text,
+                      agent: e.agent,
+                    });
+                  }
+                }
+              } else if (e.type === "tool_call") {
+                const part: MessagePart = {
+                  type: "tool_call",
+                  id: e.id,
+                  name: e.name,
+                  args: e.args,
+                  agent: e.agent,
                 };
+                removePendingEverywhere(e.id);
+                if (nestIntoSub) upsertChildToolPart(part, e.agent);
+                else {
+                  const i = cur.parts.findIndex(
+                    (p) =>
+                      (p.type === "tool_call" || p.type === "tool_pending") &&
+                      p.id === e.id,
+                  );
+                  if (i >= 0) cur.parts[i] = part;
+                  else cur.parts.push(part);
+                }
+              } else if (e.type === "tool_pending") {
+                const pending: MessagePart = {
+                  type: "tool_pending",
+                  id: e.id,
+                  name: e.name,
+                  args: e.args,
+                  dangerous: e.dangerous,
+                  agent: e.agent,
+                };
+                removePendingEverywhere(e.id);
+                const i = cur.parts.findIndex(
+                  (p) =>
+                    (p.type === "tool_call" || p.type === "tool_pending") &&
+                    p.id === e.id,
+                );
+                if (i >= 0) cur.parts[i] = pending;
+                else cur.parts.push(pending);
+              } else if (e.type === "tool_result") {
+                const resultPart: MessagePart = {
+                  type: "tool_result",
+                  id: e.id,
+                  name: e.name,
+                  result: e.result,
+                  agent: e.agent,
+                };
+                removePendingEverywhere(e.id);
+                if (nestIntoSub) upsertChildToolPart(resultPart, e.agent);
+                else cur.parts.push(resultPart);
+              } else if (e.type === "subagent_start") {
+                cur.parts.push({
+                  type: "subagent",
+                  id: e.id,
+                  agent: e.agent,
+                  label: e.label,
+                  task: e.task,
+                  status: "running",
+                  children: [],
+                });
+              } else if (e.type === "subagent_end") {
+                const i = cur.parts.findIndex(
+                  (p) => p.type === "subagent" && p.id === e.id,
+                );
+                if (i >= 0 && cur.parts[i].type === "subagent") {
+                  cur.parts[i] = {
+                    ...cur.parts[i],
+                    status: e.ok ? "done" : "error",
+                    summary: e.summary,
+                    children: e.children ?? cur.parts[i].children,
+                  };
+                }
+              } else if (e.type === "plan") {
+                cur.parts.push({ type: "plan", items: e.items });
+              } else if (e.type === "status") {
+                cur.parts.push({ type: "status", text: e.text });
+              } else if (e.type === "error") {
+                cur.parts.push({ type: "text", text: `错误：${e.text}` });
               }
-            } else if (e.type === "plan") {
-              cur.parts.push({ type: "plan", items: e.items });
-            } else if (e.type === "status") {
-              cur.parts.push({ type: "status", text: e.text });
-            } else if (e.type === "error") {
-              cur.parts.push({ type: "text", text: `错误：${e.text}` });
-            }
-            next[idx] = cur;
-            return next;
-          });
-        },
-      });
-      await reloadMeta();
-    } catch (e) {
-      const msg = String(e);
-      if (!msg.includes("已取消")) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `err-${Date.now()}`,
-            role: "assistant",
-            parts: [{ type: "text", text: msg }],
+              next[idx] = cur;
+              return next;
+            });
           },
-        ]);
+        });
+        await reloadMeta();
+      } catch (e) {
+        const msg = String(e);
+        if (!msg.includes("已取消")) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `err-${Date.now()}`,
+              role: "assistant",
+              parts: [{ type: "text", text: msg }],
+            },
+          ]);
+        }
+      } finally {
+        abortRef.current = null;
+        setActivity({ phase: "idle", label: "" });
+        setBusy(false);
       }
-    } finally {
-      abortRef.current = null;
-      setActivity({ phase: "idle", label: "" });
-      setBusy(false);
+    },
+    [
+      permissionMode,
+      ensureSession,
+      runtime,
+      remoteAgentId,
+      modelRef,
+      thinkingMode,
+      reloadMeta,
+      t,
+    ],
+  );
+
+  const executePlan = useCallback(
+    (items: string[], planKey: string) => {
+      if (busy || executedPlanKeys.has(planKey) || items.length === 0) return;
+      setExecutedPlanKeys((prev) => new Set(prev).add(planKey));
+      void runTurn({
+        content: buildPlanExecutePrompt(items),
+        permissionMode: "confirm",
+        titleHint: `执行计划：${items[0]?.slice(0, 24) ?? ""}`,
+      });
+    },
+    [busy, executedPlanKeys, runTurn],
+  );
+
+  const send = async () => {
+    const content = text.trim();
+    if (!content) return;
+    if (busy) {
+      if (sessionId) steerAgent(sessionId, content);
+      setText("");
+      const steerMsg: LiveMsg = {
+        id: `u-steer-${Date.now()}`,
+        role: "user",
+        parts: [{ type: "text", text: content }],
+      };
+      setMessages((prev) => [...prev, steerMsg]);
+      return;
     }
+    setText("");
+    await runTurn({ content });
   };
 
   const refreshRemote = async () => {
@@ -641,7 +809,7 @@ export function AiChatPanel() {
     return parts[parts.length - 1] || o.label;
   }, [modelOptions, modelRef, t]);
 
-  const contextLimit = useMemo(() => {
+  const modelContextTag = useMemo(() => {
     const decoded = modelRef.includes(":")
       ? {
           providerId: Number(modelRef.slice(0, modelRef.indexOf(":"))),
@@ -654,29 +822,41 @@ export function AiChatPanel() {
         m.provider_id === decoded.providerId &&
         m.model_id === decoded.modelId,
     );
-    return parseContextWindow(row?.context_tag || "128k");
+    return row?.context_tag || "128k";
   }, [modelRef, models]);
 
   const contextBudget = useMemo(() => {
-    const hist = historyTextFromUiMessages(messages);
-    const inTurn = inTurnPartsEstimate(messages);
-    return estimateContextBudget({
-      systemPrompt: buildOrchestratorSystemPrompt(permissionMode),
-      history: hist,
-      inTurnExtra: inTurn,
-      tools: toolsForOrchestrator(permissionMode),
+    const system = buildOrchestratorSystemPrompt(permissionMode);
+    const tools = toolsForOrchestrator(permissionMode);
+    const projectedMsgs = buildProjectedMessagesFromUi({
+      messages,
+      busy,
       draft: text,
-      contextLimit,
-      lastUsage,
-      sessionUsage,
     });
+    const meter = buildContextMeterView({
+      system,
+      tools,
+      messages: projectedMsgs,
+      contextTag: modelContextTag,
+      lastUsage,
+      sampledSurfaceTokens: sampledSurfaceRef.current,
+    });
+    return {
+      ...meter,
+      sessionInput: sessionUsage
+        ? sessionUsage.totalPrompt
+        : undefined,
+      sessionOutput: sessionUsage?.output,
+    };
   }, [
     messages,
     text,
-    contextLimit,
+    busy,
+    modelContextTag,
     permissionMode,
     lastUsage,
     sessionUsage,
+    activityTick,
   ]);
 
   const agentShort =
@@ -845,9 +1025,14 @@ export function AiChatPanel() {
             {messages.map((m) => (
               <MessageBlock
                 key={m.id}
+                messageId={m.id}
                 role={m.role}
                 parts={m.parts}
                 onConfirm={resolveConfirm}
+                onExecutePlan={executePlan}
+                executedPlanKeys={executedPlanKeys}
+                busy={busy}
+                permissionMode={permissionMode}
               />
             ))}
             {busy ? (
@@ -1054,7 +1239,14 @@ export function AiChatPanel() {
                 type="button"
                 className="flex w-full items-center gap-2 border-b border-border/70 px-2 py-1 text-left hover:bg-muted/40"
               >
-                <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+                <div className="relative h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="pointer-events-none absolute inset-y-0 z-10 w-px bg-muted-foreground/40"
+                    style={{
+                      left: `${Math.min(99, contextBudget.thresholdPercent)}%`,
+                    }}
+                    title={`压缩阈值 ${contextBudget.thresholdPercent}%`}
+                  />
                   <div
                     className={cn(
                       "h-full rounded-full transition-all",
@@ -1071,10 +1263,10 @@ export function AiChatPanel() {
                 </div>
                 <span className="shrink-0 tabular-nums text-[10px] text-muted-foreground">
                   {contextBudget.percent}% ·{" "}
-                  {contextBudget.lastApiPrompt != null
-                    ? formatTokenCount(contextBudget.lastApiPrompt)
-                    : `~${formatTokenCount(contextBudget.total)}`}
-                  /{formatTokenCount(contextBudget.limit)}
+                  {contextBudget.pressureTokens != null
+                    ? formatTokenCount(contextBudget.projectedTokens)
+                    : `~${formatTokenCount(contextBudget.projectedTokens)}`}
+                  /{formatTokenCount(contextBudget.contextWindow)}
                 </span>
               </button>
             </PopoverTrigger>
@@ -1086,34 +1278,28 @@ export function AiChatPanel() {
               <div className="font-medium">{t("terminal.aiContextTitle")}</div>
               <BudgetRow
                 label={t("terminal.aiContextSystem")}
-                value={contextBudget.system}
+                value={contextBudget.systemTokens}
               />
               <BudgetRow
                 label={t("terminal.aiContextTools")}
-                value={contextBudget.tools}
+                value={contextBudget.toolsTokens}
               />
               <BudgetRow
                 label={t("terminal.aiContextMessages")}
-                value={contextBudget.messages}
+                value={contextBudget.messageTokens}
               />
-              {contextBudget.inTurn > 0 ? (
-                <BudgetRow
-                  label={t("terminal.aiContextInTurn")}
-                  value={contextBudget.inTurn}
-                />
-              ) : null}
-              <BudgetRow
-                label={t("terminal.aiContextDraft")}
-                value={contextBudget.draft}
-              />
-              {contextBudget.lastApiPrompt != null ? (
+              {contextBudget.pressureTokens != null ? (
                 <>
                   <div className="border-t border-border pt-1.5 font-medium">
                     {t("terminal.aiContextLastApi")}
                   </div>
                   <BudgetRow
                     label={t("terminal.aiContextApiInput")}
-                    value={contextBudget.lastApiPrompt}
+                    value={contextBudget.pressureTokens}
+                  />
+                  <BudgetRow
+                    label="投影占用"
+                    value={contextBudget.projectedTokens}
                   />
                   {contextBudget.lastApiOutput != null ? (
                     <BudgetRow
@@ -1154,7 +1340,7 @@ export function AiChatPanel() {
                 </>
               ) : null}
               <div className="border-t border-border pt-1.5 text-[10px] text-muted-foreground">
-                {t("terminal.aiContextHint")}
+                占用率基于 projectedTokens（API 样本 + 表层增量）；下方组成为启发式估算，相加不等于占用总量。
               </div>
             </PopoverContent>
           </Popover>
@@ -1177,7 +1363,7 @@ export function AiChatPanel() {
               type="button"
               size="icon-sm"
               className="mb-0.5 size-7 shrink-0"
-              disabled={busy || !text.trim()}
+              disabled={!text.trim()}
               onClick={() => void send()}
             >
               {busy ? (
@@ -1208,13 +1394,23 @@ function BudgetRow({ label, value }: { label: string; value: number }) {
 }
 
 function MessageBlock({
+  messageId,
   role,
   parts,
   onConfirm,
+  onExecutePlan,
+  executedPlanKeys,
+  busy,
+  permissionMode,
 }: {
+  messageId: string;
   role: "user" | "assistant";
   parts: MessagePart[];
   onConfirm?: (id: string, ok: boolean) => void;
+  onExecutePlan?: (items: string[], planKey: string) => void;
+  executedPlanKeys?: Set<string>;
+  busy?: boolean;
+  permissionMode?: AgentPermissionMode;
 }) {
   if (role === "user") {
     const text = parts
@@ -1230,7 +1426,16 @@ function MessageBlock({
   return (
     <div className="mr-1 space-y-1.5 text-[12px] leading-[1.55]">
       {parts.map((p, i) => (
-        <PartView key={i} part={p} onConfirm={onConfirm} />
+        <PartView
+          key={i}
+          part={p}
+          planKey={p.type === "plan" ? `${messageId}:${i}` : undefined}
+          onConfirm={onConfirm}
+          onExecutePlan={onExecutePlan}
+          executedPlanKeys={executedPlanKeys}
+          busy={busy}
+          permissionMode={permissionMode}
+        />
       ))}
     </div>
   );
@@ -1295,11 +1500,22 @@ function toolLabel(name: string, args: unknown): string {
 
 function PartView({
   part,
+  planKey,
   onConfirm,
+  onExecutePlan,
+  executedPlanKeys,
+  busy,
+  permissionMode,
 }: {
   part: MessagePart;
+  planKey?: string;
   onConfirm?: (id: string, ok: boolean) => void;
+  onExecutePlan?: (items: string[], planKey: string) => void;
+  executedPlanKeys?: Set<string>;
+  busy?: boolean;
+  permissionMode?: AgentPermissionMode;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(part.type === "thinking");
   if (part.type === "text") {
     return (
@@ -1386,14 +1602,40 @@ function PartView({
     const md = part.items
       .map((it, i) => `${i + 1}. ${it.replace(/\n+/g, " ")}`)
       .join("\n");
+    const executed = planKey ? executedPlanKeys?.has(planKey) : false;
+    const executeLabel =
+      permissionMode === "plan"
+        ? t("terminal.aiPlanExecuteSwitch")
+        : t("terminal.aiPlanExecute");
     return (
       <div className="rounded-md border border-border bg-muted/50 px-2 py-1.5 text-[11px]">
-        <div className="mb-1 font-medium">计划（未执行）</div>
+        <div className="mb-1 font-medium">{t("terminal.aiPlanTitle")}</div>
         <MarkdownViewer
           source={md}
           density="compact"
           className="text-sidebar-foreground"
         />
+        {part.items.length > 0 ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-border/60 pt-2">
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 gap-1 px-2 text-[10px]"
+              disabled={Boolean(busy || executed)}
+              onClick={() => {
+                if (planKey) onExecutePlan?.(part.items, planKey);
+              }}
+            >
+              <Play size={11} />
+              {executed ? t("terminal.aiPlanExecuted") : executeLabel}
+            </Button>
+            {permissionMode === "plan" && !executed ? (
+              <span className="text-[10px] text-muted-foreground">
+                {t("terminal.aiPlanExecuteHint")}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     );
   }

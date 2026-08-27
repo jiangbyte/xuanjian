@@ -160,6 +160,8 @@ function partToEstimateText(part: MessagePart): string {
       const kids = (part.children ?? []).map(partToEstimateText).join("\n");
       return [part.task, part.summary ?? "", kids].filter(Boolean).join("\n");
     }
+    case "compaction":
+      return part.summary;
     default:
       return "";
   }

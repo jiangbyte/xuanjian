@@ -12,7 +12,7 @@ export function buildOrchestratorSystemPrompt(
 ): string {
   const modeLine =
     mode === "plan"
-      ? "【权限=计划】禁止写操作与 terminal SubAgent 执行命令；可用 inspector 只读收集后给出分步计划。"
+      ? "【权限=计划】禁止写操作与 terminal SubAgent 执行命令；可用 inspector 只读收集。最终回复先写结论与依据；若确有需切换至确认/执行模式才会动手的操作，单独用「## 执行计划」标题列出可执行步骤（命令或工具名+要点）。无需清理/无写操作时省略该节，不要把巡检结论或文件大小清单当作计划项。"
       : mode === "confirm"
         ? "【权限=确认执行】写操作与 terminal SubAgent 的命令会要求用户确认。"
         : "【权限=完全执行】可直接派发执行；危险命令仍会二次确认。";
@@ -30,6 +30,7 @@ export function buildOrchestratorSystemPrompt(
     "本地能力：list_scripts / get_script 查阅脚本库；list_pipelines / run_pipeline 执行流水线；list_cmd_history 查阅历史；list_sessions 查看焦点标签。",
     "简单一问一答可直接用本地工具，不必强行派发。",
     "遵循 ReAct：Thought → Action → Observation；禁止编造 Observation。",
+    "长任务请先分段思考：列出检查项/步骤清单，再逐步调用工具；每步根据 Observation 更新计划，避免一次输出过长结论。",
     "多步任务（部署/同步/清理等）：必须按步骤连续执行直至完成或明确受阻；sync_to_remote 的 dry_run 只是预览，完成后须继续实际 sync、部署与验证，不得在仅完成 dry_run 后结束。",
     "批量文件同步用 sync_to_remote，不要 read_file + write_remote_file 逐文件搬运。",
     "docker pull/compose 等长任务：terminal_run/terminal_tail 的 wait_ms 为上限，出现 shell 提示符或输出稳定后会自动提前返回；registry 超时时建议配置镜像加速。",

@@ -22,7 +22,10 @@
     "lint": "biome check --formatter-enabled=false --assist-enabled=false .",
     "format": "biome format --write .",
     "check": "biome check --write .",
-    "ci": "pnpm typecheck && pnpm lint && pnpm build"
+    "ci": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "agent-server:dev": "pnpm --dir packages/agent-server dev"
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.1.1",
@@ -87,6 +90,7 @@
     "postcss": "^8.5.26",
     "tailwindcss": "^4.1.11",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vitest": "^3.2.4"
   }
 }

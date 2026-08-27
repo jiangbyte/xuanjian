@@ -53,6 +53,7 @@ export type AgentSessionRow = {
   title: string;
   runtime: AgentRuntimeKind;
   remote_agent_id: string | null;
+  remote_backend_session_id: string | null;
   model_ref: string | null;
   permission_mode: AgentPermissionMode;
   host_id: number | null;
@@ -70,6 +71,7 @@ export type MessagePart =
       name: string;
       args: unknown;
       agent?: string;
+      thinkingBefore?: string;
     }
   | {
       type: "tool_pending";
@@ -97,7 +99,8 @@ export type MessagePart =
       children?: MessagePart[];
     }
   | { type: "plan"; title?: string; items: string[]; agent?: string }
-  | { type: "status"; text: string };
+  | { type: "status"; text: string }
+  | { type: "compaction"; summary: string };
 
 export type AgentMessageRow = {
   id: number;
@@ -403,6 +406,7 @@ export async function updateAgentSession(
     title: string;
     runtime: AgentRuntimeKind;
     remote_agent_id: string | null;
+    remote_backend_session_id: string | null;
     model_ref: string | null;
     permission_mode: AgentPermissionMode;
     host_id: number | null;
@@ -419,16 +423,19 @@ export async function updateAgentSession(
   if (!cur) throw new Error("session not found");
   await db.execute(
     `UPDATE agent_sessions SET
-      title=$1, runtime=$2, remote_agent_id=$3, model_ref=$4,
-      permission_mode=$5, host_id=$6, tab_id=$7,
+      title=$1, runtime=$2, remote_agent_id=$3, remote_backend_session_id=$4,
+      model_ref=$5, permission_mode=$6, host_id=$7, tab_id=$8,
       updated_at=datetime('now')
-     WHERE id=$8`,
+     WHERE id=$9`,
     [
       patch.title ?? cur.title,
       patch.runtime ?? cur.runtime,
       patch.remote_agent_id === undefined
         ? cur.remote_agent_id
         : patch.remote_agent_id,
+      patch.remote_backend_session_id === undefined
+        ? cur.remote_backend_session_id
+        : patch.remote_backend_session_id,
       patch.model_ref === undefined ? cur.model_ref : patch.model_ref,
       patch.permission_mode ?? cur.permission_mode,
       patch.host_id === undefined ? cur.host_id : patch.host_id,

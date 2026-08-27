@@ -285,6 +285,7 @@ export type AiChatChunk = {
   toolCalls?: unknown;
   error?: string | null;
   raw?: unknown;
+  usage?: unknown;
 };
 
 export function onAiChatChunk(

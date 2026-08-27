@@ -240,11 +240,18 @@ function normalizeAnthropic(raw: unknown): NormalizedLlmReply {
 }
 
 function splitThinkTags(text: string): { thinking: string; text: string } {
-  const re = /<think>([\s\S]*?)<\/think>/gi;
+  const patterns = [
+    /<think>([\s\S]*?)<\/redacted_thinking>/gi,
+    /([\s\S]*?)<\/think>/gi,
+    /<thinking>([\s\S]*?)<\/thinking>/gi,
+  ];
   const parts: string[] = [];
-  for (const m of text.matchAll(re)) {
-    parts.push(m[1].trim());
+  let cleaned = text;
+  for (const re of patterns) {
+    for (const m of cleaned.matchAll(re)) {
+      parts.push(m[1].trim());
+    }
+    cleaned = cleaned.replace(re, "").trim();
   }
-  const cleaned = parts.length ? text.replace(re, "").trim() : text;
-  return { thinking: parts.join("\n"), text: cleaned };
+  return { thinking: parts.join("\n"), text: cleaned || text };
 }

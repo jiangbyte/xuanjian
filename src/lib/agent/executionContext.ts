@@ -140,6 +140,29 @@ export async function buildExecutionContextBlock(): Promise<string> {
   return lines.join("\n");
 }
 
+let lastExecutionContextHash = "";
+
+function hashText(s: string): string {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return String(h);
+}
+
+/** 执行上下文变化时才返回新块（供 inbox.inject） */
+export async function buildExecutionContextBlockIfChanged(): Promise<
+  string | null
+> {
+  const block = await buildExecutionContextBlock();
+  const h = hashText(block);
+  if (h === lastExecutionContextHash) return null;
+  lastExecutionContextHash = h;
+  return block;
+}
+
+export function resetExecutionContextCache(): void {
+  lastExecutionContextHash = "";
+}
+
 /** list_sessions 工具用的序列化 */
 export async function serializeSessionsForAgent(): Promise<
   Record<string, unknown>

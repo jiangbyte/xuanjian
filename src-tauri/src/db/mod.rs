@@ -534,5 +534,16 @@ CREATE INDEX IF NOT EXISTS idx_pipeline_runs_pipeline ON pipeline_runs(pipeline_
 "#,
             kind: MigrationKind::Up,
         },
+        // —— 迁移 v21：远程后端会话 ID + Agent 压缩设置 ——
+        Migration {
+            version: 21,
+            description: "agent_remote_backend_session_compaction",
+            sql: r#"
+ALTER TABLE agent_sessions ADD COLUMN remote_backend_session_id TEXT;
+INSERT OR IGNORE INTO app_settings (key, value) VALUES ('agent.auto_compact', 'true');
+INSERT OR IGNORE INTO app_settings (key, value) VALUES ('agent.compact_threshold', '0.8');
+"#,
+            kind: MigrationKind::Up,
+        },
     ]
 }

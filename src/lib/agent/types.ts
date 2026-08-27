@@ -3,7 +3,8 @@
  * @author Charlie
  */
 
-import type { LlmUsage, ThinkingMode } from "@/lib/agent/contextBudget";
+import type { LlmMessage } from "@/lib/agent/llm";
+import type { ThinkingMode } from "@/lib/agent/contextBudget";
 import { getSetting, type AgentPermissionMode } from "@/lib/db";
 
 /** 侧栏活动条阶段：让用户感知是否仍在执行 */
@@ -19,7 +20,9 @@ export type AgentActivityPhase =
 
 export type RuntimeEvent =
   | { type: "thinking"; text: string; agent?: string }
+  | { type: "thinking_delta"; text: string; agent?: string }
   | { type: "text"; text: string; agent?: string }
+  | { type: "text_delta"; text: string; agent?: string }
   | {
       type: "tool_call";
       id: string;
@@ -67,7 +70,7 @@ export type RuntimeEvent =
       children?: import("@/lib/db").MessagePart[];
     }
   | { type: "error"; text: string }
-  | { type: "usage"; usage: LlmUsage; agent?: string }
+  | { type: "usage"; usage: import("@/lib/agent/contextBudget").LlmUsage; agent?: string }
   | { type: "done" };
 
 export type ConfirmToolRequest = {
@@ -85,7 +88,8 @@ export type RunAgentInput = {
   modelRef?: string | null;
   permissionMode: AgentPermissionMode;
   thinkingMode?: ThinkingMode;
-  history: Array<{ role: "user" | "assistant"; content: string }>;
+  /** 多轮历史（LlmMessage，由 buildAgentHistory 构建） */
+  history: LlmMessage[];
   onEvent: (e: RuntimeEvent) => void;
   onConfirmTool?: (req: ConfirmToolRequest) => Promise<boolean>;
   /** 取消当前轮次 */

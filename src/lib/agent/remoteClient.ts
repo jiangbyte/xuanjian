@@ -3,7 +3,11 @@
  * @author Charlie
  */
 
-import { appendAgentMessage, type MessagePart } from "@/lib/db";
+import {
+  appendAgentMessage,
+  listAgentSessions,
+  type MessagePart,
+} from "@/lib/db";
 import {
   getBackendBase,
   type RunAgentInput,
@@ -25,6 +29,34 @@ export async function discoverRemoteAgents(): Promise<AgentInfo[]> {
   if (!res.ok) throw new Error(`discover agents: ${res.status}`);
   const data = (await res.json()) as { agents?: AgentInfo[] };
   return data.agents ?? [];
+}
+
+async function resolveRemoteSessionId(
+  input: RunAgentInput,
+  root: string,
+  agentId: string,
+  headers: Record<string, string>,
+): Promise<string> {
+  const sessions = await listAgentSessions();
+  const row = sessions.find((s) => s.id === input.sessionId);
+  if (row?.remote_backend_session_id) {
+    return row.remote_backend_session_id;
+  }
+
+  const sessRes = await fetch(`${root}/v1/agents/${agentId}/sessions`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ title: "xuanjian" }),
+  });
+  if (!sessRes.ok) {
+    throw new Error(`创建后端会话失败: ${sessRes.status}`);
+  }
+  const sess = (await sessRes.json()) as { id: string };
+  const { updateAgentSession } = await import("@/lib/db");
+  await updateAgentSession(input.sessionId, {
+    remote_backend_session_id: sess.id,
+  });
+  return sess.id;
 }
 
 export async function runRemoteAgentTurn(input: RunAgentInput): Promise<void> {
@@ -50,21 +82,14 @@ export async function runRemoteAgentTurn(input: RunAgentInput): Promise<void> {
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const sessRes = await fetch(`${root}/v1/agents/${agentId}/sessions`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ title: "xuanjian" }),
-  });
-  if (!sessRes.ok) {
-    input.onEvent({
-      type: "error",
-      text: `创建后端会话失败: ${sessRes.status}`,
-    });
+  let sid: string;
+  try {
+    sid = await resolveRemoteSessionId(input, root, agentId, headers);
+  } catch (e) {
+    input.onEvent({ type: "error", text: String(e) });
     input.onEvent({ type: "done" });
     return;
   }
-  const sess = (await sessRes.json()) as { id: string };
-  const sid = sess.id;
 
   await fetch(`${root}/v1/agents/${agentId}/sessions/${sid}/messages`, {
     method: "POST",
@@ -73,15 +98,26 @@ export async function runRemoteAgentTurn(input: RunAgentInput): Promise<void> {
   });
 
   const parts: MessagePart[] = [];
+  const tokenQs = token ? `?token=${encodeURIComponent(token)}` : "";
   const es = new EventSource(
-    `${root}/v1/agents/${agentId}/sessions/${sid}/events${token ? `?token=${encodeURIComponent(token)}` : ""}`,
+    `${root}/v1/agents/${agentId}/sessions/${sid}/events${tokenQs}`,
   );
 
   await new Promise<void>((resolve) => {
+    let settled = false;
     const finish = () => {
+      if (settled) return;
+      settled = true;
       es.close();
       resolve();
     };
+
+    const onAbort = () => {
+      input.onEvent({ type: "error", text: "已取消" });
+      finish();
+    };
+    input.signal?.addEventListener("abort", onAbort, { once: true });
+
     es.onmessage = (ev) => {
       void (async () => {
         try {
@@ -99,7 +135,7 @@ export async function runRemoteAgentTurn(input: RunAgentInput): Promise<void> {
             input.onEvent({ type: "thinking", text: data.text });
           } else if (data.type === "token" && data.text) {
             parts.push({ type: "text", text: data.text });
-            input.onEvent({ type: "text", text: data.text });
+            input.onEvent({ type: "text_delta", text: data.text });
           } else if (data.type === "tool_request" && data.tool) {
             const t = data.tool;
             input.onEvent({
@@ -160,10 +196,11 @@ export async function runRemoteAgentTurn(input: RunAgentInput): Promise<void> {
       })();
     };
     es.onerror = () => {
-      input.onEvent({ type: "error", text: "SSE 连接中断" });
+      if (!settled) {
+        input.onEvent({ type: "error", text: "SSE 连接中断" });
+      }
       finish();
     };
-    window.setTimeout(finish, 180_000);
   });
 
   if (parts.length) {

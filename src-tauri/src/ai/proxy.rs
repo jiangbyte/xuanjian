@@ -5,6 +5,7 @@
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
@@ -43,6 +44,8 @@ pub struct AiChatChunk {
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage: Option<Value>,
 }
 
 /// 按 API 协议标准拼接补全端点。
@@ -97,6 +100,83 @@ fn http_err(kind: &str, url: &str, status: reqwest::StatusCode, body: &str) -> S
         body.to_string()
     };
     format!("{kind} {status} @ {url}: {truncated}{hint}")
+}
+
+#[derive(Default, Clone)]
+struct OpenAiToolCallAcc {
+    id: String,
+    name: String,
+    arguments: String,
+}
+
+fn merge_openai_tool_delta(acc: &mut BTreeMap<usize, OpenAiToolCallAcc>, delta: &Value) {
+    let Some(arr) = delta.as_array() else {
+        return;
+    };
+    for item in arr {
+        let idx = item.get("index").and_then(|x| x.as_u64()).unwrap_or(0) as usize;
+        let entry = acc.entry(idx).or_default();
+        if let Some(id) = item.get("id").and_then(|x| x.as_str()) {
+            entry.id.push_str(id);
+        }
+        if let Some(name) = item.pointer("/function/name").and_then(|x| x.as_str()) {
+            entry.name.push_str(name);
+        }
+        if let Some(args) = item.pointer("/function/arguments").and_then(|x| x.as_str()) {
+            entry.arguments.push_str(args);
+        }
+    }
+}
+
+fn openai_tool_acc_to_json(acc: &BTreeMap<usize, OpenAiToolCallAcc>) -> Value {
+    let calls: Vec<Value> = acc
+        .values()
+        .map(|t| {
+            let arguments = if t.arguments.is_empty() {
+                "{}".to_string()
+            } else {
+                t.arguments.clone()
+            };
+            json!({
+                "id": t.id,
+                "type": "function",
+                "function": {
+                    "name": t.name,
+                    "arguments": arguments,
+                }
+            })
+        })
+        .collect();
+    Value::Array(calls)
+}
+
+#[derive(Clone)]
+struct AnthropicToolBlock {
+    id: String,
+    name: String,
+    arguments: String,
+}
+
+fn anthropic_tools_to_openai_json(blocks: &[AnthropicToolBlock]) -> Value {
+    let calls: Vec<Value> = blocks
+        .iter()
+        .map(|t| {
+            let arguments = if t.arguments.is_empty() {
+                "{}".to_string()
+            } else {
+                t.arguments.clone()
+            };
+            json!({
+                "id": t.id,
+                "type": "function",
+                "function": {
+                    "name": t.name,
+                    "arguments": arguments,
+                }
+            })
+        })
+        .collect();
+    Value::Array(calls)
 }
 
 fn apply_thinking_mode(body: &mut Value, api_format: &str, mode: &str) {
@@ -385,6 +465,7 @@ pub async fn ai_chat_stream(
                     tool_calls: None,
                     error: Some(e),
                     raw: None,
+                    usage: None,
                 },
             );
         }
@@ -410,11 +491,19 @@ async fn run_stream(
     params: &ChatProxyParams,
     cancel: Arc<AtomicBool>,
 ) -> Result<(), String> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(300))
+        .build()
+        .map_err(|e| format!("HTTP 客户端初始化失败: {e}"))?;
     let use_stream = params.stream.unwrap_or(true);
+    let thinking = params
+        .thinking_mode
+        .as_deref()
+        .unwrap_or("high")
+        .to_string();
 
-    if !use_stream || params.api_format == "anthropic" {
-        // Anthropic streaming can be added later; non-stream fallback
+    if !use_stream {
         let mut p = params.clone();
         p.stream = Some(false);
         let raw = ai_chat_completion(p).await?;
@@ -430,6 +519,7 @@ async fn run_stream(
                     tool_calls: None,
                     error: None,
                     raw: None,
+                    usage: None,
                 },
             );
         }
@@ -444,9 +534,11 @@ async fn run_stream(
                     tool_calls: None,
                     error: None,
                     raw: None,
+                    usage: None,
                 },
             );
         }
+        let usage = raw.get("usage").cloned();
         let _ = app.emit(
             "ai-chat-chunk",
             AiChatChunk {
@@ -457,20 +549,41 @@ async fn run_stream(
                 tool_calls: tools,
                 error: None,
                 raw: Some(raw),
+                usage,
             },
         );
         return Ok(());
     }
 
+    if params.api_format == "anthropic" {
+        return run_anthropic_stream(app, job_id, params, &client, &thinking, cancel).await;
+    }
+
+    run_openai_stream(app, job_id, params, &client, &thinking, cancel).await
+}
+
+async fn run_openai_stream(
+    app: &AppHandle,
+    job_id: &str,
+    params: &ChatProxyParams,
+    client: &reqwest::Client,
+    thinking: &str,
+    cancel: Arc<AtomicBool>,
+) -> Result<(), String> {
     let url = openai_url(&params.base_url);
     let mut body = json!({
         "model": params.model,
         "messages": params.messages,
         "stream": true,
+        "stream_options": { "include_usage": true },
     });
     if let Some(tools) = &params.tools {
         body["tools"] = tools.clone();
     }
+    if let Some(mt) = params.max_tokens.filter(|n| *n > 0) {
+        body["max_tokens"] = json!(mt);
+    }
+    apply_thinking_mode(&mut body, &params.api_format, thinking);
 
     let resp = client
         .post(&url)
@@ -487,7 +600,8 @@ async fn run_stream(
 
     let mut stream = resp.bytes_stream();
     let mut buf = String::new();
-    let mut tool_acc: Option<Value> = None;
+    let mut tool_acc: BTreeMap<usize, OpenAiToolCallAcc> = BTreeMap::new();
+    let mut last_usage: Option<Value> = None;
 
     while let Some(item) = stream.next().await {
         if cancel.load(Ordering::SeqCst) {
@@ -503,6 +617,11 @@ async fn run_stream(
             }
             let data = line.strip_prefix("data:").map(str::trim).unwrap_or(&line);
             if data == "[DONE]" {
+                let tools = if tool_acc.is_empty() {
+                    None
+                } else {
+                    Some(openai_tool_acc_to_json(&tool_acc))
+                };
                 let _ = app.emit(
                     "ai-chat-chunk",
                     AiChatChunk {
@@ -510,14 +629,20 @@ async fn run_stream(
                         done: true,
                         delta: None,
                         thinking: None,
-                        tool_calls: tool_acc.clone(),
+                        tool_calls: tools,
                         error: None,
                         raw: None,
+                        usage: last_usage.clone(),
                     },
                 );
                 return Ok(());
             }
             if let Ok(v) = serde_json::from_str::<Value>(data) {
+                if let Some(u) = v.get("usage") {
+                    if !u.is_null() {
+                        last_usage = Some(u.clone());
+                    }
+                }
                 if let Some(delta) = v
                     .pointer("/choices/0/delta/content")
                     .and_then(|c| c.as_str())
@@ -533,6 +658,7 @@ async fn run_stream(
                                 tool_calls: None,
                                 error: None,
                                 raw: None,
+                                usage: None,
                             },
                         );
                     }
@@ -556,17 +682,23 @@ async fn run_stream(
                                 tool_calls: None,
                                 error: None,
                                 raw: None,
+                                usage: None,
                             },
                         );
                     }
                 }
                 if let Some(tc) = v.pointer("/choices/0/delta/tool_calls") {
-                    tool_acc = Some(tc.clone());
+                    merge_openai_tool_delta(&mut tool_acc, tc);
                 }
             }
         }
     }
 
+    let tools = if tool_acc.is_empty() {
+        None
+    } else {
+        Some(openai_tool_acc_to_json(&tool_acc))
+    };
     let _ = app.emit(
         "ai-chat-chunk",
         AiChatChunk {
@@ -574,9 +706,199 @@ async fn run_stream(
             done: true,
             delta: None,
             thinking: None,
-            tool_calls: tool_acc,
+            tool_calls: tools,
             error: None,
             raw: None,
+            usage: last_usage,
+        },
+    );
+    Ok(())
+}
+
+async fn run_anthropic_stream(
+    app: &AppHandle,
+    job_id: &str,
+    params: &ChatProxyParams,
+    client: &reqwest::Client,
+    thinking: &str,
+    cancel: Arc<AtomicBool>,
+) -> Result<(), String> {
+    let url = anthropic_url(&params.base_url);
+    let mut body = openai_messages_to_anthropic(params)?;
+    apply_thinking_mode(&mut body, "anthropic", thinking);
+    body["stream"] = json!(true);
+
+    let resp = client
+        .post(&url)
+        .header("x-api-key", &params.api_key)
+        .header("anthropic-version", "2023-06-01")
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        return Err(http_err("anthropic", &url, status, &text));
+    }
+
+    let mut stream = resp.bytes_stream();
+    let mut buf = String::new();
+    let mut tool_blocks: Vec<AnthropicToolBlock> = Vec::new();
+    let mut current_tool_idx: Option<usize> = None;
+    let mut last_usage: Option<Value> = None;
+
+    while let Some(item) = stream.next().await {
+        if cancel.load(Ordering::SeqCst) {
+            break;
+        }
+        let chunk = item.map_err(|e| e.to_string())?;
+        buf.push_str(&String::from_utf8_lossy(&chunk));
+
+        while let Some(pos) = buf.find('\n') {
+            let line = buf[..pos].trim().to_string();
+            buf = buf[pos + 1..].to_string();
+            if line.is_empty() || line.starts_with(':') {
+                continue;
+            }
+            if !line.starts_with("data:") {
+                continue;
+            }
+            let data = line.strip_prefix("data:").map(str::trim).unwrap_or("");
+            if data.is_empty() {
+                continue;
+            }
+            let Ok(v) = serde_json::from_str::<Value>(data) else {
+                continue;
+            };
+            let ev_type = v.get("type").and_then(|t| t.as_str()).unwrap_or("");
+
+            match ev_type {
+                "message_start" => {
+                    if let Some(u) = v.pointer("/message/usage") {
+                        last_usage = Some(u.clone());
+                    }
+                }
+                "content_block_start" => {
+                    if let Some(block) = v.get("content_block") {
+                        let bt = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                        if bt == "tool_use" {
+                            tool_blocks.push(AnthropicToolBlock {
+                                id: block
+                                    .get("id")
+                                    .and_then(|x| x.as_str())
+                                    .unwrap_or("")
+                                    .to_string(),
+                                name: block
+                                    .get("name")
+                                    .and_then(|x| x.as_str())
+                                    .unwrap_or("")
+                                    .to_string(),
+                                arguments: String::new(),
+                            });
+                            current_tool_idx = Some(tool_blocks.len() - 1);
+                        }
+                    }
+                }
+                "content_block_delta" => {
+                    if let Some(delta) = v.get("delta") {
+                        let dt = delta.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                        if dt == "thinking_delta" {
+                            if let Some(t) = delta.get("thinking").and_then(|x| x.as_str()) {
+                                if !t.is_empty() {
+                                    let _ = app.emit(
+                                        "ai-chat-chunk",
+                                        AiChatChunk {
+                                            job_id: job_id.into(),
+                                            done: false,
+                                            delta: None,
+                                            thinking: Some(t.to_string()),
+                                            tool_calls: None,
+                                            error: None,
+                                            raw: None,
+                                            usage: None,
+                                        },
+                                    );
+                                }
+                            }
+                        } else if dt == "text_delta" {
+                            if let Some(t) = delta.get("text").and_then(|x| x.as_str()) {
+                                if !t.is_empty() {
+                                    let _ = app.emit(
+                                        "ai-chat-chunk",
+                                        AiChatChunk {
+                                            job_id: job_id.into(),
+                                            done: false,
+                                            delta: Some(t.to_string()),
+                                            thinking: None,
+                                            tool_calls: None,
+                                            error: None,
+                                            raw: None,
+                                            usage: None,
+                                        },
+                                    );
+                                }
+                            }
+                        } else if dt == "input_json_delta" {
+                            if let (Some(idx), Some(partial)) = (
+                                current_tool_idx,
+                                delta.get("partial_json").and_then(|x| x.as_str()),
+                            ) {
+                                if let Some(tb) = tool_blocks.get_mut(idx) {
+                                    tb.arguments.push_str(partial);
+                                }
+                            }
+                        }
+                    }
+                }
+                "message_delta" => {
+                    if let Some(u) = v.get("usage") {
+                        last_usage = Some(u.clone());
+                    }
+                }
+                "message_stop" => {
+                    let tools = if tool_blocks.is_empty() {
+                        None
+                    } else {
+                        Some(anthropic_tools_to_openai_json(&tool_blocks))
+                    };
+                    let _ = app.emit(
+                        "ai-chat-chunk",
+                        AiChatChunk {
+                            job_id: job_id.into(),
+                            done: true,
+                            delta: None,
+                            thinking: None,
+                            tool_calls: tools,
+                            error: None,
+                            raw: None,
+                            usage: last_usage.clone(),
+                        },
+                    );
+                    return Ok(());
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let tools = if tool_blocks.is_empty() {
+        None
+    } else {
+        Some(anthropic_tools_to_openai_json(&tool_blocks))
+    };
+    let _ = app.emit(
+        "ai-chat-chunk",
+        AiChatChunk {
+            job_id: job_id.into(),
+            done: true,
+            delta: None,
+            thinking: None,
+            tool_calls: tools,
+            error: None,
+            raw: None,
+            usage: last_usage,
         },
     );
     Ok(())
