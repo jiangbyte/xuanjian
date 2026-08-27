@@ -6,34 +6,33 @@
 import type { AgentToolDef } from "@/lib/agent/tools";
 import type { MessagePart } from "@/lib/db";
 
-/** 每条 message 的角色 / 结构开销（粗估） */
-const MESSAGE_OVERHEAD = 4;
+/**
+ * 与 deepseek-harness `@deepseek-ai/dsh-token-meter` 对齐的固定密度启发式：
+ * 4 字符 ≈ 1 token，外加 role / block 结构开销。不做分词器。
+ */
+export const CHARS_PER_TOKEN = 4;
+/** 每条 content block / tools blob 的 JSON 结构开销 */
+export const BLOCK_OVERHEAD = 4;
+/** 每条消息（含 system）的 role 字段开销 */
+export const ROLE_OVERHEAD = 4;
 
-/** CJK 与 ASCII 分开估，比 length/4 更接近常见 tokenizer */
+/** 纯文本密度估价（不含结构开销） */
 export function estimateTokens(text: string): number {
   if (!text) return 0;
-  let score = 0;
-  for (const ch of text) {
-    const code = ch.codePointAt(0) ?? 0;
-    if (isCjk(code)) {
-      score += 1.05;
-    } else if (code <= 0x7f) {
-      score += 0.28;
-    } else {
-      score += 0.55;
-    }
-  }
-  return Math.max(1, Math.ceil(score));
+  return Math.ceil(text.length / CHARS_PER_TOKEN);
 }
 
-function isCjk(code: number): boolean {
+/** system prompt：chars/4 + ROLE_OVERHEAD */
+export function estimateSystemTokens(system: string): number {
+  if (!system) return 0;
+  return Math.ceil(system.length / CHARS_PER_TOKEN) + ROLE_OVERHEAD;
+}
+
+/** tools schema：JSON.stringify 密度 + BLOCK_OVERHEAD */
+export function estimateToolsTokens(tools: AgentToolDef[] | undefined): number {
+  if (!tools?.length) return 0;
   return (
-    (code >= 0x4e00 && code <= 0x9fff) ||
-    (code >= 0x3400 && code <= 0x4dbf) ||
-    (code >= 0xf900 && code <= 0xfaff) ||
-    (code >= 0xff00 && code <= 0xffef) ||
-    (code >= 0x3040 && code <= 0x30ff) ||
-    (code >= 0xac00 && code <= 0xd7af)
+    Math.ceil(JSON.stringify(tools).length / CHARS_PER_TOKEN) + BLOCK_OVERHEAD
   );
 }
 
@@ -195,7 +194,7 @@ export function inTurnPartsEstimate(
     for (const p of m.parts) {
       if (p.type === "text") continue;
       const t = partToEstimateText(p);
-      if (t) total += estimateTokens(t) + MESSAGE_OVERHEAD;
+      if (t) total += estimateTokens(t) + BLOCK_OVERHEAD + ROLE_OVERHEAD;
     }
   }
   return total;
@@ -206,7 +205,8 @@ function estimateLlmMessagesTokens(
 ): number {
   let total = 0;
   for (const m of messages) {
-    total += MESSAGE_OVERHEAD + estimateTokens(m.content);
+    total += ROLE_OVERHEAD;
+    if (m.content) total += estimateTokens(m.content) + BLOCK_OVERHEAD;
   }
   return total;
 }
@@ -239,13 +239,13 @@ export function estimateContextBudget(input: {
   lastUsage?: LlmUsage | null;
   sessionUsage?: LlmUsage | null;
 }): ContextBudgetBreakdown {
-  const system = estimateTokens(input.systemPrompt ?? "");
-  const tools = estimateTokens(
-    input.tools ? JSON.stringify(input.tools) : "",
-  );
+  const system = estimateSystemTokens(input.systemPrompt ?? "");
+  const tools = estimateToolsTokens(input.tools);
   const messages = estimateLlmMessagesTokens(input.history ?? []);
   const inTurn = input.inTurnExtra ?? 0;
-  const draft = estimateTokens(input.draft ?? "");
+  const draft = input.draft?.trim()
+    ? ROLE_OVERHEAD + estimateTokens(input.draft) + BLOCK_OVERHEAD
+    : 0;
   const estimated = system + tools + messages + inTurn + draft;
 
   const lastApiPrompt = input.lastUsage

@@ -13,9 +13,9 @@ import {
 import { parseLlmUsage, type LlmUsage } from "@/lib/agent/contextBudget";
 import { BlockAssembler } from "@/lib/agent/llm/assembler";
 import { mergeStreamToolCallDeltas } from "@/lib/agent/llm/stream-tool-calls";
-import { REACT_LIMITS } from "@/lib/agent/reactGuards";
+import { REACT_LIMITS } from "@xuanjian/agent-core";
 import type { AgentToolDef } from "@/lib/agent/tools";
-import type { ProviderBundle } from "@/lib/agent/agent-loop/provider";
+import type { ProviderBundle } from "@/lib/agent/provider";
 import type { RuntimeEvent } from "@/lib/agent/types";
 
 export type StreamCallbacks = {

@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { splitPlanFromReply, buildPlanExecutePrompt } from "@/lib/agent/agent-loop/graceful-stop";
+import { splitPlanFromReply, buildPlanExecutePrompt } from "@xuanjian/agent-core";
 
 describe("splitPlanFromReply", () => {
   it("ignores diagnostic bullets when no actionable steps", () => {

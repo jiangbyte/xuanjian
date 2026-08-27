@@ -5,7 +5,7 @@
 
 import type { LlmMessage } from "@/lib/agent/llm";
 import { chatCompletion } from "@/lib/agent/llm";
-import type { ProviderBundle } from "@/lib/agent/agent-loop/provider";
+import type { ProviderBundle } from "@/lib/agent/provider";
 import { selectCompactableRange } from "@/lib/agent/compaction/region";
 import {
   sanitizeLlmMessagesForApi,

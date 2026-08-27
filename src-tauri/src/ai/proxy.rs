@@ -307,9 +307,47 @@ fn openai_messages_to_anthropic(params: &ChatProxyParams) -> Result<Value, Strin
         }
 
         // 已是 Anthropic content blocks（前端归一后回传）
+        // 若只有 thinking/text 而缺 tool_use，必须从 tool_calls 补齐，否则后续 tool_result 会成孤儿。
         if let Some(blocks) = m.get("anthropic_content").and_then(|c| c.as_array()) {
+            let mut content_blocks = blocks.clone();
+            if role == "assistant" {
+                let existing_ids: std::collections::HashSet<String> = content_blocks
+                    .iter()
+                    .filter_map(|b| {
+                        if b.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
+                            b.get("id").and_then(|id| id.as_str()).map(|s| s.to_string())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                if let Some(tcs) = m.get("tool_calls").and_then(|t| t.as_array()) {
+                    for tc in tcs {
+                        let id = tc.get("id").and_then(|x| x.as_str()).unwrap_or("");
+                        if id.is_empty() || existing_ids.contains(id) {
+                            continue;
+                        }
+                        let name = tc
+                            .pointer("/function/name")
+                            .and_then(|x| x.as_str())
+                            .unwrap_or("");
+                        let args_str = tc
+                            .pointer("/function/arguments")
+                            .and_then(|x| x.as_str())
+                            .unwrap_or("{}");
+                        let input: Value =
+                            serde_json::from_str(args_str).unwrap_or_else(|_| json!({}));
+                        content_blocks.push(json!({
+                            "type": "tool_use",
+                            "id": id,
+                            "name": name,
+                            "input": input,
+                        }));
+                    }
+                }
+            }
             let ar = if role == "assistant" { "assistant" } else { "user" };
-            out.push(json!({ "role": ar, "content": blocks }));
+            out.push(json!({ "role": ar, "content": content_blocks }));
             continue;
         }
 

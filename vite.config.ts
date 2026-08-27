@@ -18,9 +18,38 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(async () => ({
   plugins: [react(), tailwindcss()],
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "src"),
-    },
+    alias: [
+      {
+        find: "@xuanjian/agent-core/graph",
+        replacement: path.resolve(
+          __dirname,
+          "packages/agent-core/src/graph.ts",
+        ),
+      },
+      {
+        find: "@xuanjian/agent-core",
+        replacement: path.resolve(
+          __dirname,
+          "packages/agent-core/src/index.ts",
+        ),
+      },
+      {
+        find: "@xuanjian/agent-adapters",
+        replacement: path.resolve(
+          __dirname,
+          "packages/agent-adapters/src/index.ts",
+        ),
+      },
+      {
+        // 精确匹配：避免把 `/web` 再写成 `/web/web`
+        find: /^@langchain\/langgraph$/,
+        replacement: "@langchain/langgraph/web",
+      },
+      {
+        find: /^@\//,
+        replacement: `${path.resolve(__dirname, "src")}/`,
+      },
+    ],
   },
   clearScreen: false,
   server: {

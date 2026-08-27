@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { isConcurrencySafe } from "@/lib/agent/agent-loop/concurrency";
+import { isConcurrencySafe } from "@/lib/agent/tools/concurrency";
 
 describe("isConcurrencySafe", () => {
   it("marks read tools safe", () => {

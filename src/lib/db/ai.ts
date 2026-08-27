@@ -46,14 +46,10 @@ export type McpServerRow = {
 };
 
 export type AgentPermissionMode = "confirm" | "plan" | "full";
-export type AgentRuntimeKind = "local" | "remote";
 
 export type AgentSessionRow = {
   id: number;
   title: string;
-  runtime: AgentRuntimeKind;
-  remote_agent_id: string | null;
-  remote_backend_session_id: string | null;
   model_ref: string | null;
   permission_mode: AgentPermissionMode;
   host_id: number | null;
@@ -108,15 +104,6 @@ export type AgentMessageRow = {
   role: "user" | "assistant" | "system" | "tool";
   parts_json: string;
   created_at?: string;
-};
-
-export type RemoteAgentRow = {
-  id: string;
-  name: string;
-  description: string;
-  endpoint: string;
-  enabled: number;
-  last_seen: string | null;
 };
 
 export async function listAiProviders(): Promise<AiProviderRow[]> {
@@ -375,8 +362,6 @@ export async function listAgentSessions(): Promise<AgentSessionRow[]> {
 
 export async function createAgentSession(input?: {
   title?: string;
-  runtime?: AgentRuntimeKind;
-  remote_agent_id?: string | null;
   model_ref?: string | null;
   permission_mode?: AgentPermissionMode;
   host_id?: number | null;
@@ -385,12 +370,10 @@ export async function createAgentSession(input?: {
   const db = await getDb();
   const result = await db.execute(
     `INSERT INTO agent_sessions
-      (title, runtime, remote_agent_id, model_ref, permission_mode, host_id, tab_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      (title, model_ref, permission_mode, host_id, tab_id)
+     VALUES ($1, $2, $3, $4, $5)`,
     [
       input?.title?.trim() || "新对话",
-      input?.runtime ?? "local",
-      input?.remote_agent_id ?? null,
       input?.model_ref ?? null,
       input?.permission_mode ?? "confirm",
       input?.host_id ?? null,
@@ -404,9 +387,6 @@ export async function updateAgentSession(
   id: number,
   patch: Partial<{
     title: string;
-    runtime: AgentRuntimeKind;
-    remote_agent_id: string | null;
-    remote_backend_session_id: string | null;
     model_ref: string | null;
     permission_mode: AgentPermissionMode;
     host_id: number | null;
@@ -423,19 +403,11 @@ export async function updateAgentSession(
   if (!cur) throw new Error("session not found");
   await db.execute(
     `UPDATE agent_sessions SET
-      title=$1, runtime=$2, remote_agent_id=$3, remote_backend_session_id=$4,
-      model_ref=$5, permission_mode=$6, host_id=$7, tab_id=$8,
+      title=$1, model_ref=$2, permission_mode=$3, host_id=$4, tab_id=$5,
       updated_at=datetime('now')
-     WHERE id=$9`,
+     WHERE id=$6`,
     [
       patch.title ?? cur.title,
-      patch.runtime ?? cur.runtime,
-      patch.remote_agent_id === undefined
-        ? cur.remote_agent_id
-        : patch.remote_agent_id,
-      patch.remote_backend_session_id === undefined
-        ? cur.remote_backend_session_id
-        : patch.remote_backend_session_id,
       patch.model_ref === undefined ? cur.model_ref : patch.model_ref,
       patch.permission_mode ?? cur.permission_mode,
       patch.host_id === undefined ? cur.host_id : patch.host_id,
@@ -485,45 +457,6 @@ export function parseMessageParts(partsJson: string): MessagePart[] {
   } catch {
     return [{ type: "text", text: partsJson }];
   }
-}
-
-export async function listRemoteAgents(): Promise<RemoteAgentRow[]> {
-  const db = await getDb();
-  return db.select<RemoteAgentRow[]>(
-    "SELECT * FROM remote_agents ORDER BY name",
-  );
-}
-
-export async function upsertRemoteAgent(row: {
-  id: string;
-  name: string;
-  description?: string;
-  endpoint?: string;
-  enabled?: boolean;
-}): Promise<void> {
-  const db = await getDb();
-  await db.execute(
-    `INSERT INTO remote_agents (id, name, description, endpoint, enabled, last_seen)
-     VALUES ($1, $2, $3, $4, $5, datetime('now'))
-     ON CONFLICT(id) DO UPDATE SET
-       name=excluded.name,
-       description=excluded.description,
-       endpoint=excluded.endpoint,
-       enabled=excluded.enabled,
-       last_seen=datetime('now')`,
-    [
-      row.id,
-      row.name,
-      row.description ?? "",
-      row.endpoint ?? "",
-      row.enabled == null ? 1 : row.enabled ? 1 : 0,
-    ],
-  );
-}
-
-export async function deleteRemoteAgent(id: string) {
-  const db = await getDb();
-  await db.execute("DELETE FROM remote_agents WHERE id = $1", [id]);
 }
 
 /** model_ref 格式：`providerId:modelId` */

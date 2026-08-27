@@ -8,11 +8,11 @@ import type { AgentToolDef } from "@/lib/agent/tools";
 import {
   buildContextMeterView,
   measureSurfaceTokens,
-  projectedTokensFromSample,
 } from "@/lib/agent/contextBudget/meter";
 import {
+  BLOCK_OVERHEAD,
+  ROLE_OVERHEAD,
   estimateTokens,
-  promptTokensFromUsage,
   type ContextBudgetBreakdown,
   type LlmUsage,
 } from "@/lib/agent/contextBudget";
@@ -20,29 +20,41 @@ import type { MessagePart } from "@/lib/db";
 
 export type { ContextBudgetBreakdown, LlmUsage };
 
-const MESSAGE_OVERHEAD = 4;
+/** 对齐 dsh estimateMessage：ROLE_OVERHEAD + 各 content block 密度 */
+export function measureLlmMessageTokens(m: LlmMessage): number {
+  let tokens = ROLE_OVERHEAD;
 
-function messageContentText(m: LlmMessage): string {
   if (m.role === "tool") {
-    return `${m.name ?? ""}:${String(m.content)}`;
+    const text = `${m.name ?? ""}:${String(m.content ?? "")}`;
+    if (text.length > 1) tokens += estimateTokens(text) + BLOCK_OVERHEAD;
+    return tokens;
   }
+
   if (m.role === "assistant") {
-    const parts: string[] = [];
-    if (m.content) parts.push(String(m.content));
-    if (m.tool_calls?.length) {
-      parts.push(JSON.stringify(m.tool_calls));
+    if (m.content) {
+      tokens += estimateTokens(String(m.content)) + BLOCK_OVERHEAD;
+    }
+    for (const tc of m.tool_calls ?? []) {
+      tokens +=
+        estimateTokens(tc.function?.name ?? "") +
+        estimateTokens(tc.function?.arguments ?? "") +
+        BLOCK_OVERHEAD;
     }
     if (m.anthropic_content?.length) {
-      parts.push(JSON.stringify(m.anthropic_content));
+      tokens +=
+        estimateTokens(JSON.stringify(m.anthropic_content)) + BLOCK_OVERHEAD;
     }
-    return parts.join("\n");
+    return tokens;
   }
-  if (typeof m.content === "string") return m.content;
-  return JSON.stringify(m.content ?? "");
-}
 
-export function measureLlmMessageTokens(m: LlmMessage): number {
-  return MESSAGE_OVERHEAD + estimateTokens(messageContentText(m));
+  const content =
+    typeof m.content === "string"
+      ? m.content
+      : m.content == null
+        ? ""
+        : JSON.stringify(m.content);
+  if (content) tokens += estimateTokens(content) + BLOCK_OVERHEAD;
+  return tokens;
 }
 
 export function measurePromptTokens(input: {
@@ -56,21 +68,6 @@ export function measurePromptTokens(input: {
     system: input.system ?? "",
     tools: input.tools ?? [],
     messages: input.messages,
-  });
-}
-
-/** @deprecated 使用 projectedTokensFromSample */
-export function projectedTokens(input: {
-  estimated: number;
-  lastUsage?: LlmUsage | null;
-  sampledEstimated?: number;
-}): number {
-  return projectedTokensFromSample({
-    surfaceTokens: input.estimated,
-    pressureTokens: input.lastUsage
-      ? promptTokensFromUsage(input.lastUsage)
-      : null,
-    sampledSurfaceTokens: input.sampledEstimated,
   });
 }
 

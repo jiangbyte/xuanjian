@@ -545,5 +545,34 @@ INSERT OR IGNORE INTO app_settings (key, value) VALUES ('agent.compact_threshold
 "#,
             kind: MigrationKind::Up,
         },
+        // —— 迁移 v22：移除远程 Agent（仅本地 LangGraph） ——
+        Migration {
+            version: 22,
+            description: "remove_remote_agent",
+            sql: r#"
+DROP TABLE IF EXISTS remote_agents;
+
+CREATE TABLE IF NOT EXISTS agent_sessions_v22 (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL DEFAULT '',
+  model_ref TEXT,
+  permission_mode TEXT NOT NULL DEFAULT 'confirm',
+  host_id INTEGER,
+  tab_id TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+INSERT INTO agent_sessions_v22 (id, title, model_ref, permission_mode, host_id, tab_id, created_at, updated_at)
+SELECT id, title, model_ref, permission_mode, host_id, tab_id, created_at, updated_at
+FROM agent_sessions;
+
+DROP TABLE agent_sessions;
+ALTER TABLE agent_sessions_v22 RENAME TO agent_sessions;
+
+DELETE FROM app_settings WHERE key IN ('agent.gateway_port', 'agent.default_runtime');
+"#,
+            kind: MigrationKind::Up,
+        },
     ]
 }

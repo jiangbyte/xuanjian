@@ -1,25 +1,21 @@
-/**
+﻿/**
  * @file 终端右侧 AI 对话面板
  * @author Charlie
  * @description 侧栏内完整 Agent 对话：历史抽屉、气泡/思考/工具卡、模型·Agent·权限选择。
  */
 
 import {
-  Bot,
   Brain,
   History,
   Loader2,
-  Play,
   Plus,
   Send,
   Sparkles,
   Square,
-  Wrench,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { MarkdownViewer } from "@/components/MarkdownViewer";
 import {
   Popover,
   PopoverContent,
@@ -38,6 +34,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { MessageBlock, reduceParts, toolLabel } from "@/features/agent";
 import {
   formatTokenCount,
   loadThinkingMode,
@@ -53,17 +50,18 @@ import {
   measureSurfaceTokens,
 } from "@/lib/agent/contextBudget/meter";
 import { buildAgentHistory } from "@/lib/agent/session";
-import { steerAgent } from "@/lib/agent/runtime";
 import { buildOrchestratorSystemPrompt } from "@/lib/agent/prompts";
-import { buildPlanExecutePrompt } from "@/lib/agent/agent-loop/graceful-stop";
 import { toolsForOrchestrator } from "@/lib/agent/subagents";
-import { runAgentTurn } from "@/lib/agent/runtime";
-import type { AgentActivityPhase } from "@/lib/agent/types";
+import { runAgentTurn } from "@xuanjian/agent-adapters";
+import {
+  steerAgent,
+  buildPlanExecutePrompt,
+  type AgentActivityPhase,
+} from "@xuanjian/agent-core";
 import {
   getBlockingUi,
   subscribeBlockingUi,
 } from "@/lib/ui/blockingUi";
-import { discoverRemoteAgents } from "@/lib/agent/remoteClient";
 import { BUILTIN_MCP_SERVER } from "@/lib/agent/mcpBuiltin";
 import {
   appendAgentMessage,
@@ -76,18 +74,14 @@ import {
   listAgentSessions,
   listAiModels,
   listAiProviders,
-  listRemoteAgents,
   parseMessageParts,
   updateAgentSession,
-  upsertRemoteAgent,
   type AgentMessageRow,
   type AgentPermissionMode,
-  type AgentRuntimeKind,
   type AgentSessionRow,
   type AiModelRow,
   type AiProviderRow,
   type MessagePart,
-  type RemoteAgentRow,
 } from "@/lib/db";
 import { cn } from "@/lib/utils";
 import { WorkspaceSwitcher } from "@/features/workspace/WorkspaceSwitcher";
@@ -122,10 +116,7 @@ export function AiChatPanel() {
 
   const [providers, setProviders] = useState<AiProviderRow[]>([]);
   const [models, setModels] = useState<AiModelRow[]>([]);
-  const [remoteAgents, setRemoteAgents] = useState<RemoteAgentRow[]>([]);
 
-  const [runtime, setRuntime] = useState<AgentRuntimeKind>("local");
-  const [remoteAgentId, setRemoteAgentId] = useState<string>("");
   const [modelRef, setModelRef] = useState<string>("");
   const [permissionMode, setPermissionMode] =
     useState<AgentPermissionMode>("confirm");
@@ -195,16 +186,14 @@ export function AiChatPanel() {
   }, [messages]);
 
   const reloadMeta = useCallback(async () => {
-    const [p, m, s, ra] = await Promise.all([
+    const [p, m, s] = await Promise.all([
       listAiProviders(),
       listAiModels(),
       listAgentSessions(),
-      listRemoteAgents(),
     ]);
     setProviders(p);
     setModels(m);
     setSessions(s);
-    setRemoteAgents(ra);
     if (!modelRef && p.length && m.length) {
       const first = m.find((x) => x.enabled);
       if (first) setModelRef(encodeModelRef(first.provider_id, first.model_id));
@@ -226,8 +215,6 @@ export function AiChatPanel() {
     );
     const sess = (await listAgentSessions()).find((x) => x.id === id);
     if (sess) {
-      setRuntime(sess.runtime);
-      setRemoteAgentId(sess.remote_agent_id ?? "");
       setModelRef(sess.model_ref ?? "");
       setPermissionMode(sess.permission_mode);
     }
@@ -243,8 +230,6 @@ export function AiChatPanel() {
     }
     const id = await createAgentSession({
       title: activeTab?.title?.trim() || t("terminal.aiNewChat"),
-      runtime,
-      remote_agent_id: remoteAgentId || null,
       model_ref: modelRef || null,
       permission_mode: permissionMode,
       host_id: activeTab?.hostId ?? null,
@@ -259,8 +244,6 @@ export function AiChatPanel() {
     sessionId,
     activeTabId,
     activeTab,
-    runtime,
-    remoteAgentId,
     modelRef,
     permissionMode,
     reloadMeta,
@@ -284,8 +267,6 @@ export function AiChatPanel() {
       }
       const id = await createAgentSession({
         title: tab?.title?.trim() || t("terminal.aiNewChat"),
-        runtime,
-        remote_agent_id: remoteAgentId || null,
         model_ref: modelRef || null,
         permission_mode: permissionMode,
         host_id: tab?.hostId ?? null,
@@ -300,8 +281,6 @@ export function AiChatPanel() {
     },
     [
       tabs,
-      runtime,
-      remoteAgentId,
       modelRef,
       permissionMode,
       loadSession,
@@ -412,8 +391,6 @@ export function AiChatPanel() {
         ]);
 
         await updateAgentSession(sid, {
-          runtime,
-          remote_agent_id: remoteAgentId || null,
           model_ref: modelRef || null,
           permission_mode: activeMode,
           title: (opts.titleHint ?? content).slice(0, 40),
@@ -422,12 +399,10 @@ export function AiChatPanel() {
         await runAgentTurn({
           sessionId: sid,
           userText: content,
-          runtime,
-          remoteAgentId: remoteAgentId || null,
           modelRef: modelRef || null,
           permissionMode: activeMode,
           thinkingMode,
-          history,
+          history: history as import("@xuanjian/agent-core").RunAgentInput["history"],
           signal: ac.signal,
           onConfirmTool: (req) =>
             new Promise<boolean>((resolve) => {
@@ -446,8 +421,8 @@ export function AiChatPanel() {
                 tools,
                 messages: projectedMsgs,
               });
-              setLastUsage(e.usage);
-              setSessionUsage((prev) => mergeUsage(prev, e.usage));
+              setLastUsage(e.usage as LlmUsage);
+              setSessionUsage((prev) => mergeUsage(prev, e.usage as LlmUsage));
               return;
             }
             if (e.type === "activity") {
@@ -467,259 +442,7 @@ export function AiChatPanel() {
               const next = [...prev];
               const idx = next.findIndex((m) => m.id === asstId);
               if (idx < 0) return prev;
-              const cur = { ...next[idx], parts: [...next[idx].parts] };
-
-              const agentOf =
-                "agent" in e ? (e as { agent?: string }).agent : undefined;
-              // 待确认必须顶层可见，不可塞进 SubAgent 折叠子轨迹
-              const nestIntoSub = Boolean(
-                agentOf &&
-                  agentOf !== "orchestrator" &&
-                  (e.type === "thinking" ||
-                    e.type === "thinking_delta" ||
-                    e.type === "text" ||
-                    e.type === "text_delta" ||
-                    e.type === "tool_call" ||
-                    e.type === "tool_result"),
-              );
-
-              const findRunningSubagent = (agent?: string) => {
-                const si = cur.parts.findIndex(
-                  (p) =>
-                    p.type === "subagent" &&
-                    p.status === "running" &&
-                    p.agent === agent,
-                );
-                if (si < 0) return null;
-                const sub = cur.parts[si];
-                if (sub.type !== "subagent") return null;
-                return { si, sub };
-              };
-
-              const pushChild = (child: MessagePart, agent?: string) => {
-                const found = findRunningSubagent(agent ?? agentOf);
-                if (!found) {
-                  cur.parts.push(child);
-                  return;
-                }
-                const { si, sub } = found;
-                cur.parts[si] = {
-                  ...sub,
-                  children: [...(sub.children ?? []), child],
-                };
-              };
-
-              const appendStreamInSub = (
-                kind: "thinking" | "text",
-                delta: string,
-                agent?: string,
-              ) => {
-                const found = findRunningSubagent(agent);
-                if (!found) {
-                  cur.parts.push({ type: kind, text: delta, agent });
-                  return;
-                }
-                const { si, sub } = found;
-                const children = [...(sub.children ?? [])];
-                const last = children[children.length - 1];
-                if (last?.type === kind && last.agent === agent) {
-                  children[children.length - 1] = {
-                    type: kind,
-                    text: last.text + delta,
-                    agent,
-                  };
-                } else {
-                  children.push({ type: kind, text: delta, agent });
-                }
-                cur.parts[si] = { ...sub, children };
-              };
-
-              const upsertChildToolPart = (
-                part: MessagePart,
-                agent?: string,
-              ) => {
-                if (
-                  part.type !== "tool_call" &&
-                  part.type !== "tool_pending" &&
-                  part.type !== "tool_result"
-                ) {
-                  pushChild(part, agent);
-                  return;
-                }
-                const found = findRunningSubagent(agent);
-                if (!found) {
-                  const i = cur.parts.findIndex(
-                    (p) =>
-                      (p.type === "tool_call" || p.type === "tool_pending") &&
-                      p.id === part.id,
-                  );
-                  if (i >= 0) cur.parts[i] = part;
-                  else cur.parts.push(part);
-                  return;
-                }
-                const { si, sub } = found;
-                const children = [...(sub.children ?? [])];
-                const ci = children.findIndex(
-                  (c) =>
-                    (c.type === part.type ||
-                      (part.type === "tool_pending" &&
-                        (c.type === "tool_call" || c.type === "tool_pending")) ||
-                      (part.type === "tool_call" &&
-                        (c.type === "tool_call" || c.type === "tool_pending"))) &&
-                    c.id === part.id,
-                );
-                if (ci >= 0) children[ci] = part;
-                else children.push(part);
-                cur.parts[si] = { ...sub, children };
-              };
-
-              const removePendingEverywhere = (id: string) => {
-                cur.parts = cur.parts.filter(
-                  (p) => !(p.type === "tool_pending" && p.id === id),
-                );
-                for (let i = 0; i < cur.parts.length; i++) {
-                  const p = cur.parts[i];
-                  if (p.type !== "subagent" || !p.children?.length) continue;
-                  cur.parts[i] = {
-                    ...p,
-                    children: p.children.filter(
-                      (c) => !(c.type === "tool_pending" && c.id === id),
-                    ),
-                  };
-                }
-              };
-
-              const appendStreamPart = (
-                kind: "thinking" | "text",
-                delta: string,
-                agent?: string,
-              ) => {
-                if (nestIntoSub) {
-                  appendStreamInSub(kind, delta, agent);
-                  return;
-                }
-                const last = cur.parts[cur.parts.length - 1];
-                if (last?.type === kind && last.agent === agent) {
-                  cur.parts[cur.parts.length - 1] = {
-                    type: kind,
-                    text: last.text + delta,
-                    agent,
-                  };
-                  return;
-                }
-                cur.parts.push({ type: kind, text: delta, agent });
-              };
-
-              if (e.type === "thinking_delta") {
-                appendStreamPart("thinking", e.text, e.agent);
-              } else if (e.type === "text_delta") {
-                appendStreamPart("text", e.text, e.agent);
-              } else if (e.type === "thinking") {
-                if (nestIntoSub) {
-                  appendStreamInSub("thinking", e.text, e.agent);
-                } else {
-                  cur.parts.push({
-                    type: "thinking",
-                    text: e.text,
-                    agent: e.agent,
-                  });
-                }
-              } else if (e.type === "text") {
-                if (nestIntoSub) {
-                  appendStreamInSub("text", e.text, e.agent);
-                } else {
-                  const last = cur.parts[cur.parts.length - 1];
-                  if (last?.type === "text" && last.agent === e.agent) {
-                    cur.parts[cur.parts.length - 1] = {
-                      type: "text",
-                      text: last.text + e.text,
-                      agent: e.agent,
-                    };
-                  } else {
-                    cur.parts.push({
-                      type: "text",
-                      text: e.text,
-                      agent: e.agent,
-                    });
-                  }
-                }
-              } else if (e.type === "tool_call") {
-                const part: MessagePart = {
-                  type: "tool_call",
-                  id: e.id,
-                  name: e.name,
-                  args: e.args,
-                  agent: e.agent,
-                };
-                removePendingEverywhere(e.id);
-                if (nestIntoSub) upsertChildToolPart(part, e.agent);
-                else {
-                  const i = cur.parts.findIndex(
-                    (p) =>
-                      (p.type === "tool_call" || p.type === "tool_pending") &&
-                      p.id === e.id,
-                  );
-                  if (i >= 0) cur.parts[i] = part;
-                  else cur.parts.push(part);
-                }
-              } else if (e.type === "tool_pending") {
-                const pending: MessagePart = {
-                  type: "tool_pending",
-                  id: e.id,
-                  name: e.name,
-                  args: e.args,
-                  dangerous: e.dangerous,
-                  agent: e.agent,
-                };
-                removePendingEverywhere(e.id);
-                const i = cur.parts.findIndex(
-                  (p) =>
-                    (p.type === "tool_call" || p.type === "tool_pending") &&
-                    p.id === e.id,
-                );
-                if (i >= 0) cur.parts[i] = pending;
-                else cur.parts.push(pending);
-              } else if (e.type === "tool_result") {
-                const resultPart: MessagePart = {
-                  type: "tool_result",
-                  id: e.id,
-                  name: e.name,
-                  result: e.result,
-                  agent: e.agent,
-                };
-                removePendingEverywhere(e.id);
-                if (nestIntoSub) upsertChildToolPart(resultPart, e.agent);
-                else cur.parts.push(resultPart);
-              } else if (e.type === "subagent_start") {
-                cur.parts.push({
-                  type: "subagent",
-                  id: e.id,
-                  agent: e.agent,
-                  label: e.label,
-                  task: e.task,
-                  status: "running",
-                  children: [],
-                });
-              } else if (e.type === "subagent_end") {
-                const i = cur.parts.findIndex(
-                  (p) => p.type === "subagent" && p.id === e.id,
-                );
-                if (i >= 0 && cur.parts[i].type === "subagent") {
-                  cur.parts[i] = {
-                    ...cur.parts[i],
-                    status: e.ok ? "done" : "error",
-                    summary: e.summary,
-                    children: e.children ?? cur.parts[i].children,
-                  };
-                }
-              } else if (e.type === "plan") {
-                cur.parts.push({ type: "plan", items: e.items });
-              } else if (e.type === "status") {
-                cur.parts.push({ type: "status", text: e.text });
-              } else if (e.type === "error") {
-                cur.parts.push({ type: "text", text: `错误：${e.text}` });
-              }
-              next[idx] = cur;
+              next[idx] = { ...next[idx], parts: reduceParts(next[idx].parts, e) };
               return next;
             });
           },
@@ -746,8 +469,6 @@ export function AiChatPanel() {
     [
       permissionMode,
       ensureSession,
-      runtime,
-      remoteAgentId,
       modelRef,
       thinkingMode,
       reloadMeta,
@@ -784,22 +505,6 @@ export function AiChatPanel() {
     }
     setText("");
     await runTurn({ content });
-  };
-
-  const refreshRemote = async () => {
-    try {
-      const list = await discoverRemoteAgents();
-      for (const a of list) {
-        await upsertRemoteAgent({
-          id: a.id,
-          name: a.name,
-          description: a.description,
-        });
-      }
-      await reloadMeta();
-    } catch (e) {
-      console.error(e);
-    }
   };
 
   const modelShort = useMemo(() => {
@@ -859,11 +564,7 @@ export function AiChatPanel() {
     activityTick,
   ]);
 
-  const agentShort =
-    runtime === "local"
-      ? t("terminal.aiLocalAgent")
-      : remoteAgents.find((a) => a.id === remoteAgentId)?.name ||
-        t("terminal.aiLocalAgent");
+  const agentShort = t("terminal.aiLocalAgent");
 
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground">
@@ -901,8 +602,6 @@ export function AiChatPanel() {
                     }
                     const id = await createAgentSession({
                       title: activeTab?.title?.trim() || t("terminal.aiNewChat"),
-                      runtime,
-                      remote_agent_id: remoteAgentId || null,
                       model_ref: modelRef || null,
                       permission_mode: permissionMode,
                       host_id: activeTab?.hostId ?? null,
@@ -1154,42 +853,12 @@ export function AiChatPanel() {
                 <SelectItem value="full">{t("terminal.aiPermFull")}</SelectItem>
               </SelectContent>
             </Select>
-            <Select
-              value={runtime === "local" ? "local" : `remote:${remoteAgentId}`}
-              onValueChange={(v) => {
-                if (v === "local") {
-                  setRuntime("local");
-                  setRemoteAgentId("");
-                } else if (v === "__refresh__") {
-                  void refreshRemote();
-                } else {
-                  setRuntime("remote");
-                  setRemoteAgentId(v.replace(/^remote:/, ""));
-                }
-              }}
+            <span
+              className="flex h-7 min-w-0 flex-1 items-center truncate px-1.5 text-[11px] text-muted-foreground"
+              title={agentShort}
             >
-              <SelectTrigger
-                className="h-7 min-w-0 flex-1 border-0 bg-transparent px-1.5 text-[11px] shadow-none focus:ring-0"
-                title={agentShort}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent side="top" align="center">
-                <SelectItem value="local">
-                  {t("terminal.aiLocalAgent")}
-                </SelectItem>
-                {remoteAgents
-                  .filter((a) => a.enabled)
-                  .map((a) => (
-                    <SelectItem key={a.id} value={`remote:${a.id}`}>
-                      {a.name}
-                    </SelectItem>
-                  ))}
-                <SelectItem value="__refresh__">
-                  {t("terminal.aiRefreshRemote")}
-                </SelectItem>
-              </SelectContent>
-            </Select>
+              {t("terminal.aiLocalAgent")}
+            </span>
             <Select
               value={modelRef || undefined}
               onValueChange={setModelRef}
@@ -1232,7 +901,7 @@ export function AiChatPanel() {
             </Select>
           </div>
 
-          {/* 上下文容量：细条，点击看拆分 */}
+          {/* 上下文容量：有 API 样本后显示占用（对齐 dsh ContextMeter） */}
           <Popover>
             <PopoverTrigger asChild>
               <button
@@ -1240,33 +909,35 @@ export function AiChatPanel() {
                 className="flex w-full items-center gap-2 border-b border-border/70 px-2 py-1 text-left hover:bg-muted/40"
               >
                 <div className="relative h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="pointer-events-none absolute inset-y-0 z-10 w-px bg-muted-foreground/40"
-                    style={{
-                      left: `${Math.min(99, contextBudget.thresholdPercent)}%`,
-                    }}
-                    title={`压缩阈值 ${contextBudget.thresholdPercent}%`}
-                  />
-                  <div
-                    className={cn(
-                      "h-full rounded-full transition-all",
-                      contextBudget.percent >= 90
-                        ? "bg-destructive"
-                        : contextBudget.percent >= 70
-                          ? "bg-amber-500"
-                          : "bg-primary",
-                    )}
-                    style={{
-                      width: `${Math.min(100, Math.max(2, contextBudget.percent))}%`,
-                    }}
-                  />
+                  {contextBudget.pressureTokens != null ? (
+                    <>
+                      <div
+                        className="pointer-events-none absolute inset-y-0 z-10 w-px bg-muted-foreground/40"
+                        style={{
+                          left: `${Math.min(99, contextBudget.thresholdPercent)}%`,
+                        }}
+                        title={`压缩阈值 ${contextBudget.thresholdPercent}%`}
+                      />
+                      <div
+                        className={cn(
+                          "h-full rounded-full transition-all",
+                          contextBudget.percent >= 90
+                            ? "bg-destructive"
+                            : contextBudget.percent >= 70
+                              ? "bg-amber-500"
+                              : "bg-primary",
+                        )}
+                        style={{
+                          width: `${Math.min(100, Math.max(1, contextBudget.percent))}%`,
+                        }}
+                      />
+                    </>
+                  ) : null}
                 </div>
                 <span className="shrink-0 tabular-nums text-[10px] text-muted-foreground">
-                  {contextBudget.percent}% ·{" "}
                   {contextBudget.pressureTokens != null
-                    ? formatTokenCount(contextBudget.projectedTokens)
-                    : `~${formatTokenCount(contextBudget.projectedTokens)}`}
-                  /{formatTokenCount(contextBudget.contextWindow)}
+                    ? `${contextBudget.percent}% · ${formatTokenCount(contextBudget.projectedTokens)}/${formatTokenCount(contextBudget.contextWindow)}`
+                    : `—/${formatTokenCount(contextBudget.contextWindow)}`}
                 </span>
               </button>
             </PopoverTrigger>
@@ -1340,7 +1011,9 @@ export function AiChatPanel() {
                 </>
               ) : null}
               <div className="border-t border-border pt-1.5 text-[10px] text-muted-foreground">
-                占用率基于 projectedTokens（API 样本 + 表层增量）；下方组成为启发式估算，相加不等于占用总量。
+                {contextBudget.pressureTokens != null
+                  ? "占用率 = API prompt 样本 + 表层增量；下方组成为 chars÷4 启发式，相加不等于占用总量。"
+                  : "发送一轮后由模型返回的 prompt usage 锚定占用率；下方组成为 chars÷4 启发式预览。"}
               </div>
             </PopoverContent>
           </Popover>
@@ -1391,324 +1064,4 @@ function BudgetRow({ label, value }: { label: string; value: number }) {
       <span className="tabular-nums">~{formatTokenCount(value)}</span>
     </div>
   );
-}
-
-function MessageBlock({
-  messageId,
-  role,
-  parts,
-  onConfirm,
-  onExecutePlan,
-  executedPlanKeys,
-  busy,
-  permissionMode,
-}: {
-  messageId: string;
-  role: "user" | "assistant";
-  parts: MessagePart[];
-  onConfirm?: (id: string, ok: boolean) => void;
-  onExecutePlan?: (items: string[], planKey: string) => void;
-  executedPlanKeys?: Set<string>;
-  busy?: boolean;
-  permissionMode?: AgentPermissionMode;
-}) {
-  if (role === "user") {
-    const text = parts
-      .filter((p): p is Extract<MessagePart, { type: "text" }> => p.type === "text")
-      .map((p) => p.text)
-      .join("\n");
-    return (
-      <div className="ml-4 rounded-lg rounded-br-sm bg-primary/10 px-2.5 py-1.5 text-[12px] leading-[1.55] text-foreground">
-        {text}
-      </div>
-    );
-  }
-  return (
-    <div className="mr-1 space-y-1.5 text-[12px] leading-[1.55]">
-      {parts.map((p, i) => (
-        <PartView
-          key={i}
-          part={p}
-          planKey={p.type === "plan" ? `${messageId}:${i}` : undefined}
-          onConfirm={onConfirm}
-          onExecutePlan={onExecutePlan}
-          executedPlanKeys={executedPlanKeys}
-          busy={busy}
-          permissionMode={permissionMode}
-        />
-      ))}
-    </div>
-  );
-}
-
-function toolLabel(name: string, args: unknown): string {
-  if (
-    (name === "terminal_run" || name === "session_exec") &&
-    args &&
-    typeof args === "object" &&
-    "command" in args
-  ) {
-    return `${name === "terminal_run" ? "终端执行" : "旁路执行"} · ${String((args as { command: string }).command)}`;
-  }
-  if (name === "run_script" && args && typeof args === "object") {
-    const a = args as {
-      script_name?: string;
-      script_id?: number;
-    };
-    const title = a.script_name || (a.script_id != null ? `#${a.script_id}` : "");
-    return title ? `执行脚本 · ${title}` : "执行脚本";
-  }
-  if (name === "get_script" && args && typeof args === "object" && "script_id" in args) {
-    return `读取脚本 · #${String((args as { script_id: unknown }).script_id)}`;
-  }
-  const labels: Record<string, string> = {
-    terminal_tail: "读取终端输出",
-    list_sessions: "列出会话",
-    host_info: "主机信息",
-    list_hosts: "主机列表",
-    host_metrics: "指标探测",
-    run_batch: "批量执行脚本",
-    create_inspection_report: "生成巡检报告",
-    docker_compose_up: "Compose up",
-    list_scripts: "脚本库列表",
-    get_script: "读取脚本",
-    list_cmd_history: "历史命令",
-    run_script: "执行脚本",
-    list_files: "列出文件",
-    read_file: "读取文件",
-    file_info: "文件信息",
-    ping: "Ping",
-    dns_lookup: "DNS 查询",
-    tcp_probe: "TCP 探测",
-    tls_cert: "TLS 证书",
-    docker_ps: "Docker 列表",
-    docker_logs: "Docker 日志",
-    docker_inspect: "Docker Inspect",
-    search_notes: "搜索笔记",
-    search_session_logs: "搜索录制",
-    search_cmd_history: "搜索历史命令",
-    port_snapshot: "端口快照",
-    disk_snapshot: "磁盘快照",
-    upload_file: "上传文件",
-    upload_tree: "上传目录树",
-    sync_to_remote: "同步到远程",
-    write_remote_file: "写远程文件",
-    deploy: "部署",
-  };
-  return labels[name] ?? name;
-}
-
-function PartView({
-  part,
-  planKey,
-  onConfirm,
-  onExecutePlan,
-  executedPlanKeys,
-  busy,
-  permissionMode,
-}: {
-  part: MessagePart;
-  planKey?: string;
-  onConfirm?: (id: string, ok: boolean) => void;
-  onExecutePlan?: (items: string[], planKey: string) => void;
-  executedPlanKeys?: Set<string>;
-  busy?: boolean;
-  permissionMode?: AgentPermissionMode;
-}) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(part.type === "thinking");
-  if (part.type === "text") {
-    return (
-      <MarkdownViewer
-        source={part.text}
-        density="compact"
-        className="text-sidebar-foreground"
-      />
-    );
-  }
-  if (part.type === "thinking") {
-    return (
-      <button
-        type="button"
-        className="w-full rounded-md border border-dashed border-border bg-muted/40 px-2 py-1.5 text-left text-[12px] leading-[1.55] text-muted-foreground"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span className="font-medium text-foreground/80">
-          Thought
-          {part.agent && part.agent !== "orchestrator"
-            ? ` · ${part.agent}`
-            : ""}
-        </span>
-        {open ? (
-          <pre className="mt-1 whitespace-pre-wrap font-sans text-[12px] leading-[1.55]">
-            {part.text}
-          </pre>
-        ) : (
-          <span className="ml-1 opacity-70">
-            {part.text.slice(0, 64)}
-            {part.text.length > 64 ? "…" : ""}
-          </span>
-        )}
-      </button>
-    );
-  }
-  if (part.type === "subagent") {
-    return (
-      <div
-        className={cn(
-          "rounded-md border px-2 py-1.5 text-[11px]",
-          part.status === "running" && "border-primary/40 bg-primary/5",
-          part.status === "done" && "border-border bg-muted/30",
-          part.status === "error" && "border-destructive/40 bg-destructive/5",
-        )}
-      >
-        <div className="flex items-center gap-1.5 font-medium">
-          {part.status === "running" ? (
-            <Loader2 size={12} className="animate-spin text-primary" />
-          ) : (
-            <Bot size={12} className="text-primary" />
-          )}
-          <span>
-            SubAgent · {part.label}
-            {part.status === "running"
-              ? " · 执行中"
-              : part.status === "error"
-                ? " · 失败"
-                : " · 完成"}
-          </span>
-        </div>
-        <div className="mt-0.5 text-muted-foreground">{part.task}</div>
-        {part.summary ? (
-          <div className="mt-1.5 border-t border-border/60 pt-1.5">
-            <MarkdownViewer source={part.summary} density="compact" />
-          </div>
-        ) : null}
-        {part.children && part.children.length > 0 ? (
-          <details className="mt-1">
-            <summary className="cursor-pointer text-[10px] text-muted-foreground">
-              展开子轨迹 ({part.children.length})
-            </summary>
-            <div className="mt-1 space-y-1 border-l border-border pl-2">
-              {part.children.map((c, i) => (
-                <PartView key={i} part={c} onConfirm={onConfirm} />
-              ))}
-            </div>
-          </details>
-        ) : null}
-      </div>
-    );
-  }
-  if (part.type === "plan") {
-    const md = part.items
-      .map((it, i) => `${i + 1}. ${it.replace(/\n+/g, " ")}`)
-      .join("\n");
-    const executed = planKey ? executedPlanKeys?.has(planKey) : false;
-    const executeLabel =
-      permissionMode === "plan"
-        ? t("terminal.aiPlanExecuteSwitch")
-        : t("terminal.aiPlanExecute");
-    return (
-      <div className="rounded-md border border-border bg-muted/50 px-2 py-1.5 text-[11px]">
-        <div className="mb-1 font-medium">{t("terminal.aiPlanTitle")}</div>
-        <MarkdownViewer
-          source={md}
-          density="compact"
-          className="text-sidebar-foreground"
-        />
-        {part.items.length > 0 ? (
-          <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-border/60 pt-2">
-            <Button
-              type="button"
-              size="sm"
-              className="h-7 gap-1 px-2 text-[10px]"
-              disabled={Boolean(busy || executed)}
-              onClick={() => {
-                if (planKey) onExecutePlan?.(part.items, planKey);
-              }}
-            >
-              <Play size={11} />
-              {executed ? t("terminal.aiPlanExecuted") : executeLabel}
-            </Button>
-            {permissionMode === "plan" && !executed ? (
-              <span className="text-[10px] text-muted-foreground">
-                {t("terminal.aiPlanExecuteHint")}
-              </span>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-    );
-  }
-  if (part.type === "tool_pending") {
-    return (
-      <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px]">
-        <div className="font-medium">
-          待确认{part.dangerous ? " · 危险" : ""}
-          {part.agent && part.agent !== "orchestrator"
-            ? ` · ${part.agent}`
-            : ""}
-        </div>
-        <div className="mt-0.5 text-foreground">
-          {toolLabel(part.name, part.args)}
-        </div>
-        <pre className="mt-1 max-h-20 overflow-auto font-mono text-[10px] text-muted-foreground">
-          {JSON.stringify(part.args, null, 0)}
-        </pre>
-        <div className="mt-1.5 flex gap-1.5">
-          <Button
-            type="button"
-            size="sm"
-            className="h-6 px-2 text-[10px]"
-            onClick={() => onConfirm?.(part.id, true)}
-          >
-            允许执行
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-6 px-2 text-[10px]"
-            onClick={() => onConfirm?.(part.id, false)}
-          >
-            拒绝
-          </Button>
-        </div>
-      </div>
-    );
-  }
-  if (part.type === "tool_call") {
-    return (
-      <div className="flex items-start gap-1.5 rounded-md border border-border px-2 py-1 text-[12px] leading-[1.55]">
-        <Wrench size={12} className="mt-0.5 shrink-0 text-primary" />
-        <div className="min-w-0">
-          <div className="font-medium">
-            Action · {toolLabel(part.name, part.args)}
-          </div>
-          <pre className="truncate font-mono text-[11px] text-muted-foreground">
-            {JSON.stringify(part.args)}
-          </pre>
-        </div>
-      </div>
-    );
-  }
-  if (part.type === "tool_result") {
-    return (
-      <details className="rounded-md bg-muted/40 px-2 py-1.5 text-[12px] leading-[1.55]">
-        <summary className="cursor-pointer font-medium">
-          Observation · {part.name}
-        </summary>
-        <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[11px] leading-snug">
-          {part.result}
-        </pre>
-      </details>
-    );
-  }
-  if (part.type === "status") {
-    return (
-      <div className="text-[11px] font-medium text-muted-foreground">
-        {part.text}
-      </div>
-    );
-  }
-  return null;
 }

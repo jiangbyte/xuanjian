@@ -6,7 +6,8 @@
 import type { LlmMessage } from "@/lib/agent/llm";
 import type { AgentToolDef } from "@/lib/agent/tools";
 import {
-  estimateTokens,
+  estimateSystemTokens,
+  estimateToolsTokens,
   parseContextWindow,
   promptTokensFromUsage,
   type LlmUsage,
@@ -25,10 +26,8 @@ export function measureSurfaceTokens(input: {
   tools: AgentToolDef[];
   messages: LlmMessage[];
 }): number {
-  const system = estimateTokens(input.system);
-  const tools = estimateTokens(
-    input.tools?.length ? JSON.stringify(input.tools) : "",
-  );
+  const system = estimateSystemTokens(input.system);
+  const tools = estimateToolsTokens(input.tools);
   const messages = input.messages.reduce(
     (n, m) => n + measureLlmMessageTokens(m),
     0,
@@ -85,10 +84,8 @@ export function buildContextMeterView(input: {
   thresholdRatio?: number;
 }): ContextMeterView {
   const contextWindow = parseContextWindow(input.contextTag ?? "128k");
-  const systemTokens = estimateTokens(input.system);
-  const toolsTokens = estimateTokens(
-    input.tools?.length ? JSON.stringify(input.tools) : "",
-  );
+  const systemTokens = estimateSystemTokens(input.system);
+  const toolsTokens = estimateToolsTokens(input.tools);
   const messageTokens = input.messages.reduce(
     (n, m) => n + measureLlmMessageTokens(m),
     0,

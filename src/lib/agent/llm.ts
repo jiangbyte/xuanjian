@@ -5,7 +5,7 @@
 
 import { api } from "@/lib/tauri";
 import { parseLlmUsage, type LlmUsage } from "@/lib/agent/contextBudget";
-import { REACT_LIMITS } from "@/lib/agent/reactGuards";
+import { REACT_LIMITS } from "@xuanjian/agent-core";
 import type { AgentToolDef } from "@/lib/agent/tools";
 
 export type LlmMessage =

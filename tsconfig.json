@@ -24,8 +24,11 @@
     /* Path alias: @/* → src/* */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@xuanjian/agent-core": ["packages/agent-core/src/index.ts"],
+      "@xuanjian/agent-core/graph": ["packages/agent-core/src/graph.ts"],
+      "@xuanjian/agent-adapters": ["packages/agent-adapters/src/index.ts"]
     }
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "vite.config.ts", "packages/agent-core/src", "packages/agent-adapters/src"]
 }

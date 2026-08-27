@@ -1,6 +1,5 @@
 /**
- * @file 会话模块导出
- * @author Charlie
+ * @file session 模块导出
  */
 
 export { buildAgentHistory, buildHistoryFromMessageRows } from "@/lib/agent/session/buildHistory";
@@ -12,5 +11,4 @@ export {
   sessionEventsToParts,
   toLlmToolCall,
 } from "@/lib/agent/session/partsMapping";
-export { SessionStore } from "@/lib/agent/session/store";
 export type { DeriveMessagesOptions, SessionEvent } from "@/lib/agent/session/types";

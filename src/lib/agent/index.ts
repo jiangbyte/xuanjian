@@ -1,20 +1,23 @@
 /**
- * @file Agent Harness 模块入口
- * @author Charlie
+ * @file Agent 模块入口
  */
 
-export { runAgentTurn } from "@/lib/agent/runtime";
-export type { RunAgentInput, RuntimeEvent, ConfirmToolRequest } from "@/lib/agent/types";
-export { runLocalReAct } from "@/lib/agent/react";
+export { runAgentTurn } from "@xuanjian/agent-adapters";
 export {
-  buildAgentHistory,
-  deriveMessages,
-  SessionStore,
-} from "@/lib/agent/session";
-export {
-  runReActLoop,
-  resolveProvider,
-  AgentInbox,
-} from "@/lib/agent/agent-loop";
+  steerAgent,
+  buildPlanExecutePrompt,
+  splitPlanFromReply,
+  REACT_LIMITS,
+  ReactLoopGuard,
+} from "@xuanjian/agent-core";
+export type {
+  RunAgentInput,
+  RuntimeEvent,
+  ConfirmToolRequest,
+  AgentActivityPhase,
+} from "@xuanjian/agent-core";
+export { buildAgentHistory, deriveMessages } from "@/lib/agent/session";
 export { useHook, registerDefaultToolHooks } from "@/lib/agent/hooks";
 export { compactLlmMessagesForModel } from "@/lib/agent/compaction";
+export { resolveProvider } from "@/lib/agent/provider";
+export type { ProviderBundle } from "@/lib/agent/provider";

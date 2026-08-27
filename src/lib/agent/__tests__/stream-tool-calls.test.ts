@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   normalizeSubAgentArgs,
   parseArgs,
-} from "@/lib/agent/agent-loop/parse-tool-args";
+} from "@xuanjian/agent-core";
 import { mergeStreamToolCallDeltas } from "@/lib/agent/llm/stream-tool-calls";
 
 describe("mergeStreamToolCallDeltas", () => {

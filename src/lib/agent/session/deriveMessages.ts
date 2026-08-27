@@ -19,6 +19,33 @@ type PendingAssistant = {
   agent?: string;
 };
 
+function ensureAnthropicToolUses(
+  blocks: import("@/lib/agent/llm").AnthropicContentBlock[],
+  toolCalls: import("@/lib/agent/llm").LlmToolCall[],
+): import("@/lib/agent/llm").AnthropicContentBlock[] {
+  const existing = new Set(
+    blocks.filter((b) => b.type === "tool_use").map((b) => b.id),
+  );
+  const out = [...blocks];
+  for (const tc of toolCalls) {
+    if (existing.has(tc.id)) continue;
+    let input: unknown = {};
+    try {
+      input = JSON.parse(tc.function.arguments || "{}");
+    } catch {
+      input = {};
+    }
+    out.push({
+      type: "tool_use",
+      id: tc.id,
+      name: tc.function.name,
+      input,
+    });
+    existing.add(tc.id);
+  }
+  return out;
+}
+
 function flushAssistant(
   messages: LlmMessage[],
   pending: PendingAssistant | null,
@@ -37,6 +64,12 @@ function flushAssistant(
         ...anthropicContent,
       ];
     }
+    // 历史回放常只有 thinking；必须补齐 tool_use，否则 Rust 优先 anthropic_content
+    // 会丢掉 OpenAI tool_calls，导致后续 tool_result 孤儿。
+    anthropicContent = ensureAnthropicToolUses(
+      anthropicContent,
+      pending.toolCalls,
+    );
     messages.push({
       role: "assistant",
       content,
