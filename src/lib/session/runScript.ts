@@ -6,6 +6,7 @@
  */
 
 import type { ScriptRow } from "@/lib/db";
+import { normalizePasteForPty } from "@/lib/session/pasteNormalize";
 import { applyScriptVars, extractScriptVars } from "@/lib/session/scriptVars";
 import { api } from "@/lib/tauri";
 
@@ -49,7 +50,7 @@ export async function sendScriptToSession(
   body: string,
   opts: { pasteOnly: boolean; sendMode: "once" | "line" },
 ) {
-  const text = body.replace(/\r\n/g, "\n");
+  const text = normalizePasteForPty(body);
   if (opts.sendMode === "line") {
     const lines = text.split("\n");
     for (const line of lines) {

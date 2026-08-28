@@ -13,12 +13,12 @@
   <img src="https://img.shields.io/badge/SQLite-Local-003B57?logo=sqlite&logoColor=white" alt="SQLite" />
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platform" />
   <img src="https://img.shields.io/badge/License-MIT-yellow" alt="License" />
-  <img src="https://img.shields.io/badge/version-1.3.2-orange" alt="Version" />
+  <img src="https://img.shields.io/badge/version-1.3.3-orange" alt="Version" />
 </p>
 
 **玄鉴（Xuanjian）** 是一款面向运维与现场排查的 **AI 桌面运维工作台**：主机清单、本地 / SSH / WSL 终端、SFTP、脚本与笔记、会话录制回放、本机网络工具与终端侧栏 Docker，并内置 **玄鉴 Agent**——基于 LangGraph 本地编排，可在**独立下栏终端**中可观测地执行命令，按 ReAct 完成排查与运维任务。基于 **Tauri 2 + React + Rust**，数据本地 SQLite 持久化，跨 Windows / macOS / Linux。
 
-> 当前版本：`1.3.2` · 协议：[MIT License](LICENSE) · 应用标识：`io.github.jiangbyte.xuanjian` · 仓库：[jiangbyte/xuanjian](https://github.com/jiangbyte/xuanjian)
+> 当前版本：`1.3.3` · 协议：[MIT License](LICENSE) · 应用标识：`io.github.jiangbyte.xuanjian` · 仓库：[jiangbyte/xuanjian](https://github.com/jiangbyte/xuanjian)
 
 ## 目录
 
@@ -241,6 +241,7 @@ pnpm tauri build
 | 文档 | 说明 |
 | --- | --- |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Agent LangGraph 分层与事件协议 |
+| [`docs/release-notes/v1.3.3.md`](docs/release-notes/v1.3.3.md) | v1.3.3 发行说明 |
 | [`docs/release-notes/v1.3.2.md`](docs/release-notes/v1.3.2.md) | v1.3.2 发行说明 |
 | [`docs/release-notes/v1.3.1.md`](docs/release-notes/v1.3.1.md) | v1.3.1 发行说明 |
 | [`docs/release-notes/v1.3.0.md`](docs/release-notes/v1.3.0.md) | v1.3.0 发行说明 |

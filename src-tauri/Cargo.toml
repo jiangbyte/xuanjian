@@ -1,6 +1,6 @@
 [package]
 name = "xuanjian"
-version = "1.3.2"
+version = "1.3.3"
 description = "玄鉴 / Xuanjian - Agent O&M tool"
 authors = ["Charlie"]
 license = "MIT"

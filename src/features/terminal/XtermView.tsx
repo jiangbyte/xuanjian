@@ -17,6 +17,7 @@ import {
   useContextMenu,
 } from "@/components/ContextMenu";
 import { clipboardReadText, clipboardWriteText } from "@/lib/ui/clipboard";
+import { normalizePasteForPty } from "@/lib/session/pasteNormalize";
 import { attachTerminalClipboard } from "@/lib/ui/terminalClipboard";
 import { dialogs } from "@/lib/ui/dialogs";
 import { modKeyLabel } from "@/lib/core/platform";
@@ -99,7 +100,7 @@ export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
     const pasteToSession = async (text: string) => {
       const sid = sessionRef.current;
       if (!sid || !text) return;
-      await api.sessionWrite(sid, text);
+      await api.sessionWrite(sid, normalizePasteForPty(text));
     };
 
     const detachClipboard = attachTerminalClipboard(term, {
@@ -320,7 +321,9 @@ export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
                 if (!sid) return;
                 try {
                   const text = await clipboardReadText();
-                  if (text) await api.sessionWrite(sid, text);
+                  if (text) {
+                    await api.sessionWrite(sid, normalizePasteForPty(text));
+                  }
                 } catch {
                   /* clipboard denied */
                 }
