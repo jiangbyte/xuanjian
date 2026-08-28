@@ -5,7 +5,6 @@
 
 import { summarizeAuditEvents } from "@/lib/db/audit";
 import { listAlertRules } from "@/lib/db/automation";
-import { listDockerProjects } from "@/lib/db/dockerProjects";
 import { listGroups, listHosts } from "@/lib/db/hosts";
 import { listNoteCategories, listNotes } from "@/lib/db/notes";
 import { listScriptPackages, listScripts } from "@/lib/db/scripts";
@@ -13,7 +12,6 @@ import { listWorkspaces } from "@/lib/db/workspaces";
 import {
   EXPORT_FORMAT,
   EXPORT_VERSION,
-  type ExportDockerProject,
   type ExportHostItem,
   type XuanjianExport,
 } from "@/lib/share/types";
@@ -26,7 +24,6 @@ export type BuildExportOptions = {
     hosts?: boolean;
     scripts?: boolean;
     notes?: boolean;
-    dockerProjects?: boolean;
     workspaces?: boolean;
     alertRules?: boolean;
     auditSummary?: boolean;
@@ -35,7 +32,6 @@ export type BuildExportOptions = {
   hostIds?: number[];
   scriptIds?: number[];
   noteIds?: number[];
-  dockerProjectIds?: number[];
   /** 使用 encrypt_secret 加密整包 JSON（同机可解密导入） */
   encryptPackage?: boolean;
 };
@@ -53,7 +49,6 @@ export async function buildExport(
     hosts: true,
     scripts: true,
     notes: true,
-    dockerProjects: true,
     workspaces: true,
     alertRules: true,
     auditSummary: true,
@@ -174,41 +169,6 @@ export async function buildExport(
         category: n.category_name ?? null,
       })),
     };
-  }
-
-  if (sections.dockerProjects !== false) {
-    let projects = await listDockerProjects();
-    const filter = idSet(options.dockerProjectIds);
-    if (filter) projects = projects.filter((p) => filter.has(p.id));
-    const dockerProjects: ExportDockerProject[] = projects.map((p) => {
-      let compose: unknown = {};
-      let dockerfiles: Record<string, string> = {};
-      let layout: unknown = {};
-      try {
-        compose = JSON.parse(p.compose_json || "{}");
-      } catch {
-        compose = {};
-      }
-      try {
-        dockerfiles = JSON.parse(p.dockerfiles_json || "{}");
-      } catch {
-        dockerfiles = {};
-      }
-      try {
-        layout = JSON.parse(p.layout_json || "{}");
-      } catch {
-        layout = {};
-      }
-      return {
-        name: p.name,
-        description: p.description,
-        kind: p.kind,
-        compose,
-        dockerfiles,
-        layout,
-      };
-    });
-    doc.dockerProjects = dockerProjects;
   }
 
   if (sections.workspaces !== false) {

@@ -257,7 +257,6 @@ export function HostsConsole() {
                 hosts: true,
                 scripts: false,
                 notes: false,
-                dockerProjects: false,
               },
               hostIds: ids,
             },

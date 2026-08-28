@@ -201,7 +201,6 @@ export function ScriptsConsole() {
                 hosts: false,
                 scripts: true,
                 notes: false,
-                dockerProjects: false,
               },
               scriptIds: ids,
             },

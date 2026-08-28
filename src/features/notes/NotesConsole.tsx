@@ -459,7 +459,6 @@ export function NotesConsole() {
                     hosts: false,
                     scripts: false,
                     notes: true,
-                    dockerProjects: false,
                   },
                   noteIds: ids,
                 },

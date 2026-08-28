@@ -3,7 +3,6 @@
  * @description 各模块为空时注入占位示例，便于了解数据结构；与普通记录一样可编辑、删除。
  */
 
-import { DOCKER_TEMPLATES } from "@/features/docker/templates";
 import {
   EXPORT_FORMAT,
   EXPORT_VERSION,
@@ -183,45 +182,5 @@ mysqldump -h 127.0.0.1 -u backup -p app \\
         },
       ],
     },
-  };
-}
-
-function templateById(id: string) {
-  return DOCKER_TEMPLATES.find((t) => t.id === id);
-}
-
-/** Docker 示例项目 */
-export const SAMPLE_DOCKER_PROJECTS = [
-  {
-    name: `${SAMPLE_PREFIX}Nginx 静态站`,
-    description: "Nginx + Dockerfile，8080 端口。",
-    templateId: "nginx",
-  },
-  {
-    name: `${SAMPLE_PREFIX}Redis 缓存`,
-    description: "Redis 7 单节点，6379 端口。",
-    templateId: "redis",
-  },
-  {
-    name: `${SAMPLE_PREFIX}精简 Dockerfile`,
-    description: "Alpine 基础镜像。",
-    templateId: "blank-dockerfile",
-  },
-] as const;
-
-export function sampleDockerProjectInput(
-  name: string,
-  description: string,
-  templateId: string,
-) {
-  const tpl = templateById(templateId);
-  if (!tpl) return null;
-  return {
-    name,
-    description,
-    kind: tpl.kind,
-    compose_json: JSON.stringify(tpl.compose),
-    dockerfiles_json: JSON.stringify(tpl.dockerfiles),
-    layout_json: "{}",
   };
 }

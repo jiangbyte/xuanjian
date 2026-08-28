@@ -680,7 +680,6 @@ export function SettingsDialog({
                         t("settings.aboutFeatureTerminal"),
                         t("settings.aboutFeatureAgent"),
                         t("settings.aboutFeatureSftp"),
-                        t("settings.aboutFeatureDocker"),
                         t("settings.aboutFeatureNetwork"),
                         t("settings.aboutFeatureLocal"),
                       ].map((label) => (

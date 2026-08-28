@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/version-1.3.1-orange" alt="Version" />
 </p>
 
-**玄鉴（Xuanjian）** 是一款面向运维与现场排查的 **AI 桌面运维工作台**：主机清单、本地 / SSH / WSL 终端、SFTP、脚本与笔记、会话录制回放、本机网络工具与 Docker 编排，并内置 **玄鉴 Agent**——基于 LangGraph 本地编排，可在**独立下栏终端**中可观测地执行命令，按 ReAct 完成排查与运维任务。基于 **Tauri 2 + React + Rust**，数据本地 SQLite 持久化，跨 Windows / macOS / Linux。
+**玄鉴（Xuanjian）** 是一款面向运维与现场排查的 **AI 桌面运维工作台**：主机清单、本地 / SSH / WSL 终端、SFTP、脚本与笔记、会话录制回放、本机网络工具与终端侧栏 Docker，并内置 **玄鉴 Agent**——基于 LangGraph 本地编排，可在**独立下栏终端**中可观测地执行命令，按 ReAct 完成排查与运维任务。基于 **Tauri 2 + React + Rust**，数据本地 SQLite 持久化，跨 Windows / macOS / Linux。
 
 > 当前版本：`1.3.1` · 协议：[MIT License](LICENSE) · 应用标识：`io.github.jiangbyte.xuanjian` · 仓库：[jiangbyte/xuanjian](https://github.com/jiangbyte/xuanjian)
 
@@ -66,24 +66,24 @@
   </tr>
 </table>
 
-### Docker · 脚本 · 自动化 · 笔记
+### 脚本 · 自动化 · 笔记
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/docker-dockerfile.png" alt="Dockerfile 编排" /></td>
     <td width="50%"><img src="docs/images/scripts.png" alt="脚本库" /></td>
-  </tr>
-  <tr>
-    <td align="center">Docker 编排工作室 · Dockerfile 可视化编辑</td>
-    <td align="center">脚本库 · 脚本包分类 · 变量占位</td>
-  </tr>
-  <tr>
     <td width="50%"><img src="docs/images/automation.png" alt="批量自动化" /></td>
-    <td width="50%"><img src="docs/images/notes.png" alt="笔记" /></td>
   </tr>
   <tr>
+    <td align="center">脚本库 · 脚本包分类 · 变量占位</td>
     <td align="center">批量自动化 · 多主机脚本执行</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/notes.png" alt="笔记" /></td>
+    <td width="50%"></td>
+  </tr>
+  <tr>
     <td align="center">笔记 · 分类管理 · Markdown 编辑</td>
+    <td align="center"></td>
   </tr>
 </table>
 
@@ -135,7 +135,7 @@
 | **玄鉴 Agent** | LangGraph Orchestrator + SubAgent（巡检 / 终端 / 部署 / 分析）；权限模式（计划 / 确认 / 完全）；MCP 工具动态合并；上下文压缩与用量计量 |
 | **模型与协议** | 自定义供应商；**OpenAI 兼容** 与 **Anthropic Messages**；思考强度、上下文窗口可配 |
 | **SFTP / 文件** | 双栏浏览、上传下载、冲突处理、内联编辑 |
-| **Docker** | Compose / Dockerfile 编排工作室；会话侧栏管理容器、**实时跟随日志** |
+| **Docker** | 会话侧栏管理容器、镜像、网络与卷，**实时跟随日志**；Agent 可调用 `docker_*` 工具 |
 | **脚本与笔记** | 脚本包、变量占位、多目标执行；Markdown 笔记分类与自动保存 |
 | **会话日志** | 终端 I/O 录制、筛选、回放、导出 |
 | **网络工具** | Ping / 路由 / DNS、IP 计算、端口探测、HTTP / TLS、测速、连接与流量 |
@@ -165,7 +165,6 @@ xuanjian/                         # pnpm workspace 根
 │   │   ├── hosts/                # 主机操作台
 │   │   ├── terminal/             # 终端 · SFTP · Agent 下栏 · AiChatPanel
 │   │   ├── network/              # 网络工具
-│   │   ├── docker/               # Compose / Dockerfile 编排
 │   │   ├── scripts/ · notes/ · logs/ · audit/ · automation/ · fleet/
 │   │   └── settings/             # 外观 / 终端 / 模型 / MCP / Agent …
 │   ├── lib/

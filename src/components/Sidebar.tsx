@@ -1,13 +1,12 @@
 /**
  * @file 主导航侧栏 — GitHub Primer
  * @author Charlie
- * @description 品牌标识与主机 / 网络 / Docker / 脚本 / 笔记 / 日志等路由入口。
+ * @description 品牌标识与主机 / 网络 / 脚本 / 笔记 / 日志等路由入口。
  */
 
 import {
   Activity,
   ClipboardCheck,
-  Container,
   Network,
   NotebookPen,
   ScrollText,
@@ -28,7 +27,6 @@ export function Sidebar() {
   const mainItems = [
     { to: "/", end: true, icon: Server, label: t("nav.hosts") },
     { to: "/network", icon: Network, label: t("nav.network") },
-    { to: "/docker", icon: Container, label: t("nav.docker") },
     { to: "/scripts", icon: Zap, label: t("nav.scripts") },
     { to: "/automation", icon: Timer, label: t("nav.automation") },
     { to: "/fleet", icon: Activity, label: t("nav.fleet") },

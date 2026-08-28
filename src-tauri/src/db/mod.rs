@@ -685,5 +685,14 @@ DELETE FROM app_settings WHERE key = 'migration.workflow_v1_converted';
 "#,
             kind: MigrationKind::Up,
         },
+        // —— 迁移 v28：移除 Docker 编排工作室 ——
+        Migration {
+            version: 28,
+            description: "drop_docker_projects",
+            sql: r#"
+DROP TABLE IF EXISTS docker_projects;
+"#,
+            kind: MigrationKind::Up,
+        },
     ]
 }

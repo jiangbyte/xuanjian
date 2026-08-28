@@ -60,15 +60,6 @@ export type ExportNoteItem = {
   category?: string | null;
 };
 
-export type ExportDockerProject = {
-  name: string;
-  description?: string;
-  kind?: "compose" | "dockerfile" | "full";
-  compose?: unknown;
-  dockerfiles?: Record<string, string>;
-  layout?: unknown;
-};
-
 export type ExportWorkspaceItem = {
   name: string;
   local_root: string;
@@ -116,7 +107,6 @@ export type XuanjianExport = {
     categories?: ExportNoteCategory[];
     items?: ExportNoteItem[];
   };
-  dockerProjects?: ExportDockerProject[];
   workspaces?: ExportWorkspaceItem[];
   alertRules?: ExportAlertRule[];
   auditSummary?: ExportAuditSummary;

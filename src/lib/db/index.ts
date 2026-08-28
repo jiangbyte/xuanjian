@@ -9,7 +9,6 @@ export * from "@/lib/db/audit";
 export * from "@/lib/db/automation";
 export * from "@/lib/db/client";
 export * from "@/lib/db/cmdHistory";
-export * from "@/lib/db/dockerProjects";
 export * from "@/lib/db/hosts";
 export * from "@/lib/db/knownHosts";
 export * from "@/lib/db/metrics";

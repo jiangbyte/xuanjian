@@ -21,11 +21,6 @@ const NetworkConsole = lazy(() =>
     default: m.NetworkConsole,
   })),
 );
-const DockerConsole = lazy(() =>
-  import("@/features/docker/DockerConsole").then((m) => ({
-    default: m.DockerConsole,
-  })),
-);
 const ScriptsConsole = lazy(() =>
   import("@/features/scripts/ScriptsConsole").then((m) => ({
     default: m.ScriptsConsole,
@@ -95,22 +90,13 @@ export default function App() {
             }
           />
           <Route
-            path="docker"
-            element={
-              <Suspense fallback={<RouteFallback />}>
-                <DockerConsole />
-              </Suspense>
-            }
-          />
-          <Route
             path="scripts"
             element={
               <Suspense fallback={<RouteFallback />}>
                 <ScriptsConsole />
               </Suspense>
             }
-          />
-          <Route
+          />          <Route
             path="automation"
             element={
               <Suspense fallback={<RouteFallback />}>

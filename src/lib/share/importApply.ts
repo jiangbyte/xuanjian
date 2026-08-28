@@ -4,10 +4,6 @@
  */
 
 import { createAlertRule, listAlertRules } from "@/lib/db/automation";
-import {
-  createDockerProject,
-  listDockerProjects,
-} from "@/lib/db/dockerProjects";
 import { createGroup, createHost, listGroups, listHosts } from "@/lib/db/hosts";
 import {
   createNote,
@@ -294,39 +290,6 @@ async function importNotes(doc: XuanjianExport): Promise<ImportResult> {
   return result;
 }
 
-async function importDocker(doc: XuanjianExport): Promise<ImportResult> {
-  const result = emptyResult();
-  if (!doc.dockerProjects?.length) return result;
-  const existing = await listDockerProjects();
-  const nameSet = new Set(existing.map((p) => p.name));
-  for (const p of doc.dockerProjects) {
-    const name = p.name?.trim();
-    if (!name) {
-      result.errors.push("docker project missing name");
-      continue;
-    }
-    if (nameSet.has(name)) {
-      result.skipped += 1;
-      continue;
-    }
-    try {
-      await createDockerProject({
-        name,
-        description: p.description ?? "",
-        kind: p.kind ?? "full",
-        compose_json: JSON.stringify(p.compose ?? {}),
-        dockerfiles_json: JSON.stringify(p.dockerfiles ?? {}),
-        layout_json: JSON.stringify(p.layout ?? {}),
-      });
-      nameSet.add(name);
-      result.created += 1;
-    } catch (e) {
-      result.errors.push(`docker ${name}: ${String(e)}`);
-    }
-  }
-  return result;
-}
-
 async function importWorkspaces(doc: XuanjianExport): Promise<ImportResult> {
   const result = emptyResult();
   if (!doc.workspaces?.length) return result;
@@ -411,7 +374,6 @@ export async function applyImport(doc: XuanjianExport): Promise<ImportResult> {
   result = mergeResult(result, await importHosts(doc));
   result = mergeResult(result, await importScripts(doc));
   result = mergeResult(result, await importNotes(doc));
-  result = mergeResult(result, await importDocker(doc));
   result = mergeResult(result, await importWorkspaces(doc));
   result = mergeResult(result, await importAlertRules(doc));
   return result;

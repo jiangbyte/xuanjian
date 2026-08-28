@@ -22,7 +22,6 @@ export type ShareSectionKey =
   | "hosts"
   | "scripts"
   | "notes"
-  | "dockerProjects"
   | "workspaces"
   | "alertRules"
   | "auditSummary";
@@ -33,7 +32,6 @@ const ALL_OFF: ShareSections = {
   hosts: false,
   scripts: false,
   notes: false,
-  dockerProjects: false,
   workspaces: false,
   alertRules: false,
   auditSummary: false,
@@ -82,7 +80,6 @@ export function ShareExportDialog({
             hosts: sections.hosts,
             scripts: sections.scripts,
             notes: sections.notes,
-            dockerProjects: sections.dockerProjects,
             workspaces: sections.workspaces,
             alertRules: sections.alertRules,
             auditSummary: sections.auditSummary,
@@ -105,7 +102,6 @@ export function ShareExportDialog({
     { key: "hosts", label: t("share.sectionHosts") },
     { key: "scripts", label: t("share.sectionScripts") },
     { key: "notes", label: t("share.sectionNotes") },
-    { key: "dockerProjects", label: t("share.sectionDocker") },
     { key: "workspaces", label: t("share.sectionWorkspaces") },
     { key: "alertRules", label: t("share.sectionAlertRules") },
     { key: "auditSummary", label: t("share.sectionAudit") },
@@ -193,12 +189,10 @@ export function shareDefaults(
 export const DEFAULT_EXPORT_HOSTS = shareDefaults("hosts");
 export const DEFAULT_EXPORT_SCRIPTS = shareDefaults("scripts");
 export const DEFAULT_EXPORT_NOTES = shareDefaults("notes");
-export const DEFAULT_EXPORT_DOCKER = shareDefaults("dockerProjects");
 export const DEFAULT_EXPORT_ALL: ShareSections = {
   hosts: true,
   scripts: true,
   notes: true,
-  dockerProjects: true,
   workspaces: true,
   alertRules: true,
   auditSummary: true,
