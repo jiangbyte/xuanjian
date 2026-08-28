@@ -36,13 +36,15 @@ export {
   steerAgent,
 } from "./inbox";
 
-export {
-  REACT_LIMITS,
-  ReactLoopGuard,
-  isReadOnlyAgentTool,
-  toolCallSignature,
-} from "./guards";
-export type { GuardStopReason } from "./guards";
+export { AGENT_LIMITS, REACT_LIMITS } from "./limits";
+
+export { LoopPolicy, defaultResultSignature } from "./loop";
+export type {
+  AfterToolDecision,
+  BeforeToolDecision,
+  LoopPolicyOptions,
+  StopReason,
+} from "./loop";
 
 export {
   buildPlanExecutePrompt,
@@ -50,6 +52,13 @@ export {
 } from "./plan";
 
 export { normalizeSubAgentArgs, parseArgs } from "./parse-tool-args";
+
+export { runToolBatch } from "./tools/batch";
+export type {
+  ToolBatchConfig,
+  ToolBatchInput,
+  ToolBatchResult,
+} from "./tools/batch";
 
 /** 图运行时请从 `@xuanjian/agent-core/graph` 导入，避免 UI 无谓加载 LangGraph */
 export type { OrchestratorConfig, AgentGraphState } from "./graph";

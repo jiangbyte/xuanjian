@@ -4,7 +4,7 @@
 
 import {
   getSessionInbox,
-  REACT_LIMITS,
+  AGENT_LIMITS,
   type AgentPorts,
   type CoreLlmMessage,
   type CoreToolDef,
@@ -74,7 +74,7 @@ async function runSubAgentAction(opts: {
       userText: task,
       permissionMode: opts.parent.permissionMode,
       thinkingMode: opts.parent.thinkingMode,
-      maxRounds: Math.min(def.maxRounds * 3, REACT_LIMITS.SUB_MAX_ROUNDS),
+      maxRounds: Math.min(def.maxRounds * 3, AGENT_LIMITS.SUB_MAX_ROUNDS),
       agentTag: kindRaw,
       agentLabel: def.label,
       depth: opts.parent.depth + 1,
@@ -145,7 +145,7 @@ export async function runAgentTurn(input: RunAgentInput): Promise<void> {
       userText: input.userText,
       permissionMode: input.permissionMode,
       thinkingMode: input.thinkingMode ?? "high",
-      maxRounds: REACT_LIMITS.ORCH_MAX_ROUNDS,
+      maxRounds: AGENT_LIMITS.ORCH_MAX_ROUNDS,
       agentTag: "orchestrator",
       agentLabel: "编排器",
       depth: 0,

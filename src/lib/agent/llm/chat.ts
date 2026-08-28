@@ -5,7 +5,7 @@
 
 import { api } from "@/lib/tauri";
 import { parseLlmUsage, type LlmUsage } from "@/lib/agent/contextBudget";
-import { REACT_LIMITS } from "@xuanjian/agent-core";
+import { AGENT_LIMITS } from "@xuanjian/agent-core";
 import type { AgentToolDef } from "@/lib/agent/tools";
 
 export type LlmMessage =
@@ -74,7 +74,7 @@ export async function chatCompletion(
   messages: LlmMessage[],
   tools: AgentToolDef[],
 ): Promise<NormalizedLlmReply> {
-  const timeoutMs = cfg.timeoutMs ?? REACT_LIMITS.LLM_TIMEOUT_MS;
+  const timeoutMs = cfg.timeoutMs ?? AGENT_LIMITS.LLM_TIMEOUT_MS;
   const parentSignal = cfg.signal;
 
   if (parentSignal?.aborted) {

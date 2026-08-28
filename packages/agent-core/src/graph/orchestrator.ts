@@ -1,12 +1,15 @@
 /**
- * @file LangGraph Orchestrator 状态与图
+ * @file LangGraph Orchestrator（图路由；工具批处理与环路在 LoopPolicy / runToolBatch）
  */
 
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph/web";
-import type { AgentPorts } from "../ports";
 import { AgentInbox } from "../inbox";
-import { ReactLoopGuard, REACT_LIMITS } from "../guards";
+import { AGENT_LIMITS } from "../limits";
+import { LoopPolicy } from "../loop/policy";
+import type { StopReason } from "../loop/types";
 import { splitPlanFromReply } from "../plan";
+import type { AgentPorts } from "../ports";
+import { runToolBatch } from "../tools/batch";
 import type {
   AgentPermissionMode,
   CoreLlmMessage,
@@ -39,7 +42,6 @@ export type OrchestratorConfig = {
   signal?: AbortSignal;
   inbox: AgentInbox;
   sessionIdHint?: number;
-  /** SubAgent 派发（由 adapters/app 注入，避免 core 循环依赖） */
   runSubAgent?: (opts: {
     kind: string;
     task: string;
@@ -47,7 +49,6 @@ export type OrchestratorConfig = {
     args: Record<string, unknown>;
     parent: OrchestratorConfig;
   }) => Promise<{ ok: boolean; summary: string; children: MessagePart[] }>;
-  /** 可选：每步前压缩消息 */
   compactMessages?: (messages: CoreLlmMessage[]) => Promise<CoreLlmMessage[]>;
 };
 
@@ -80,6 +81,10 @@ const AgentState = Annotation.Root({
     reducer: (_l, r) => r,
     default: () => false,
   }),
+  stopReason: Annotation<StopReason | null>({
+    reducer: (_l, r) => r,
+    default: () => null,
+  }),
 });
 
 export type AgentGraphState = typeof AgentState.State;
@@ -103,34 +108,33 @@ function emitActivity(
   emit({ type: "activity", phase, label, detail });
 }
 
-function parseArgs(raw: string): Record<string, unknown> {
-  try {
-    const v = JSON.parse(raw || "{}");
-    return v && typeof v === "object" && !Array.isArray(v)
-      ? (v as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
+function applyStop(
+  reason: StopReason,
+  policy: LoopPolicy,
+): Partial<AgentGraphState> {
+  policy.applyStop(reason);
+  return { stopReason: reason, wrapUp: true, finished: true };
 }
 
 export function buildOrchestratorGraph(config: OrchestratorConfig) {
-  const guard = new ReactLoopGuard(
-    config.depth === 0
-      ? REACT_LIMITS.ORCH_MAX_TOOL_CALLS
-      : REACT_LIMITS.SUB_MAX_TOOL_CALLS,
-  );
+  const policy = new LoopPolicy({
+    maxCalls:
+      config.depth === 0
+        ? AGENT_LIMITS.ORCH_MAX_TOOL_CALLS
+        : AGENT_LIMITS.SUB_MAX_TOOL_CALLS,
+  });
 
   const preStep = async (
     state: AgentGraphState,
   ): Promise<Partial<AgentGraphState>> => {
     checkAbort(config.signal);
-    if (guard.shouldWrapUp || guard.checkWallClock()) {
-      return { wrapUp: true, finished: true };
+    if (state.stopReason || policy.isStopped() || policy.checkWallClock()) {
+      const reason =
+        state.stopReason ?? policy.stopReason ?? ("wall_clock" as StopReason);
+      return applyStop(reason, policy);
     }
     if (state.rounds >= config.maxRounds) {
-      guard.markWrapUp("max_rounds");
-      return { wrapUp: true, finished: true };
+      return applyStop("max_rounds", policy);
     }
 
     let messages = [...state.messages];
@@ -193,11 +197,13 @@ export function buildOrchestratorGraph(config: OrchestratorConfig) {
         ...state.assistantParts,
         { type: "text" as const, text: msg, agent: config.agentTag },
       ];
+      policy.applyStop("error");
       return {
         lastReply: null,
         assistantParts: parts,
         finished: true,
         wrapUp: true,
+        stopReason: "error",
       };
     }
   };
@@ -205,7 +211,9 @@ export function buildOrchestratorGraph(config: OrchestratorConfig) {
   const routeAfterModel = (
     state: AgentGraphState,
   ): "executeTools" | "finalize" | "continueEmpty" => {
-    if (state.finished || state.wrapUp || !state.lastReply) return "finalize";
+    if (state.finished || state.wrapUp || state.stopReason || !state.lastReply) {
+      return "finalize";
+    }
     if (isEmptyReply(state.lastReply)) return "continueEmpty";
     if (state.lastReply.toolCalls.length > 0) return "executeTools";
     return "finalize";
@@ -215,9 +223,11 @@ export function buildOrchestratorGraph(config: OrchestratorConfig) {
     state: AgentGraphState,
   ): Promise<Partial<AgentGraphState>> => {
     const emptyRounds = state.emptyRounds + 1;
-    if (emptyRounds >= REACT_LIMITS.MAX_EMPTY_ROUNDS) {
-      guard.markWrapUp("empty_replies");
-      return { emptyRounds, wrapUp: true, finished: true };
+    if (emptyRounds >= AGENT_LIMITS.MAX_EMPTY_ROUNDS) {
+      return {
+        emptyRounds,
+        ...applyStop("empty_replies", policy),
+      };
     }
     const messages: CoreLlmMessage[] = [
       ...state.messages,
@@ -235,252 +245,36 @@ export function buildOrchestratorGraph(config: OrchestratorConfig) {
     state: AgentGraphState,
   ): Promise<Partial<AgentGraphState>> => {
     checkAbort(config.signal);
-    const reply = state.lastReply!;
-    const messages = [...state.messages];
-    const parts = [...state.assistantParts];
-
-    const thinking = reply.thinking.trim();
-    if (thinking) {
-      parts.push({
-        type: "thinking",
-        text: thinking,
-        agent: config.agentTag,
-      });
-    }
-    if (reply.text.trim()) {
-      parts.push({
-        type: "text",
-        text: reply.text.trim(),
-        agent: config.agentTag,
-      });
-    }
-
-    messages.push({
-      role: "assistant",
-      content: reply.text || null,
-      tool_calls: reply.toolCalls,
-      anthropic_content: reply.anthropicContent,
+    const batch = await runToolBatch({
+      reply: state.lastReply!,
+      messages: state.messages,
+      assistantParts: state.assistantParts,
+      policy,
+      config: {
+        ports: config.ports,
+        permissionMode: config.permissionMode,
+        agentTag: config.agentTag,
+        emit: config.emit,
+        onConfirmTool: config.onConfirmTool,
+        runSubAgent: config.runSubAgent
+          ? (opts) =>
+              config.runSubAgent!({
+                ...opts,
+                parent: config,
+              })
+          : undefined,
+      },
     });
 
-    for (const tc of reply.toolCalls) {
-      const name = tc.function.name;
-      const args = parseArgs(tc.function.arguments);
-      const guardObs = guard.beforeToolCall(name, args);
-      if (guardObs) {
-        parts.push({
-          type: "tool_call",
-          id: tc.id,
-          name,
-          args,
-          agent: config.agentTag,
-        });
-        config.emit({
-          type: "tool_call",
-          id: tc.id,
-          name,
-          args,
-          agent: config.agentTag,
-        });
-        messages.push({
-          role: "tool",
-          tool_call_id: tc.id,
-          name,
-          content: guardObs,
-        });
-        parts.push({
-          type: "tool_result",
-          id: tc.id,
-          name,
-          result: guardObs,
-          agent: config.agentTag,
-        });
-        config.emit({
-          type: "tool_result",
-          id: tc.id,
-          name,
-          result: guardObs,
-          agent: config.agentTag,
-        });
-        if (guard.shouldWrapUp) break;
-        continue;
-      }
-      if (guard.shouldWrapUp) break;
-
-      if (name === "run_subagent" && config.runSubAgent) {
-        const kind = String(args.agent ?? args.kind ?? "inspector");
-        const task = String(args.task ?? "");
-        parts.push({
-          type: "tool_call",
-          id: tc.id,
-          name,
-          args,
-          agent: config.agentTag,
-        });
-        config.emit({
-          type: "tool_call",
-          id: tc.id,
-          name,
-          args,
-          agent: config.agentTag,
-        });
-        config.emit({
-          type: "subagent_start",
-          id: tc.id,
-          agent: kind,
-          label: kind,
-          task,
-        });
-        const result = await config.runSubAgent({
-          kind,
-          task,
-          toolCallId: tc.id,
-          args,
-          parent: config,
-        });
-        const childPart: MessagePart = {
-          type: "subagent",
-          id: tc.id,
-          agent: kind,
-          label: kind,
-          task,
-          status: result.ok ? "done" : "error",
-          summary: result.summary,
-          children: result.children,
-        };
-        parts.push(childPart);
-        config.emit({
-          type: "subagent_end",
-          id: tc.id,
-          agent: kind,
-          label: kind,
-          ok: result.ok,
-          summary: result.summary,
-          children: result.children,
-        });
-        const resultText = JSON.stringify({
-          ok: result.ok,
-          summary: result.summary,
-        });
-        messages.push({
-          role: "tool",
-          tool_call_id: tc.id,
-          name,
-          content: resultText,
-        });
-        parts.push({
-          type: "tool_result",
-          id: tc.id,
-          name,
-          result: resultText,
-          agent: config.agentTag,
-        });
-        continue;
-      }
-
-      if (
-        config.permissionMode === "plan" &&
-        config.ports.tools.isWriteTool(name)
-      ) {
-        const blocked = JSON.stringify({
-          ok: false,
-          blocked: true,
-          reason: "计划模式禁止写操作",
-        });
-        parts.push({
-          type: "tool_call",
-          id: tc.id,
-          name,
-          args,
-          agent: config.agentTag,
-        });
-        config.emit({
-          type: "tool_call",
-          id: tc.id,
-          name,
-          args,
-          agent: config.agentTag,
-        });
-        messages.push({
-          role: "tool",
-          tool_call_id: tc.id,
-          name,
-          content: blocked,
-        });
-        parts.push({
-          type: "tool_result",
-          id: tc.id,
-          name,
-          result: blocked,
-          agent: config.agentTag,
-        });
-        config.emit({
-          type: "tool_result",
-          id: tc.id,
-          name,
-          result: blocked,
-          agent: config.agentTag,
-        });
-        continue;
-      }
-
-      parts.push({
-        type: "tool_call",
-        id: tc.id,
-        name,
-        args,
-        agent: config.agentTag,
-      });
-      config.emit({
-        type: "tool_call",
-        id: tc.id,
-        name,
-        args,
-        agent: config.agentTag,
-      });
-
-      emitActivity(
-        config.emit,
-        "running_tool",
-        "执行中…",
-        typeof args.command === "string" ? String(args.command) : name,
-      );
-
-      const result = await config.ports.tools.execute(name, args, {
-        permissionMode: config.permissionMode,
-        toolCallId: tc.id,
-        confirmTool: config.onConfirmTool,
-        emit: config.emit,
-        agentTag: config.agentTag,
-      });
-
-      messages.push({
-        role: "tool",
-        tool_call_id: tc.id,
-        name,
-        content: result,
-      });
-      parts.push({
-        type: "tool_result",
-        id: tc.id,
-        name,
-        result,
-        agent: config.agentTag,
-      });
-      config.emit({
-        type: "tool_result",
-        id: tc.id,
-        name,
-        result,
-        agent: config.agentTag,
-      });
-    }
-
+    const stopped = batch.stopReason != null;
     return {
-      messages,
-      assistantParts: parts,
+      messages: batch.messages,
+      assistantParts: batch.assistantParts,
       lastReply: null,
       emptyRounds: 0,
       finished: false,
+      stopReason: batch.stopReason,
+      wrapUp: stopped,
     };
   };
 
@@ -523,7 +317,7 @@ export function buildOrchestratorGraph(config: OrchestratorConfig) {
     }
 
     if (
-      state.wrapUp &&
+      (state.wrapUp || state.stopReason) &&
       !parts.some((p) => p.type === "text" && p.text.trim())
     ) {
       const fallback =
@@ -536,7 +330,14 @@ export function buildOrchestratorGraph(config: OrchestratorConfig) {
   };
 
   const shouldLoop = (state: AgentGraphState): "preStep" | typeof END => {
-    if (state.finished || state.wrapUp || guard.shouldWrapUp) return END;
+    if (
+      state.finished ||
+      state.wrapUp ||
+      state.stopReason ||
+      policy.isStopped()
+    ) {
+      return END;
+    }
     if (state.rounds >= config.maxRounds) return END;
     return "preStep";
   };
@@ -544,7 +345,14 @@ export function buildOrchestratorGraph(config: OrchestratorConfig) {
   const routeAfterPreStep = (
     state: AgentGraphState,
   ): "callModel" | "finalize" => {
-    if (state.wrapUp || state.finished || guard.shouldWrapUp) return "finalize";
+    if (
+      state.wrapUp ||
+      state.finished ||
+      state.stopReason ||
+      policy.isStopped()
+    ) {
+      return "finalize";
+    }
     return "callModel";
   };
 
@@ -590,6 +398,7 @@ export async function runOrchestratorGraph(
     finished: false,
     lastReply: null,
     wrapUp: false,
+    stopReason: null,
   };
 
   const finalState = await compiled.invoke(initial, {

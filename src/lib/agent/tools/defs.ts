@@ -42,7 +42,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
     function: {
       name: "terminal_tail",
       description:
-        "读取 Agent 下栏终端最近输出（与 terminal_run/session_exec 同一会话）。长任务可设 wait_ms 为最长等待；出现 shell 提示符或输出稳定后会自动提前返回。",
+        "读取 Agent 下栏终端最近输出（与 terminal_run/session_exec 同一会话）。长任务请设较大 wait_ms 单次等待；若返回 still_running=true，按 suggested_next_wait_ms 加大 wait，禁止无进展短轮询。",
       parameters: {
         type: "object",
         properties: {
@@ -51,11 +51,11 @@ export const TOOL_DEFS: AgentToolDef[] = [
           max_chars: { type: "number", description: "默认 12000" },
           wait_ms: {
             type: "number",
-            description: "最长等待毫秒数（0=立即返回，最大 600000）",
+            description: "最长等待毫秒数（0=立即快照，最大 600000）",
           },
           stable_ms: {
             type: "number",
-            description: "输出连续不变多少毫秒视为稳定（默认 1500）",
+            description: "输出连续不变多少毫秒视为静默（默认 1500）",
           },
         },
       },
@@ -137,7 +137,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
     function: {
       name: "terminal_run",
       description:
-        "在【Agent 下栏终端】中执行命令（用户可见）。长任务设较大 wait_ms，命令结束或输出稳定后自动返回。",
+        "在【Agent 下栏终端】中执行命令（用户可见）。长任务一次给足 wait_ms；若 still_running=true，按 suggested_next_wait_ms 再等，勿高频短轮询。",
       parameters: {
         type: "object",
         properties: {
@@ -146,7 +146,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
           command: { type: "string" },
           wait_ms: {
             type: "number",
-            description: "等待命令输出（毫秒，最大 600000）",
+            description: "最长等待毫秒（最大 600000）；长任务建议 ≥30000",
           },
         },
         required: ["command"],

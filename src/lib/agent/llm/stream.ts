@@ -13,7 +13,7 @@ import {
 import { parseLlmUsage, type LlmUsage } from "@/lib/agent/contextBudget";
 import { BlockAssembler } from "@/lib/agent/llm/assembler";
 import { mergeStreamToolCallDeltas } from "@/lib/agent/llm/stream-tool-calls";
-import { REACT_LIMITS } from "@xuanjian/agent-core";
+import { AGENT_LIMITS } from "@xuanjian/agent-core";
 import type { AgentToolDef } from "@/lib/agent/tools";
 import type { ProviderBundle } from "@/lib/agent/runtime/provider";
 import type { AgentActivityPhase, RuntimeEvent } from "@xuanjian/agent-core";
@@ -103,10 +103,10 @@ export async function requestModelReply(
         void api.aiChatCancel(jobId);
         finish(
           new Error(
-            `模型调用超时（${Math.round(REACT_LIMITS.LLM_TIMEOUT_MS / 60_000)} 分钟）`,
+            `模型调用超时（${Math.round(AGENT_LIMITS.LLM_TIMEOUT_MS / 60_000)} 分钟）`,
           ),
         );
-      }, REACT_LIMITS.LLM_TIMEOUT_MS);
+      }, AGENT_LIMITS.LLM_TIMEOUT_MS);
 
       const onAbort = () => {
         void api.aiChatCancel(jobId);

@@ -4,7 +4,7 @@
  */
 
 import { stripAnsi } from "@/lib/agent/ansi";
-import { waitForTerminalOutput } from "@/lib/agent/tools/terminalWait";
+import { waitForTerminalIdle } from "@/lib/agent/tools/terminalIdleWait";
 import { runDeployToolHandler } from "@/lib/agent/tools/handlers/deploy";
 import { runReadToolHandler } from "@/lib/agent/tools/handlers/read";
 import {
@@ -57,11 +57,11 @@ async function runVisibleAgentCommand(
     typeof args.wait_ms === "number"
       ? Math.min(Math.max(args.wait_ms, 200), 600_000)
       : (opts?.defaultWaitMs ?? 900);
-  const waited = await waitForTerminalOutput({
+  const waited = await waitForTerminalIdle({
     sessionId: sid,
     maxChars: 12_000,
     waitMs: wait,
-    stableMs: 1200,
+    quietMs: 1200,
   });
   const after = waited.output;
   let delta = after;
@@ -78,6 +78,9 @@ async function runVisibleAgentCommand(
     waited_ms: waited.waited_ms,
     finish_reason: waited.finish_reason,
     likely_finished: waited.likely_finished,
+    still_running: waited.still_running,
+    progress_digest: waited.progress_digest,
+    suggested_next_wait_ms: waited.suggested_next_wait_ms,
     output: stripAnsi((delta || after).slice(0, 16_000)),
   });
 }
@@ -163,11 +166,11 @@ export async function runToolHandler(
           ? Math.min(Math.max(args.stable_ms, 500), 30_000)
           : 1500;
 
-      const waited = await waitForTerminalOutput({
+      const waited = await waitForTerminalIdle({
         sessionId: target.sessionId,
         maxChars,
         waitMs,
-        stableMs,
+        quietMs: stableMs,
       });
 
       return JSON.stringify({
@@ -179,6 +182,9 @@ export async function runToolHandler(
         waited_ms: waited.waited_ms,
         finish_reason: waited.finish_reason,
         likely_finished: waited.likely_finished,
+        still_running: waited.still_running,
+        progress_digest: waited.progress_digest,
+        suggested_next_wait_ms: waited.suggested_next_wait_ms,
         chars: waited.output.length,
         output: waited.output || "(empty transcript)",
       });
@@ -356,11 +362,11 @@ export async function runToolHandler(
         typeof args.wait_ms === "number"
           ? Math.min(Math.max(args.wait_ms, 200), 600_000)
           : 3000;
-      const waited = await waitForTerminalOutput({
+      const waited = await waitForTerminalIdle({
         sessionId: sid,
         maxChars: 12_000,
         waitMs: wait,
-        stableMs: 1200,
+        quietMs: 1200,
       });
       const after = waited.output;
       let delta = after;
@@ -373,7 +379,11 @@ export async function runToolHandler(
         script_id: script.id,
         script_name: script.name,
         waited_ms: waited.waited_ms,
+        finish_reason: waited.finish_reason,
         likely_finished: waited.likely_finished,
+        still_running: waited.still_running,
+        progress_digest: waited.progress_digest,
+        suggested_next_wait_ms: waited.suggested_next_wait_ms,
         output: stripAnsi((delta || after).slice(0, 16_000)),
       });
     }
