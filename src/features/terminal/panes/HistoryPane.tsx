@@ -9,6 +9,7 @@
 import { Copy, Play, Search, Terminal, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   InputGroup,
@@ -54,21 +55,23 @@ export function HistoryPane({ sessionId }: { sessionId: string | null }) {
 
   const run = async (cmd: string) => {
     if (!sessionId) {
-      await dialogs.alert(t("scripts.needSessionShort"));
+      toast.error(t("scripts.needSessionShort"));
       return;
     }
     try {
       await api.sessionWrite(sessionId, cmd.endsWith("\n") ? cmd : `${cmd}\n`);
+      toast.success(t("termTab.historyRunOk"));
     } catch (e) {
-      await dialogs.alert(String(e));
+      toast.error(String(e));
     }
   };
 
   const copy = async (cmd: string) => {
     try {
       await clipboardWriteText(cmd);
+      toast.success(t("termTab.historyCopied"));
     } catch {
-      await dialogs.alert(t("termTab.copyFail"));
+      toast.error(t("termTab.copyFail"));
     }
   };
 
@@ -95,6 +98,7 @@ export function HistoryPane({ sessionId }: { sessionId: string | null }) {
                   })
                 ) {
                   clear();
+                  toast.success(t("termTab.historyCleared"));
                 }
               }}
             >

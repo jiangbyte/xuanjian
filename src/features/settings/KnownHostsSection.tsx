@@ -4,7 +4,7 @@
  */
 
 import { Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ export function KnownHostsSection() {
   const [rows, setRows] = useState<KnownHostRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     setLoading(true);
     try {
       setRows(await listKnownHosts());
@@ -25,10 +25,10 @@ export function KnownHostsSection() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    reload().catch(console.error);
+    void reload();
   }, [reload]);
 
   const onRemove = async (row: KnownHostRow) => {

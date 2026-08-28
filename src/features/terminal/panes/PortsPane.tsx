@@ -9,6 +9,7 @@
 import { Copy, RefreshCw, Search, Skull, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -271,14 +272,15 @@ export function PortsPane({
   const copyText = async (text: string) => {
     try {
       await clipboardWriteText(text);
+      toast.success(t("termTab.copied"));
     } catch {
-      await dialogs.alert(t("termTab.copyFail"));
+      toast.error(t("termTab.copyFail"));
     }
   };
 
   const signal = async (row: PortRow, sig: "TERM" | "KILL") => {
     if (!sessionId || !row.pid) {
-      await dialogs.alert(t("termTab.noPid"));
+      toast.error(t("termTab.noPid"));
       return;
     }
     const ok = await dialogs.confirm(
@@ -293,9 +295,10 @@ export function PortsPane({
     if (!ok) return;
     try {
       await api.sessionExec(sessionId, killCmd(env, row.pid, sig));
+      toast.success(t("termTab.signalOk", { pid: row.pid, sig }));
       await refresh();
     } catch (e) {
-      await dialogs.alert(String(e));
+      toast.error(String(e));
     }
   };
 

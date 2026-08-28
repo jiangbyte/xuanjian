@@ -9,6 +9,7 @@
 import { RefreshCw, Search, Skull, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -186,9 +187,10 @@ export function ProcessesPane({
     if (!ok) return;
     try {
       await api.sessionExec(sessionId, killCmd(env, pid, sig));
+      toast.success(t("termTab.signalOk", { pid, sig }));
       await refresh();
     } catch (e) {
-      await dialogs.alert(String(e));
+      toast.error(String(e));
     }
   };
 

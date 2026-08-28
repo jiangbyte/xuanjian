@@ -35,34 +35,40 @@ export function PartView({
       <MarkdownViewer
         source={part.text}
         density="compact"
-        className="text-sidebar-foreground"
+        className="select-text text-sidebar-foreground"
       />
     );
   }
   if (part.type === "thinking") {
     return (
-      <button
-        type="button"
-        className="w-full max-w-full min-w-0 overflow-hidden rounded-md border border-dashed border-border bg-muted/40 px-2 py-1.5 text-left text-[12px] leading-[1.55] text-muted-foreground"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span className="font-medium text-foreground/80">
-          Thought
-          {part.agent && part.agent !== "orchestrator"
-            ? ` · ${part.agent}`
-            : ""}
-        </span>
+      <div className="w-full max-w-full min-w-0 overflow-hidden rounded-md border border-dashed border-border bg-muted/40 px-2 py-1.5 text-left text-[12px] leading-[1.55] text-muted-foreground">
+        <button
+          type="button"
+          className="flex w-full items-center gap-1 text-left font-medium text-foreground/80"
+          onClick={() => setOpen((v) => !v)}
+        >
+          <span>
+            Thought
+            {part.agent && part.agent !== "orchestrator"
+              ? ` · ${part.agent}`
+              : ""}
+          </span>
+        </button>
         {open ? (
-          <pre className="mt-1 max-w-full whitespace-pre-wrap break-words font-sans text-[12px] leading-[1.55] [overflow-wrap:anywhere]">
+          <pre className="mt-1 max-w-full select-text whitespace-pre-wrap break-words font-sans text-[12px] leading-[1.55] [overflow-wrap:anywhere]">
             {part.text}
           </pre>
         ) : (
-          <span className="ml-1 block truncate opacity-70">
+          <button
+            type="button"
+            className="mt-0.5 block w-full truncate text-left opacity-70"
+            onClick={() => setOpen(true)}
+          >
             {part.text.slice(0, 64)}
             {part.text.length > 64 ? "…" : ""}
-          </span>
+          </button>
         )}
-      </button>
+      </div>
     );
   }
   if (part.type === "subagent") {
@@ -90,10 +96,14 @@ export function PartView({
                 : " · 完成"}
           </span>
         </div>
-        <div className="mt-0.5 text-muted-foreground">{part.task}</div>
+        <div className="mt-0.5 select-text text-muted-foreground">{part.task}</div>
         {part.summary ? (
           <div className="mt-1.5 border-t border-border/60 pt-1.5">
-            <MarkdownViewer source={part.summary} density="compact" />
+            <MarkdownViewer
+              source={part.summary}
+              density="compact"
+              className="select-text"
+            />
           </div>
         ) : null}
         {part.children && part.children.length > 0 ? (
@@ -126,7 +136,7 @@ export function PartView({
         <MarkdownViewer
           source={md}
           density="compact"
-          className="text-sidebar-foreground"
+          className="select-text text-sidebar-foreground"
         />
         {part.items.length > 0 ? (
           <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-border/60 pt-2">
@@ -164,7 +174,7 @@ export function PartView({
         <div className="mt-0.5 text-foreground">
           {toolLabel(part.name, part.args)}
         </div>
-        <pre className="mt-1 max-h-20 max-w-full overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-all font-mono text-[10px] text-muted-foreground">
+        <pre className="mt-1 max-h-20 max-w-full select-text overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-all font-mono text-[10px] text-muted-foreground">
           {JSON.stringify(part.args, null, 0)}
         </pre>
         <div className="mt-1.5 flex gap-1.5">
@@ -197,7 +207,7 @@ export function PartView({
           <div className="break-words font-medium [overflow-wrap:anywhere]">
             Action · {toolLabel(part.name, part.args)}
           </div>
-          <pre className="mt-0.5 max-w-full whitespace-pre-wrap break-all font-mono text-[11px] text-muted-foreground">
+          <pre className="mt-0.5 max-w-full select-text whitespace-pre-wrap break-all font-mono text-[11px] text-muted-foreground">
             {JSON.stringify(part.args)}
           </pre>
         </div>
@@ -210,7 +220,7 @@ export function PartView({
         <summary className="cursor-pointer break-words font-medium [overflow-wrap:anywhere]">
           Observation · {part.name}
         </summary>
-        <pre className="mt-1 max-h-40 max-w-full overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-all font-mono text-[11px] leading-snug">
+        <pre className="mt-1 max-h-40 max-w-full select-text overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-all font-mono text-[11px] leading-snug">
           {part.result}
         </pre>
       </details>

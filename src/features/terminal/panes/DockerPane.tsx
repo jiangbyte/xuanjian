@@ -336,11 +336,22 @@ export function DockerPane({
         /^Error response from daemon:/im.test(text) ||
         /^Error:/im.test(text)
       ) {
-        if (text) await dialogs.alert(text.slice(0, 800));
+        toast.error(text.slice(0, 800) || t("termTab.dockerUnavailable"));
+      } else {
+        const action = /\brestart\b/.test(command)
+          ? t("termTab.dockerRestart")
+          : /\bstop\b/.test(command)
+            ? t("termTab.dockerStop")
+            : /\bstart\b/.test(command)
+              ? t("termTab.dockerStart")
+              : /\b(rmi|rm|network rm|volume rm)\b/.test(command)
+                ? t("termTab.dockerRemove")
+                : t("termTab.docker");
+        toast.success(t("termTab.dockerOpOk", { action }));
       }
       await refresh();
     } catch (e) {
-      await dialogs.alert(String(e));
+      toast.error(String(e));
     } finally {
       setBusy(null);
     }
@@ -349,8 +360,9 @@ export function DockerPane({
   const copyText = async (text: string) => {
     try {
       await clipboardWriteText(text);
+      toast.success(t("termTab.copied"));
     } catch {
-      await dialogs.alert(t("termTab.copyFail"));
+      toast.error(t("termTab.copyFail"));
     }
   };
 
@@ -359,8 +371,9 @@ export function DockerPane({
     try {
       const ref = safeArg(id);
       await api.sessionWrite(sessionId, `docker exec -it ${ref} sh\n`);
+      toast.success(t("termTab.dockerShellOk"));
     } catch (e) {
-      await dialogs.alert(String(e));
+      toast.error(String(e));
     }
   };
 
@@ -404,7 +417,7 @@ export function DockerPane({
         setLogsLive(true);
       } catch (e) {
         setLogsLive(false);
-        await dialogs.alert(String(e));
+        toast.error(String(e));
         setLogsView(null);
       } finally {
         setLogsLoading(false);

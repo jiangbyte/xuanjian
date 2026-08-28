@@ -12,7 +12,7 @@ import {
   Terminal,
   Trash2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -49,7 +49,7 @@ export function McpSettingsSection() {
   const [discovered, setDiscovered] = useState<Record<number, string[]>>({});
   const [toolPrefs, setToolPrefs] = useState<Record<string, boolean>>({});
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     const [servers, prefs] = await Promise.all([
       listMcpServers(),
       listMcpToolPrefs(),
@@ -60,10 +60,10 @@ export function McpSettingsSection() {
       pm[`${p.mcp_server_id}:${p.tool_name}`] = Boolean(p.enabled);
     }
     setToolPrefs(pm);
-  };
+  }, []);
 
   useEffect(() => {
-    reload().catch(console.error);
+    void reload();
   }, [reload]);
 
   const runTest = async (row: McpServerRow) => {

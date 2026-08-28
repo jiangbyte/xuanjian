@@ -36,7 +36,7 @@ export function MarkdownViewer({
   return (
     <div
       className={cn(
-        "md-preview-wrap min-h-0 overflow-auto",
+        "md-preview-wrap min-h-0 overflow-auto select-text",
         compact && "overflow-x-hidden",
         !compact && !sidebar && "flex-1",
         compact && "xj-md-chat",
