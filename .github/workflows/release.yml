@@ -327,11 +327,11 @@ jobs:
           ver="${TAG_NAME#v}"
           for f in "${found[@]}"; do
             base=$(basename "$f")
-            # Prefer universal release; rename for Release clarity
+            # Prefer universal release; rename for Release clarity (match desktop asset prefix)
             if [[ "$base" == *universal*release* ]]; then
-              out="xuanjian_${ver}_android_universal.apk"
+              out="Xuanjian_${ver}_android_universal.apk"
             else
-              out="xuanjian_${ver}_android_${base}"
+              out="Xuanjian_${ver}_android_${base}"
             fi
             cp -f "$f" "dist-android/$out"
             echo "Collected $f -> dist-android/$out"
@@ -339,12 +339,19 @@ jobs:
           ls -la dist-android
 
       - name: Upload APK to GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.TAG_NAME }}
-          name: ${{ env.TAG_NAME }}
-          files: dist-android/*
-          fail_on_unmatched_files: true
-          generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Only attach assets — avoid softprops update-a-release (can fail under concurrent matrix publishes)
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+              break
+            fi
+            echo "Release $TAG_NAME not ready yet (attempt $attempt); waiting..."
+            sleep 30
+          done
+          gh release view "$TAG_NAME" >/dev/null
+          gh release upload "$TAG_NAME" dist-android/* --clobber
+          echo "Uploaded:"
+          ls -la dist-android

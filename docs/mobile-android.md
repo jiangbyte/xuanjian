@@ -92,4 +92,4 @@ base64 -w0 xuanjian.jks > xuanjian.jks.b64
 
 **务必备份** `.jks` 与密码；丢失后无法用同一签名更新应用。
 
-产物命名示例：`xuanjian_1.3.1_android_universal.apk`。
+产物命名示例：`Xuanjian_1.3.1_android_universal.apk`。
