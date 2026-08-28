@@ -6,7 +6,8 @@
         "title": "玄鉴",
         "fullscreen": false,
         "resizable": true,
-        "decorations": true
+        "decorations": true,
+        "visible": true
       }
     ],
     "security": {

@@ -218,6 +218,41 @@ jobs:
             pnpm exec tauri android init --ci
           fi
 
+      - name: Apply brand Android icons + INTERNET permission
+        env:
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          set -euo pipefail
+          # Stamp brand icons into gen/android (init alone uses Tauri default logo)
+          pnpm exec tauri icon src-tauri/icons/icon.png
+          # Adaptive icon background should match brand (black)
+          mkdir -p src-tauri/gen/android/app/src/main/res/values
+          printf '%s\n' \
+            '<?xml version="1.0" encoding="utf-8"?>' \
+            '<resources>' \
+            '  <color name="ic_launcher_background">#000000</color>' \
+            '</resources>' \
+            > src-tauri/gen/android/app/src/main/res/values/ic_launcher_background.xml
+          # Ensure network for SSH / SFTP
+          MANIFEST="src-tauri/gen/android/app/src/main/AndroidManifest.xml"
+          if [ -f "$MANIFEST" ] && ! grep -q 'android.permission.INTERNET' "$MANIFEST"; then
+            python3 - <<'PY'
+          from pathlib import Path
+          p = Path("src-tauri/gen/android/app/src/main/AndroidManifest.xml")
+          text = p.read_text(encoding="utf-8")
+          if "android.permission.INTERNET" in text:
+              print("INTERNET already present")
+              raise SystemExit(0)
+          gt = text.find(">")
+          if gt < 0 or "<manifest" not in text[:gt+1]:
+              raise SystemExit("manifest root not found")
+          insert = '\n    <uses-permission android:name="android.permission.INTERNET" />'
+          p.write_text(text[: gt + 1] + insert + text[gt + 1 :], encoding="utf-8")
+          print("Added INTERNET permission")
+          PY
+          fi
+          echo "Android icons + INTERNET ready"
+
       - name: Ensure Gradle release signingConfigs
         run: |
           set -euo pipefail

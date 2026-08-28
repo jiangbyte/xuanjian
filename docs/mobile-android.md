@@ -69,7 +69,9 @@ http://localhost:1420/?mobile=1
 推送 `v*` tag 时，[`release.yml`](../.github/workflows/release.yml) 会：
 
 1. 桌面四端安装包（原有 `tauri-action`）
-2. **并行** `publish-android`：Ubuntu + JDK17 + NDK → `tauri android init`（若无 `gen/android`）→ `tauri android build --apk` → 上传到同一 Release
+2. **并行** `publish-android`：Ubuntu + JDK17 + NDK → `tauri android init` → **`tauri icon` 写入品牌图标** → `tauri android build --apk` → 上传到同一 Release
+
+移动端启动使用相对 `sqlite:xuanjian.db`（AppConfig）与 `capabilities/mobile.json`；桌面逻辑不变。
 
 ### 签名 Secrets（可选）
 
