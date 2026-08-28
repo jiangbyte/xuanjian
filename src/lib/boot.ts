@@ -5,18 +5,13 @@
 
 import { isTauri } from "@tauri-apps/api/core";
 
-/** 等待 React 首帧绘制后显示窗口，避免白屏闪烁（仅桌面窗口） */
+/** 等待 React 首帧绘制后显示窗口，避免白屏闪烁 */
 export function showMainWindowWhenReady() {
   if (!isTauri()) return;
-  // Android / iOS 无自定义 decorations 窗口 show 流程
-  const ua = navigator.userAgent.toLowerCase();
-  if (ua.includes("android") || ua.includes("iphone") || ua.includes("ipad")) {
-    return;
-  }
   const show = () => {
-    void import("@tauri-apps/api/window")
-      .then(({ getCurrentWindow }) => getCurrentWindow().show())
-      .catch(() => undefined);
+    void import("@tauri-apps/api/window").then(({ getCurrentWindow }) =>
+      getCurrentWindow().show(),
+    );
   };
   requestAnimationFrame(() => requestAnimationFrame(show));
 }

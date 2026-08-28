@@ -244,7 +244,6 @@ pnpm tauri build
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Agent LangGraph 分层与事件协议 |
 | [`docs/release-notes/v1.3.1.md`](docs/release-notes/v1.3.1.md) | v1.3.1 发行说明 |
 | [`docs/release-notes/v1.3.0.md`](docs/release-notes/v1.3.0.md) | v1.3.0 发行说明 |
-| [`docs/mobile-android.md`](docs/mobile-android.md) | 移动端 Android 脚手架与调试 |
 | [`docs/工程规范.md`](docs/工程规范.md) | 目录约定、模块边界与 CI |
 | [`src-tauri/tauri.conf.json`](src-tauri/tauri.conf.json) | 窗口、打包与 SQLite 配置 |
 | [Tauri 2 文档](https://v2.tauri.app/) | 官方桌面端文档 |

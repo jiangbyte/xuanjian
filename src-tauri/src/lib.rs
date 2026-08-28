@@ -22,7 +22,6 @@ use session::{AppState, SharedState};
 use std::sync::Arc;
 
 /// 构建 prevent-default 插件；Windows 额外关闭 WebView2 加速键与默认菜单。
-#[cfg(desktop)]
 fn build_prevent_default_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     use tauri_plugin_prevent_default::Flags;
     let flags = Flags::CONTEXT_MENU
@@ -61,27 +60,14 @@ pub fn run() {
     let state: SharedState = Arc::new(AppState::new());
     let network_state = Arc::new(NetworkState::new());
     let ai_state = Arc::new(AiState::new());
-
-    // 桌面：绝对路径（可自定义数据目录）；移动端：相对 AppConfig（plugin-sql 约定）
-    #[cfg(mobile)]
-    let db_url = data_dir::MOBILE_DB_URL.to_string();
-    #[cfg(desktop)]
     let db_url = data_dir::db_url().expect("resolve sqlite url");
 
-    #[cfg(desktop)]
-    let builder = tauri::Builder::default()
+    tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(build_prevent_default_plugin());
-
-    #[cfg(mobile)]
-    let builder = tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_clipboard_manager::init());
-
-    builder
+        // 拦截部分浏览器快捷键；刻意不拦截 Ctrl+Shift+C/V，保证终端复制粘贴可用
+        .plugin(build_prevent_default_plugin())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations(&db_url, db::migrations())
@@ -91,21 +77,7 @@ pub fn run() {
         .manage(network_state)
         .manage(ai_state)
         .setup(|app| {
-            #[cfg(mobile)]
-            {
-                use tauri::Manager;
-                let dir = app
-                    .path()
-                    .app_config_dir()
-                    .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
-                std::fs::create_dir_all(&dir)?;
-                data_dir::set_runtime_data_dir(dir);
-            }
-
-            // 定时任务依赖 rusqlite 直连；移动端伴侣不跑调度
-            #[cfg(desktop)]
             scheduler::start(app.handle().clone());
-
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
