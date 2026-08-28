@@ -218,6 +218,77 @@ jobs:
             pnpm exec tauri android init --ci
           fi
 
+      - name: Ensure Gradle release signingConfigs
+        run: |
+          set -euo pipefail
+          APP_GRADLE="src-tauri/gen/android/app/build.gradle.kts"
+          if [ ! -f "$APP_GRADLE" ]; then
+            echo "Missing $APP_GRADLE" >&2
+            exit 1
+          fi
+          if grep -q 'signingConfigs' "$APP_GRADLE"; then
+            echo "signingConfigs already present"
+            exit 0
+          fi
+          python3 <<'PY'
+          from pathlib import Path
+          path = Path("src-tauri/gen/android/app/build.gradle.kts")
+          text = path.read_text(encoding="utf-8")
+          if "import java.util.Properties" not in text:
+              text = "import java.util.Properties\nimport java.io.FileInputStream\n" + text
+          elif "import java.io.FileInputStream" not in text:
+              text = text.replace(
+                  "import java.util.Properties",
+                  "import java.util.Properties\nimport java.io.FileInputStream",
+                  1,
+              )
+          block = '''
+          signingConfigs {
+              create("release") {
+                  val keystorePropertiesFile = rootProject.file("keystore.properties")
+                  val keystoreProperties = Properties()
+                  if (keystorePropertiesFile.exists()) {
+                      keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+                      keyAlias = keystoreProperties["keyAlias"] as String
+                      keyPassword = keystoreProperties["password"] as String
+                      storeFile = file(keystoreProperties["storeFile"] as String)
+                      storePassword = keystoreProperties["password"] as String
+                  }
+              }
+          }
+          '''
+          marker = "buildTypes {"
+          if marker not in text:
+              raise SystemExit("buildTypes block not found in app/build.gradle.kts")
+          text = text.replace(marker, block + "\n" + marker, 1)
+          # Attach signingConfig when keystore exists
+          old = '''getByName("release") {
+                      isMinifyEnabled = true'''
+          new = '''getByName("release") {
+                      val keystorePropertiesFile = rootProject.file("keystore.properties")
+                      if (keystorePropertiesFile.exists()) {
+                          signingConfig = signingConfigs.getByName("release")
+                      }
+                      isMinifyEnabled = true'''
+          if old in text:
+              text = text.replace(old, new, 1)
+          else:
+              # Fallback: inject after getByName("release") {
+              needle = 'getByName("release") {'
+              idx = text.find(needle)
+              if idx < 0:
+                  raise SystemExit('getByName("release") not found')
+              insert_at = idx + len(needle)
+              inject = '''
+                      val keystorePropertiesFile = rootProject.file("keystore.properties")
+                      if (keystorePropertiesFile.exists()) {
+                          signingConfig = signingConfigs.getByName("release")
+                      }'''
+              text = text[:insert_at] + inject + text[insert_at:]
+          path.write_text(text, encoding="utf-8")
+          print("Injected signingConfigs into", path)
+          PY
+
       - name: Setup Android signing (optional)
         env:
           ANDROID_KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}

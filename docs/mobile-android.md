@@ -81,11 +81,15 @@ http://localhost:1420/?mobile=1
 | `ANDROID_KEY_ALIAS` | key alias |
 | `ANDROID_KEY_PASSWORD` | store / key 密码（写入 `keystore.properties` 的 `password`） |
 
+CI 会在 `tauri android init` 后写入 `keystore.properties`，并注入 `app/build.gradle.kts` 的 `signingConfigs`（若模板尚无）。
+
 生成 keystore 示例：
 
 ```bash
 keytool -genkey -v -keystore xuanjian.jks -keyalg RSA -keysize 2048 -validity 10000 -alias xuanjian
 base64 -w0 xuanjian.jks > xuanjian.jks.b64
 ```
+
+**务必备份** `.jks` 与密码；丢失后无法用同一签名更新应用。
 
 产物命名示例：`xuanjian_1.3.1_android_universal.apk`。
