@@ -6,11 +6,11 @@
 
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { registerDefaultToolHooks } from "@/lib/agent/hooks/defaultTools";
 import App from "@/App";
 import { ContextMenuProvider } from "@/components/ContextMenu";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { shouldUseMobileUi } from "@/lib/platform/mobile";
 import { DialogHost } from "@/lib/ui/dialogs";
 import "@/stores/settings";
 import "@/i18n";
@@ -47,7 +47,12 @@ document.addEventListener(
   true,
 );
 
-registerDefaultToolHooks();
+// 移动端不注册 Agent 工具钩子（无 AI）
+if (!shouldUseMobileUi()) {
+  void import("@/lib/agent/hooks/defaultTools").then((m) =>
+    m.registerDefaultToolHooks(),
+  );
+}
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

@@ -1,8 +1,13 @@
-# Release：标题仅用 tag（如 v0.1.1），正文见 RELEASE_NOTES.md
+# Release：桌面安装包 + Android APK
 #
 # Author: Charlie
 #
 # 触发：推送 v* tag，或手动 workflow_dispatch（指定 tag）
+#
+# Android 签名（可选，配置后打正式签名包）：
+#   ANDROID_KEY_BASE64    — keystore (.jks/.keystore) 的 base64
+#   ANDROID_KEY_ALIAS
+#   ANDROID_KEY_PASSWORD  — store + key 共用密码（与常见 keystore.properties 一致）
 
 name: Release
 
@@ -13,7 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "已存在的 git tag（如 v0.1.1）"
+        description: "已存在的 git tag（如 v1.3.1）"
         required: true
         type: string
 
@@ -23,6 +28,9 @@ permissions:
 concurrency:
   group: release-${{ github.workflow }}-${{ github.ref }}-${{ inputs.tag || github.ref }}
   cancel-in-progress: false
+
+env:
+  TAG_NAME: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   publish:
@@ -55,7 +63,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ env.TAG_NAME }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -98,12 +106,10 @@ jobs:
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # macOS runner 上 Vite/tsc 偶发 OOM
           NODE_OPTIONS: --max-old-space-size=8192
         with:
-          # 标题与 tag 一致：v0.1.1（不带品牌名前缀）
-          tagName: ${{ inputs.tag || github.ref_name }}
-          releaseName: ${{ inputs.tag || github.ref_name }}
+          tagName: ${{ env.TAG_NAME }}
+          releaseName: ${{ env.TAG_NAME }}
           releaseBody: |
             ## Highlights
 
@@ -112,10 +118,15 @@ jobs:
             - Lazy terminal shell + aggressive heavy-module preload (tabs keep-alive)
             - Virtualized SFTP / process / AI lists; memoized streaming chat
 
+            ### Mobile companion
+            - APK build on Release (SSH / files / notes; no AI)
+            - Desktop debug: `?mobile=1`
+
             ### Build / CI
             - Browser shim for `agent-loop-guard` so production `pnpm build` succeeds
 
             Full notes: [docs/release-notes/v1.3.1.md](https://github.com/jiangbyte/xuanjian/blob/main/docs/release-notes/v1.3.1.md)
+            Mobile: [docs/mobile-android.md](https://github.com/jiangbyte/xuanjian/blob/main/docs/mobile-android.md)
 
             ## Installers
 
@@ -125,6 +136,7 @@ jobs:
             | macOS Apple Silicon | `aarch64` `.dmg` / `.app` |
             | macOS Intel | `x64` `.dmg` / `.app` |
             | Linux x64 | `.deb`, `.AppImage`, `.rpm` |
+            | Android | `*-universal-release*.apk` |
 
             Installers do not include user data. Windows requires [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
 
@@ -134,3 +146,134 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+
+  publish-android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG_NAME }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r26d
+          local-cache: true
+
+      - name: Fix NDK symlinks
+        run: |
+          directory="${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          if [ -d "$directory" ]; then
+            find "$directory" -type l | while read -r link; do
+              current_target=$(readlink "$link")
+              new_target="$directory/$(basename "$current_target")"
+              ln -sf "$new_target" "$link"
+            done
+          fi
+
+      - name: Install Rust stable (Android targets)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          shared-key: release-android
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Init Android project if missing
+        env:
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          if [ ! -d src-tauri/gen/android ]; then
+            pnpm exec tauri android init --ci
+          fi
+
+      - name: Setup Android signing (optional)
+        env:
+          ANDROID_KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "${ANDROID_KEY_BASE64}" ] || [ -z "${ANDROID_KEY_ALIAS}" ] || [ -z "${ANDROID_KEY_PASSWORD}" ]; then
+            echo "No Android signing secrets configured; will produce unsigned release APK."
+            exit 0
+          fi
+          cd src-tauri/gen/android
+          echo "$ANDROID_KEY_BASE64" | base64 -d > "$RUNNER_TEMP/keystore.jks"
+          {
+            echo "keyAlias=${ANDROID_KEY_ALIAS}"
+            echo "password=${ANDROID_KEY_PASSWORD}"
+            echo "storeFile=${RUNNER_TEMP}/keystore.jks"
+          } > keystore.properties
+          echo "Signed release enabled."
+
+      - name: Build Android APK
+        env:
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          NODE_OPTIONS: --max-old-space-size=8192
+        run: pnpm exec tauri android build --apk
+
+      - name: Collect APK artifacts
+        id: apk
+        run: |
+          set -euo pipefail
+          mkdir -p dist-android
+          mapfile -t found < <(find src-tauri/gen/android -type f \( -name '*.apk' \) | sort)
+          if [ "${#found[@]}" -eq 0 ]; then
+            echo "No APK found under src-tauri/gen/android" >&2
+            exit 1
+          fi
+          ver="${TAG_NAME#v}"
+          for f in "${found[@]}"; do
+            base=$(basename "$f")
+            # Prefer universal release; rename for Release clarity
+            if [[ "$base" == *universal*release* ]]; then
+              out="xuanjian_${ver}_android_universal.apk"
+            else
+              out="xuanjian_${ver}_android_${base}"
+            fi
+            cp -f "$f" "dist-android/$out"
+            echo "Collected $f -> dist-android/$out"
+          done
+          ls -la dist-android
+
+      - name: Upload APK to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          name: ${{ env.TAG_NAME }}
+          files: dist-android/*
+          fail_on_unmatched_files: true
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

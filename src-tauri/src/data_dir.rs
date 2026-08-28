@@ -32,6 +32,16 @@ pub struct DataDirInfo {
 
 /// 默认 AppConfig 目录（与 tauri `app_config_dir` 对齐）。
 pub fn default_config_dir() -> Result<PathBuf> {
+    #[cfg(target_os = "android")]
+    {
+        // Android：优先外部 files / 内部 data；dirs::config_dir 在部分设备为空
+        if let Some(base) = dirs::data_dir() {
+            return Ok(base.join(APP_ID));
+        }
+        if let Ok(cwd) = std::env::current_dir() {
+            return Ok(cwd.join(APP_ID));
+        }
+    }
     let base = dirs::config_dir().ok_or_else(|| anyhow!("no config dir"))?;
     Ok(base.join(APP_ID))
 }

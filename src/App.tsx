@@ -1,15 +1,16 @@
 /**
  * @file 应用路由根组件
  * @author Charlie
- * @description 配置 BrowserRouter 与各业务页面路由。
- * 终端页由 AppShell keep-alive 挂载，本处仅切换视图；未知路径重定向到首页。
- * 业务页按路由懒加载，减小打包后首屏解析体积。
+ * @description 桌面 AppShell / 移动 MobileShell 按平台切换。
+ * 终端页由桌面壳 keep-alive；移动端为独立全屏页。未知路径重定向首页。
  */
 
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useMemo, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "@/components/AppShell";
+import { MobileShell } from "@/features/mobile/MobileShell";
 import { SettingsRouteRedirect } from "@/features/settings/SettingsRouteRedirect";
+import { shouldUseMobileUi } from "@/lib/platform/mobile";
 
 const HostsConsole = lazy(() =>
   import("@/features/hosts/HostsConsole").then((m) => ({
@@ -62,6 +63,42 @@ const FleetDashboard = lazy(() =>
   })),
 );
 
+const MobileHostsPage = lazy(() =>
+  import("@/features/mobile/MobileHostsPage").then((m) => ({
+    default: m.MobileHostsPage,
+  })),
+);
+const MobileTerminalPage = lazy(() =>
+  import("@/features/mobile/MobileTerminalPage").then((m) => ({
+    default: m.MobileTerminalPage,
+  })),
+);
+const MobileFilesPage = lazy(() =>
+  import("@/features/mobile/MobileFilesPage").then((m) => ({
+    default: m.MobileFilesPage,
+  })),
+);
+const MobileFileEditorPage = lazy(() =>
+  import("@/features/mobile/MobileFilesPage").then((m) => ({
+    default: m.MobileFileEditorPage,
+  })),
+);
+const MobileNotesPage = lazy(() =>
+  import("@/features/mobile/MobileNotesPage").then((m) => ({
+    default: m.MobileNotesPage,
+  })),
+);
+const MobileNoteEditorPage = lazy(() =>
+  import("@/features/mobile/MobileNotesPage").then((m) => ({
+    default: m.MobileNoteEditorPage,
+  })),
+);
+const MobileMorePage = lazy(() =>
+  import("@/features/mobile/MobileMorePage").then((m) => ({
+    default: m.MobileMorePage,
+  })),
+);
+
 function RouteFallback() {
   return (
     <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -70,100 +107,59 @@ function RouteFallback() {
   );
 }
 
+function page(el: ReactNode) {
+  return <Suspense fallback={<RouteFallback />}>{el}</Suspense>;
+}
+
+function DesktopRoutes() {
+  return (
+    <Routes>
+      <Route element={<AppShell />}>
+        <Route index element={page(<HostsConsole />)} />
+        <Route path="network" element={page(<NetworkConsole />)} />
+        <Route path="docker" element={page(<DockerConsole />)} />
+        <Route path="scripts" element={page(<ScriptsConsole />)} />
+        <Route path="automation" element={page(<BatchConsole />)} />
+        <Route path="fleet" element={page(<FleetDashboard />)} />
+        <Route path="notes" element={page(<NotesConsole />)} />
+        <Route path="logs" element={page(<LogsConsole />)} />
+        <Route path="logs/:id" element={page(<LogDetailView />)} />
+        <Route path="audit" element={page(<AuditConsole />)} />
+        <Route path="settings" element={<SettingsRouteRedirect />} />
+        <Route path="terminal" element={null} />
+        <Route path="m/*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
+    </Routes>
+  );
+}
+
+function MobileRoutes() {
+  return (
+    <Routes>
+      <Route element={<MobileShell />}>
+        <Route index element={<Navigate to="/m" replace />} />
+        <Route path="m" element={page(<MobileHostsPage />)} />
+        <Route path="m/terminal" element={page(<MobileTerminalPage />)} />
+        <Route path="m/files" element={page(<MobileFilesPage />)} />
+        <Route path="m/files/edit" element={page(<MobileFileEditorPage />)} />
+        <Route path="m/notes" element={page(<MobileNotesPage />)} />
+        <Route path="m/notes/:id" element={page(<MobileNoteEditorPage />)} />
+        <Route path="m/more" element={page(<MobileMorePage />)} />
+        <Route path="*" element={<Navigate to="/m" replace />} />
+      </Route>
+    </Routes>
+  );
+}
+
 /**
- * 应用根组件：挂载路由树，所有页面落在 AppShell 布局内。
+ * 应用根组件：移动端伴侣壳 / 桌面运维壳。
  */
 export default function App() {
+  const mobile = useMemo(() => shouldUseMobileUi(), []);
   return (
     <BrowserRouter>
-      <Routes>
-        <Route element={<AppShell />}>
-          <Route
-            index
-            element={
-              <Suspense fallback={<RouteFallback />}>
-                <HostsConsole />
-              </Suspense>
-            }
-          />
-          <Route
-            path="network"
-            element={
-              <Suspense fallback={<RouteFallback />}>
-                <NetworkConsole />
-              </Suspense>
-            }
-          />
-          <Route
-            path="docker"
-            element={
-              <Suspense fallback={<RouteFallback />}>
-                <DockerConsole />
-              </Suspense>
-            }
-          />
-          <Route
-            path="scripts"
-            element={
-              <Suspense fallback={<RouteFallback />}>
-                <ScriptsConsole />
-              </Suspense>
-            }
-          />
-          <Route
-            path="automation"
-            element={
-              <Suspense fallback={<RouteFallback />}>
-                <BatchConsole />
-              </Suspense>
-            }
-          />
-          <Route
-            path="fleet"
-            element={
-              <Suspense fallback={<RouteFallback />}>
-                <FleetDashboard />
-              </Suspense>
-            }
-          />
-          <Route
-            path="notes"
-            element={
-              <Suspense fallback={<RouteFallback />}>
-                <NotesConsole />
-              </Suspense>
-            }
-          />
-          <Route
-            path="logs"
-            element={
-              <Suspense fallback={<RouteFallback />}>
-                <LogsConsole />
-              </Suspense>
-            }
-          />
-          <Route
-            path="logs/:id"
-            element={
-              <Suspense fallback={<RouteFallback />}>
-                <LogDetailView />
-              </Suspense>
-            }
-          />
-          <Route
-            path="audit"
-            element={
-              <Suspense fallback={<RouteFallback />}>
-                <AuditConsole />
-              </Suspense>
-            }
-          />
-          <Route path="settings" element={<SettingsRouteRedirect />} />
-          {/* 终端 UI 在 AppShell 中 keep-alive；此路由仅用于切换视图 */}
-          <Route path="terminal" element={null} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Route>
-      </Routes>
+      {mobile ? <MobileRoutes /> : <DesktopRoutes />}
     </BrowserRouter>
   );
 }
