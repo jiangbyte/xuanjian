@@ -1,6 +1,7 @@
 /**
  * @file 重型模块统一预加载
- * @description 首帧绘制后在后台预拉 Monaco、xterm、图表等 chunk，减少首次使用白屏等待。
+ * @description 首帧绘制后在后台并行预拉 Monaco、xterm、图表、终端壳、AI 等 chunk，
+ * 减少首次使用白屏等待。各任务失败互不影响。
  */
 
 let preloadPromise: Promise<void> | null = null;
@@ -35,6 +36,34 @@ const TASKS: PreloadTask[] = [
   {
     id: "logs-terminal",
     run: () => import("@/features/logs/LogDetailView").then(() => undefined),
+  },
+  {
+    id: "terminal-workspace",
+    run: () =>
+      import("@/features/terminal/TerminalWorkspace").then(() => undefined),
+  },
+  {
+    id: "terminal-left",
+    run: () =>
+      import("@/features/terminal/TerminalLeftPanel").then(() => undefined),
+  },
+  {
+    id: "terminal-right",
+    run: () =>
+      import("@/features/terminal/TerminalRightPanel").then(() => undefined),
+  },
+  {
+    id: "terminal-panes",
+    run: () =>
+      Promise.all([
+        import("@/features/terminal/panes/OverviewPane"),
+        import("@/features/terminal/panes/ProcessesPane"),
+        import("@/features/terminal/panes/PortsPane"),
+        import("@/features/terminal/panes/DockerPane"),
+        import("@/features/terminal/panes/HistoryPane"),
+        import("@/features/terminal/panes/ScriptsPane"),
+        import("@/features/terminal/panes/NotesPane"),
+      ]).then(() => undefined),
   },
 ];
 

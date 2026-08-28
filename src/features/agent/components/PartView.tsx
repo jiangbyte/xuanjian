@@ -3,15 +3,66 @@
  */
 
 import { Bot, Loader2, Play, Wrench } from "lucide-react";
-import { useState } from "react";
+import { lazy, memo, Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { MarkdownViewer } from "@/components/MarkdownViewer";
 import type { AgentPermissionMode, MessagePart } from "@/lib/db";
 import { cn } from "@/lib/utils";
 import { toolLabel } from "./toolLabel";
 
-export function PartView({
+const MarkdownViewer = lazy(() =>
+  import("@/components/MarkdownViewer").then((m) => ({
+    default: m.MarkdownViewer,
+  })),
+);
+
+/** 无明显 Markdown 语法时走纯文本，避免流式每个 token 触发完整 MD 解析 */
+function looksLikeMarkdown(source: string): boolean {
+  return /[#*`[\]|>_~]|^\s{0,3}[-*+]\s|^\s{0,3}\d+\.\s|```/m.test(source);
+}
+
+function MarkdownOrText({
+  source,
+  className,
+}: {
+  source: string;
+  className?: string;
+}) {
+  if (!looksLikeMarkdown(source)) {
+    return (
+      <div
+        className={cn(
+          "select-text whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
+          className,
+        )}
+      >
+        {source}
+      </div>
+    );
+  }
+  return (
+    <Suspense
+      fallback={
+        <div
+          className={cn(
+            "select-text whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
+            className,
+          )}
+        >
+          {source}
+        </div>
+      }
+    >
+      <MarkdownViewer
+        source={source}
+        density="compact"
+        className={className}
+      />
+    </Suspense>
+  );
+}
+
+function PartViewInner({
   part,
   planKey,
   onConfirm,
@@ -32,9 +83,8 @@ export function PartView({
   const [open, setOpen] = useState(part.type === "thinking");
   if (part.type === "text") {
     return (
-      <MarkdownViewer
+      <MarkdownOrText
         source={part.text}
-        density="compact"
         className="select-text text-sidebar-foreground"
       />
     );
@@ -99,11 +149,7 @@ export function PartView({
         <div className="mt-0.5 select-text text-muted-foreground">{part.task}</div>
         {part.summary ? (
           <div className="mt-1.5 border-t border-border/60 pt-1.5">
-            <MarkdownViewer
-              source={part.summary}
-              density="compact"
-              className="select-text"
-            />
+            <MarkdownOrText source={part.summary} className="select-text" />
           </div>
         ) : null}
         {part.children && part.children.length > 0 ? (
@@ -133,9 +179,8 @@ export function PartView({
     return (
       <div className="rounded-md border border-border bg-muted/50 px-2 py-1.5 text-[11px]">
         <div className="mb-1 font-medium">{t("terminal.aiPlanTitle")}</div>
-        <MarkdownViewer
+        <MarkdownOrText
           source={md}
-          density="compact"
           className="select-text text-sidebar-foreground"
         />
         {part.items.length > 0 ? (
@@ -235,3 +280,5 @@ export function PartView({
   }
   return null;
 }
+
+export const PartView = memo(PartViewInner);

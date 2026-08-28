@@ -27,6 +27,20 @@ export default defineConfig(async () => ({
         ),
       },
       {
+        find: "@xuanjian/agent-core/inbox",
+        replacement: path.resolve(
+          __dirname,
+          "packages/agent-core/src/inbox.ts",
+        ),
+      },
+      {
+        find: "@xuanjian/agent-core/plan",
+        replacement: path.resolve(
+          __dirname,
+          "packages/agent-core/src/plan.ts",
+        ),
+      },
+      {
         find: "@xuanjian/agent-core",
         replacement: path.resolve(
           __dirname,
@@ -38,6 +52,14 @@ export default defineConfig(async () => ({
         replacement: path.resolve(
           __dirname,
           "packages/agent-adapters/src/index.ts",
+        ),
+      },
+      {
+        // WebView 构建：agent-loop-guard 依赖 node:crypto/util，替换为浏览器实现
+        find: "agent-loop-guard",
+        replacement: path.resolve(
+          __dirname,
+          "packages/agent-core/src/loop/browser-loop-guard/index.ts",
         ),
       },
       {
@@ -99,6 +121,12 @@ export default defineConfig(async () => ({
           }
           if (id.includes("@xyflow") || id.includes("@dagrejs")) {
             return "flow";
+          }
+          if (
+            id.includes("echarts") ||
+            id.includes("echarts-for-react")
+          ) {
+            return "echarts";
           }
           if (id.includes("@xterm")) {
             return "xterm";

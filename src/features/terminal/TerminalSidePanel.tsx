@@ -29,6 +29,7 @@ import {
   Upload,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslation } from "react-i18next";
 import {
   type ContextMenuItem,
@@ -230,6 +231,16 @@ export function TerminalSidePanel({
     selectAllVisible,
     selectMany,
   } = useFileListSelection(visible);
+
+  const FILE_ROW_H = 28;
+  const PARENT_ROW_H = 28;
+  const rowVirtualizer = useVirtualizer({
+    count: visible.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: () => FILE_ROW_H,
+    overscan: 16,
+    paddingStart: PARENT_ROW_H,
+  });
 
   useEffect(() => {
     if (!cwd) return;
@@ -901,64 +912,78 @@ export function TerminalSidePanel({
         {error && (
           <div className="px-3 py-2 text-xs text-destructive">{error}</div>
         )}
-        <button
-          type="button"
-          data-skip-marquee
-          className="grid w-full grid-cols-[20px_minmax(100px,1.5fr)_108px_86px_60px_48px] items-center gap-2 rounded-md px-2 py-1 text-left text-xs hover:bg-accent"
-          onClick={goParent}
+        <div
+          className="relative w-full"
+          style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
         >
-          <span className="flex size-5 items-center justify-center text-primary">
-            <Folder size={14} />
-          </span>
-          <span className="truncate font-medium">..</span>
-          <span className="truncate text-muted-foreground">--</span>
-          <span className="truncate text-muted-foreground">--</span>
-          <span className="truncate text-muted-foreground">--</span>
-          <span className="truncate text-muted-foreground">
-            {t("terminal.folder")}
-          </span>
-        </button>
-        {visible.map((e, index) => (
           <button
             type="button"
-            key={e.path}
-            data-file-row
-            data-file-path={e.path}
-            className={selectionRow(
-              !!checked[e.path] || previewPaths.has(e.path),
-              "grid w-full grid-cols-[20px_minmax(100px,1.5fr)_108px_86px_60px_48px] items-center gap-2 rounded-md px-2 py-1 text-left text-xs hover:bg-accent",
-            )}
-            onClick={(ev) => handleRowPointer(e, index, ev)}
-            onDoubleClick={() => {
-              if (e.isDir) setCwd(e.path);
-              else openFile(e);
-            }}
-            onContextMenu={(ev) =>
-              openContextMenu(ev, openMenu, entryMenuItems(e))
-            }
+            data-skip-marquee
+            className="absolute top-0 left-0 grid w-full grid-cols-[20px_minmax(100px,1.5fr)_108px_86px_60px_48px] items-center gap-2 rounded-md px-2 py-1 text-left text-xs hover:bg-accent"
+            style={{ height: PARENT_ROW_H }}
+            onClick={goParent}
           >
-            <span
-              className={`flex size-5 items-center justify-center ${
-                e.isDir ? "text-primary" : "text-muted-foreground"
-              }`}
-            >
-              {e.isDir ? <Folder size={14} /> : <File size={14} />}
+            <span className="flex size-5 items-center justify-center text-primary">
+              <Folder size={14} />
             </span>
-            <span className="truncate">{e.name}</span>
+            <span className="truncate font-medium">..</span>
+            <span className="truncate text-muted-foreground">--</span>
+            <span className="truncate text-muted-foreground">--</span>
+            <span className="truncate text-muted-foreground">--</span>
             <span className="truncate text-muted-foreground">
-              {e.modifiedAt || "--"}
-            </span>
-            <span className="truncate font-mono text-xs text-muted-foreground">
-              {e.permissions || "--"}
-            </span>
-            <span className="truncate text-muted-foreground">
-              {formatSize(e.size, e.isDir)}
-            </span>
-            <span className="truncate text-muted-foreground">
-              {fileExtType(e.name, e.isDir, t)}
+              {t("terminal.folder")}
             </span>
           </button>
-        ))}
+          {rowVirtualizer.getVirtualItems().map((vi) => {
+            const e = visible[vi.index];
+            if (!e) return null;
+            return (
+              <button
+                type="button"
+                key={e.path}
+                data-file-row
+                data-file-path={e.path}
+                className={selectionRow(
+                  !!checked[e.path] || previewPaths.has(e.path),
+                  "absolute left-0 grid w-full grid-cols-[20px_minmax(100px,1.5fr)_108px_86px_60px_48px] items-center gap-2 rounded-md px-2 py-1 text-left text-xs hover:bg-accent",
+                )}
+                style={{
+                  height: vi.size,
+                  transform: `translateY(${vi.start}px)`,
+                }}
+                onClick={(ev) => handleRowPointer(e, vi.index, ev)}
+                onDoubleClick={() => {
+                  if (e.isDir) setCwd(e.path);
+                  else openFile(e);
+                }}
+                onContextMenu={(ev) =>
+                  openContextMenu(ev, openMenu, entryMenuItems(e))
+                }
+              >
+                <span
+                  className={`flex size-5 items-center justify-center ${
+                    e.isDir ? "text-primary" : "text-muted-foreground"
+                  }`}
+                >
+                  {e.isDir ? <Folder size={14} /> : <File size={14} />}
+                </span>
+                <span className="truncate">{e.name}</span>
+                <span className="truncate text-muted-foreground">
+                  {e.modifiedAt || "--"}
+                </span>
+                <span className="truncate font-mono text-xs text-muted-foreground">
+                  {e.permissions || "--"}
+                </span>
+                <span className="truncate text-muted-foreground">
+                  {formatSize(e.size, e.isDir)}
+                </span>
+                <span className="truncate text-muted-foreground">
+                  {fileExtType(e.name, e.isDir, t)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
         <FileListMarqueeOverlay rect={marquee} />
       </div>
 

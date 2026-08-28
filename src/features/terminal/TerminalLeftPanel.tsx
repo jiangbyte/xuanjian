@@ -2,7 +2,7 @@
  * @file 终端左侧边栏
  * @author Charlie
  * @description 左侧图标轨切换文件、脚本、历史、概览、进程、端口、Docker 等面板。
- * 文件标签复用 TerminalSidePanel；其余对应 panes 子目录组件。
+ * 文件标签复用 TerminalSidePanel；其余 pane 按需懒加载（启动预热仍会后台拉齐）。
  * 需传入当前会话 sessionId / kind，供各子面板探测远程或本地环境。
  */
 
@@ -15,7 +15,7 @@ import {
   Network,
   Zap,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,14 +23,39 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { DockerPane } from "@/features/terminal/panes/DockerPane";
-import { HistoryPane } from "@/features/terminal/panes/HistoryPane";
-import { OverviewPane } from "@/features/terminal/panes/OverviewPane";
-import { PortsPane } from "@/features/terminal/panes/PortsPane";
-import { ProcessesPane } from "@/features/terminal/panes/ProcessesPane";
-import { ScriptsPane } from "@/features/terminal/panes/ScriptsPane";
 import { TerminalSidePanel } from "@/features/terminal/TerminalSidePanel";
 import { cn } from "@/lib/utils";
+
+const ScriptsPane = lazy(() =>
+  import("@/features/terminal/panes/ScriptsPane").then((m) => ({
+    default: m.ScriptsPane,
+  })),
+);
+const HistoryPane = lazy(() =>
+  import("@/features/terminal/panes/HistoryPane").then((m) => ({
+    default: m.HistoryPane,
+  })),
+);
+const OverviewPane = lazy(() =>
+  import("@/features/terminal/panes/OverviewPane").then((m) => ({
+    default: m.OverviewPane,
+  })),
+);
+const ProcessesPane = lazy(() =>
+  import("@/features/terminal/panes/ProcessesPane").then((m) => ({
+    default: m.ProcessesPane,
+  })),
+);
+const PortsPane = lazy(() =>
+  import("@/features/terminal/panes/PortsPane").then((m) => ({
+    default: m.PortsPane,
+  })),
+);
+const DockerPane = lazy(() =>
+  import("@/features/terminal/panes/DockerPane").then((m) => ({
+    default: m.DockerPane,
+  })),
+);
 
 /** 左侧边栏可选标签 ID */
 export type LeftTabId =
@@ -41,6 +66,10 @@ export type LeftTabId =
   | "processes"
   | "ports"
   | "docker";
+
+function PaneFallback() {
+  return <div className="h-full w-full bg-background" aria-hidden />;
+}
 
 /**
  * 终端左侧栏：图标轨 + 对应功能面板内容区。
@@ -114,33 +143,39 @@ export function TerminalLeftPanel({
 
       {/* —— 当前标签内容 —— */}
       <div className="h-full min-w-0 flex-1 overflow-hidden">
-        {tab === "files" && (
-          <TerminalSidePanel
-            sessionId={sessionId}
-            kind={kind}
-            hostId={hostId}
-            shellId={shellId}
-          />
-        )}
-        {tab === "scripts" && <ScriptsPane sessionId={sessionId} />}
-        {tab === "history" && <HistoryPane sessionId={sessionId} />}
-        {tab === "overview" && (
-          <OverviewPane
-            sessionId={sessionId}
-            kind={kind}
-            hostId={hostId}
-            shellId={shellId}
-          />
-        )}
-        {tab === "processes" && (
-          <ProcessesPane sessionId={sessionId} kind={kind} shellId={shellId} />
-        )}
-        {tab === "ports" && (
-          <PortsPane sessionId={sessionId} kind={kind} shellId={shellId} />
-        )}
-        {tab === "docker" && (
-          <DockerPane sessionId={sessionId} kind={kind} shellId={shellId} />
-        )}
+        <Suspense fallback={<PaneFallback />}>
+          {tab === "files" && (
+            <TerminalSidePanel
+              sessionId={sessionId}
+              kind={kind}
+              hostId={hostId}
+              shellId={shellId}
+            />
+          )}
+          {tab === "scripts" && <ScriptsPane sessionId={sessionId} />}
+          {tab === "history" && <HistoryPane sessionId={sessionId} />}
+          {tab === "overview" && (
+            <OverviewPane
+              sessionId={sessionId}
+              kind={kind}
+              hostId={hostId}
+              shellId={shellId}
+            />
+          )}
+          {tab === "processes" && (
+            <ProcessesPane
+              sessionId={sessionId}
+              kind={kind}
+              shellId={shellId}
+            />
+          )}
+          {tab === "ports" && (
+            <PortsPane sessionId={sessionId} kind={kind} shellId={shellId} />
+          )}
+          {tab === "docker" && (
+            <DockerPane sessionId={sessionId} kind={kind} shellId={shellId} />
+          )}
+        </Suspense>
       </div>
     </div>
   );

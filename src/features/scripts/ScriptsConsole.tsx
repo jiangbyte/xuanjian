@@ -14,11 +14,10 @@ import {
   Upload,
   Zap,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { openContextMenu, useContextMenu } from "@/components/ContextMenu";
-import Editor from "@/components/MonacoEditor";
 import {
   SectionAsideHeader,
   SectionNavItem,
@@ -75,6 +74,8 @@ import { resolveMonacoTheme, useSettingsStore } from "@/stores/settings";
 
 const NONE = "none";
 
+const MonacoEditor = lazy(() => import("@/components/MonacoEditor"));
+
 /** 脚本包与片段管理主界面 */
 export function ScriptsConsole() {
   const { t } = useTranslation();
@@ -88,10 +89,14 @@ export function ScriptsConsole() {
   const [runTarget, setRunTarget] = useState<ScriptRow | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
-  const reload = async () => {
-    setPackages(await listScriptPackages());
-    setScripts(await listScripts());
-  };
+  const reload = useCallback(async () => {
+    const [pkgs, rows] = await Promise.all([
+      listScriptPackages(),
+      listScripts(),
+    ]);
+    setPackages(pkgs);
+    setScripts(rows);
+  }, []);
 
   useEffect(() => {
     reload().catch(console.error);
@@ -218,7 +223,7 @@ export function ScriptsConsole() {
               ))
             )
               return;
-            for (const id of ids) await deleteScript(id);
+            await Promise.all(ids.map((id) => deleteScript(id)));
             setSelectedIds(new Set());
             setEditing(null);
             await reload();
@@ -620,28 +625,37 @@ function ScriptEditorModal({
           <div>
             <Label className="mb-1.5 block">{t("scripts.body")}</Label>
             <div className="overflow-hidden rounded-md border border-border">
-              <Editor
-                height="260px"
-                language="shell"
-                theme={monacoTheme}
-                value={body}
-                onChange={(v) => setBody(v ?? "")}
-                options={{
-                  fontSize: editorFontSize,
-                  minimap: { enabled: false },
-                  wordWrap: editorWordWrap ? "on" : "off",
-                  automaticLayout: true,
-                  scrollBeyondLastLine: false,
-                  tabSize: 2,
-                  lineNumbers: "on",
-                  renderLineHighlight: "line",
-                  padding: { top: 8, bottom: 8 },
-                  scrollbar: {
-                    verticalScrollbarSize: 8,
-                    horizontalScrollbarSize: 8,
-                  },
-                }}
-              />
+              <Suspense
+                fallback={
+                  <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    …
+                  </div>
+                }
+              >
+                <MonacoEditor
+                  height="260px"
+                  language="shell"
+                  theme={monacoTheme}
+                  value={body}
+                  onChange={(v) => setBody(v ?? "")}
+                  options={{
+                    fontSize: editorFontSize,
+                    minimap: { enabled: false },
+                    wordWrap: editorWordWrap ? "on" : "off",
+                    automaticLayout: true,
+                    scrollBeyondLastLine: false,
+                    tabSize: 2,
+                    lineNumbers: "on",
+                    renderLineHighlight: "line",
+                    padding: { top: 8, bottom: 8 },
+                    scrollbar: {
+                      verticalScrollbarSize: 8,
+                      horizontalScrollbarSize: 8,
+                    },
+                  }}
+                />
+              </Suspense>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
               {t("scripts.varsHint")}

@@ -7,7 +7,9 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./graph": "./src/graph.ts"
+    "./graph": "./src/graph.ts",
+    "./inbox": "./src/inbox.ts",
+    "./plan": "./src/plan.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",

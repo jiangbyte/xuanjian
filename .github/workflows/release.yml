@@ -107,24 +107,15 @@ jobs:
           releaseBody: |
             ## Highlights
 
-            ### Agent bottom terminal
-            - Split workspace: user terminal on top, **Agent bottom panel** below (separate PTY, multi-tab)
-            - `terminal_run` / `session_exec` execute visibly in the bottom panel
-            - Transcript recording, replay, and `terminal_tail` aligned with the agent session
+            ### Performance
+            - Fix Hosts/Scripts reload loops; parallel list loads and batch deletes
+            - Lazy terminal shell + aggressive heavy-module preload (tabs keep-alive)
+            - Virtualized SFTP / process / AI lists; memoized streaming chat
 
-            ### Terminal & sidebar
-            - Denser sidebar lists; Docker logs: selectable copy + auto-follow latest
-            - SFTP toolbar horizontal scroll on narrow panes; collapse no longer remounts main xterm
+            ### Build / CI
+            - Browser shim for `agent-loop-guard` so production `pnpm build` succeeds
 
-            ### Agent & UI
-            - LangGraph runtime (`agent-core` / `agent-adapters`) hardening
-            - AI sidebar ReAct cards wrap instead of horizontal overflow
-            - Settings: agent catalog, plugins/tools, MCP sections reorganized
-
-            ### Network
-            - Connections, traffic monitor, speed-test charts
-
-            Full notes: [docs/release-notes/v1.3.0.md](https://github.com/jiangbyte/xuanjian/blob/main/docs/release-notes/v1.3.0.md)
+            Full notes: [docs/release-notes/v1.3.1.md](https://github.com/jiangbyte/xuanjian/blob/main/docs/release-notes/v1.3.1.md)
 
             ## Installers
 

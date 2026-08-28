@@ -1,16 +1,22 @@
 /**
  * @file 应用外壳布局
  * @author Charlie
- * @description 标题栏 + 侧栏 + 主内容区；终端工作区常驻挂载以保留滚动缓冲。
+ * @description 标题栏 + 侧栏 + 主内容区；终端工作区首次进入后常驻挂载以保留滚动缓冲。
  * 启动时初始化会话录制与传输进度监听，并绑定 Ctrl/Cmd+J 打开快速切换。
  * 设置/快速切换按需懒加载；离终端页时卸载左右侧栏以停止轮询与重型编辑器。
  */
 
-import { lazy, memo, Suspense, useEffect, useLayoutEffect } from "react";
+import {
+  lazy,
+  memo,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useState,
+} from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
 import { TitleBar } from "@/components/TitleBar";
-import { TerminalWorkspace } from "@/features/terminal/TerminalWorkspace";
 import { initSchedulerListener } from "@/lib/automation/schedulerListener";
 import { runWhenIdle, showMainWindowWhenReady } from "@/lib/boot";
 import { importCmdHistoryFromLocalStorage } from "@/lib/db/cmdHistory";
@@ -22,6 +28,12 @@ import { api } from "@/lib/tauri";
 import { type ThemeMode, useSettingsStore } from "@/stores/settings";
 import { initTransferProgressListener } from "@/stores/transfer";
 import { useUiStore } from "@/stores/ui";
+
+const TerminalWorkspace = lazy(() =>
+  import("@/features/terminal/TerminalWorkspace").then((m) => ({
+    default: m.TerminalWorkspace,
+  })),
+);
 
 const QuickSwitcher = lazy(() =>
   import("@/features/terminal/QuickSwitcher").then((m) => ({
@@ -60,12 +72,18 @@ const MemoTitleBar = memo(TitleBar);
 const MemoSidebar = memo(Sidebar);
 
 /**
- * 顶层布局壳：非终端路由显示侧栏与 Outlet；终端区始终挂载，离页时隐藏。
+ * 顶层布局壳：非终端路由显示侧栏与 Outlet；终端区首次挂载后常驻，离页时隐藏。
  */
 export function AppShell() {
   const onTerminal = useLocation().pathname === "/terminal";
+  const hasTabs = useUiStore((s) => s.tabs.length > 0);
   const setSwitcherOpen = useUiStore((s) => s.setSwitcherOpen);
   const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
+  const [terminalMounted, setTerminalMounted] = useState(false);
+
+  useEffect(() => {
+    if (onTerminal || hasTabs) setTerminalMounted(true);
+  }, [onTerminal, hasTabs]);
 
   useLayoutEffect(() => {
     showMainWindowWhenReady();
@@ -165,25 +183,29 @@ export function AppShell() {
             <Outlet />
           </div>
           {/* 保持终端挂载；离页时用 contain 降低 WebView 绘制开销 */}
-          <div
-            className="h-full"
-            style={
-              onTerminal
-                ? undefined
-                : {
-                    position: "absolute",
-                    inset: 0,
-                    visibility: "hidden",
-                    pointerEvents: "none",
-                    zIndex: -1,
-                    contentVisibility: "hidden",
-                    contain: "strict",
-                  }
-            }
-            aria-hidden={!onTerminal}
-          >
-            <TerminalWorkspace workspaceActive={onTerminal} />
-          </div>
+          {terminalMounted ? (
+            <div
+              className="h-full"
+              style={
+                onTerminal
+                  ? undefined
+                  : {
+                      position: "absolute",
+                      inset: 0,
+                      visibility: "hidden",
+                      pointerEvents: "none",
+                      zIndex: -1,
+                      contentVisibility: "hidden",
+                      contain: "strict",
+                    }
+              }
+              aria-hidden={!onTerminal}
+            >
+              <Suspense fallback={null}>
+                <TerminalWorkspace workspaceActive={onTerminal} />
+              </Suspense>
+            </div>
+          ) : null}
         </main>
       </div>
       <ShellOverlays />

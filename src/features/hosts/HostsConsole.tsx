@@ -4,7 +4,7 @@
  * @description 主机列表主界面：搜索筛选、分组侧栏、卡片网格与表单弹窗。
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -54,11 +54,16 @@ export function HostsConsole() {
   const updateTab = useUiStore((s) => s.updateTab);
   const navigate = useNavigate();
 
-  const reload = async () => {
-    setHosts(await listHosts());
-    setGroups(await listGroups());
-    setTags(await listTags());
-  };
+  const reload = useCallback(async () => {
+    const [hostRows, groupRows, tagRows] = await Promise.all([
+      listHosts(),
+      listGroups(),
+      listTags(),
+    ]);
+    setHosts(hostRows);
+    setGroups(groupRows);
+    setTags(tagRows);
+  }, []);
 
   useEffect(() => {
     reload().catch(console.error);
@@ -274,7 +279,7 @@ export function HostsConsole() {
               ))
             )
               return;
-            for (const id of ids) await deleteHost(id);
+            await Promise.all(ids.map((id) => deleteHost(id)));
             setSelectedIds(new Set());
             await reload();
           })();

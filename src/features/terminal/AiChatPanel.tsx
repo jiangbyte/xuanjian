@@ -14,6 +14,7 @@ import {
   Square,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,12 +53,9 @@ import {
 import { buildAgentHistory } from "@/lib/agent/history";
 import { buildOrchestratorSystemPrompt } from "@/lib/agent/runtime/prompts";
 import { toolsForOrchestrator } from "@/lib/agent/subagents";
-import { runAgentTurn } from "@xuanjian/agent-adapters";
-import {
-  steerAgent,
-  buildPlanExecutePrompt,
-  type AgentActivityPhase,
-} from "@xuanjian/agent-core";
+import { steerAgent } from "@xuanjian/agent-core/inbox";
+import { buildPlanExecutePrompt } from "@xuanjian/agent-core/plan";
+import type { AgentActivityPhase } from "@xuanjian/agent-core";
 import { getBlockingUi, subscribeBlockingUi } from "@/lib/ui/blockingUi";
 import {
   appendAgentMessage,
@@ -125,7 +123,7 @@ export function AiChatPanel() {
     () => new Set(),
   );
 
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const msgListRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const activitySinceRef = useRef(Date.now());
   const [activityTick, setActivityTick] = useState(0);
@@ -288,9 +286,24 @@ export function AiChatPanel() {
 
   useEffect(() => subscribeBlockingUi(setBlockingUiState), []);
 
+  const msgVirtualizer = useVirtualizer({
+    count: messages.length,
+    getScrollElement: () => msgListRef.current,
+    estimateSize: () => 72,
+    overscan: 6,
+    measureElement: (el) => el.getBoundingClientRect().height,
+  });
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, []);
+    if (messages.length === 0) return;
+    const el = msgListRef.current;
+    if (!el) return;
+    const nearBottom =
+      el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    if (nearBottom || busy) {
+      msgVirtualizer.scrollToIndex(messages.length - 1, { align: "end" });
+    }
+  }, [messages, busy, msgVirtualizer]);
 
   useEffect(() => {
     if (!busy) return;
@@ -381,6 +394,7 @@ export function AiChatPanel() {
           title: (opts.titleHint ?? content).slice(0, 40),
         });
 
+        const { runAgentTurn } = await import("@xuanjian/agent-adapters");
         await runAgentTurn({
           sessionId: sid,
           userText: content,
@@ -697,7 +711,10 @@ export function AiChatPanel() {
           </div>
         ) : null}
 
-        <div className="h-full overflow-x-hidden overflow-y-auto px-2.5 py-2">
+        <div
+          ref={msgListRef}
+          className="h-full overflow-x-hidden overflow-y-auto px-2.5 py-2"
+        >
           {messages.length === 0 && !busy ? (
             <div className="flex h-full min-h-[120px] flex-col items-center justify-center gap-1 px-3 text-center">
               <Sparkles size={18} className="text-muted-foreground/50" />
@@ -706,20 +723,40 @@ export function AiChatPanel() {
               </p>
             </div>
           ) : (
-            <div className="min-w-0 max-w-full select-text space-y-2.5">
-              {messages.map((m) => (
-                <MessageBlock
-                  key={m.id}
-                  messageId={m.id}
-                  role={m.role}
-                  parts={m.parts}
-                  onConfirm={resolveConfirm}
-                  onExecutePlan={executePlan}
-                  executedPlanKeys={executedPlanKeys}
-                  busy={busy}
-                  permissionMode={permissionMode}
-                />
-              ))}
+            <div className="min-w-0 max-w-full select-text">
+              <div
+                className="relative w-full"
+                style={{ height: `${msgVirtualizer.getTotalSize()}px` }}
+              >
+                {msgVirtualizer.getVirtualItems().map((vi) => {
+                  const m = messages[vi.index];
+                  if (!m) return null;
+                  const isTail = vi.index === messages.length - 1;
+                  const needsPlanKeys = m.parts.some((p) => p.type === "plan");
+                  return (
+                    <div
+                      key={m.id}
+                      data-index={vi.index}
+                      ref={msgVirtualizer.measureElement}
+                      className="absolute top-0 left-0 w-full pb-2.5"
+                      style={{ transform: `translateY(${vi.start}px)` }}
+                    >
+                      <MessageBlock
+                        messageId={m.id}
+                        role={m.role}
+                        parts={m.parts}
+                        onConfirm={resolveConfirm}
+                        onExecutePlan={executePlan}
+                        executedPlanKeys={
+                          needsPlanKeys ? executedPlanKeys : undefined
+                        }
+                        busy={isTail ? busy : false}
+                        permissionMode={permissionMode}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
               {busy ? (
                 <div className="flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2 py-1.5 text-[11px] text-muted-foreground">
                   <Loader2 size={12} className="animate-spin text-primary" />
@@ -736,7 +773,6 @@ export function AiChatPanel() {
                   </span>
                 </div>
               ) : null}
-              <div ref={bottomRef} />
             </div>
           )}
         </div>

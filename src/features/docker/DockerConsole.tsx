@@ -378,7 +378,7 @@ export function DockerConsole() {
                 ))
               )
                 return;
-              for (const id of ids) await deleteDockerProject(id);
+              await Promise.all(ids.map((id) => deleteDockerProject(id)));
               setSelectedIds(new Set());
               if (activeId != null && ids.includes(activeId)) {
                 setActiveId(null);

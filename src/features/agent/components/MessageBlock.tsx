@@ -3,7 +3,7 @@
  */
 
 import { Check, Copy } from "lucide-react";
-import { useCallback, useState } from "react";
+import { memo, useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -97,7 +97,7 @@ function CopyMessageButton({ text }: { text: string }) {
   );
 }
 
-export function MessageBlock({
+function MessageBlockInner({
   messageId,
   role,
   parts,
@@ -157,3 +157,6 @@ export function MessageBlock({
     </div>
   );
 }
+
+/** 流式更新时仅末条 parts 引用变化，历史消息跳过重渲 */
+export const MessageBlock = memo(MessageBlockInner);

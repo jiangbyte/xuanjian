@@ -7,7 +7,8 @@
  */
 
 import { RefreshCw, Search, Skull, XCircle } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -179,6 +180,15 @@ export function ProcessesPane({
     return list;
   }, [procs, q, sort]);
 
+  const listRef = useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: () => 72,
+    overscan: 10,
+    measureElement: (el) => el.getBoundingClientRect().height,
+  });
+
   const signal = async (pid: string, sig: "TERM" | "KILL") => {
     if (!sessionId) return;
     const ok = await dialogs.confirm(t("termTab.killConfirm", { pid, sig }), {
@@ -256,7 +266,7 @@ export function ProcessesPane({
       </div>
 
       {/* —— 进程列表 —— */}
-      <div className="min-h-0 flex-1 space-y-0.5 overflow-auto p-1.5">
+      <div ref={listRef} className="min-h-0 flex-1 overflow-auto p-1.5">
         {!sessionId || kind == null ? (
           <div className="px-2 py-6 text-center text-xs text-muted-foreground">
             {t("scripts.needSessionShort")}
@@ -264,78 +274,91 @@ export function ProcessesPane({
         ) : error ? (
           <div className="px-2 py-4 text-xs text-destructive">{error}</div>
         ) : (
-          filtered.map((p) => {
-            const tags = buildTags(p, t);
-            const name = shortProcName(p.cmd);
-            return (
-              <div key={p.pid} className={sidebarItemRowClass}>
+          <div
+            className="relative w-full"
+            style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+          >
+            {rowVirtualizer.getVirtualItems().map((vi) => {
+              const p = filtered[vi.index];
+              if (!p) return null;
+              const tags = buildTags(p, t);
+              const name = shortProcName(p.cmd);
+              return (
                 <div
-                  className={`mt-1 size-1.5 shrink-0 rounded-full ${
-                    p.cpu >= 30
-                      ? "bg-destructive"
-                      : p.cpu >= 10
-                        ? "bg-primary"
-                        : "bg-success"
-                  }`}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className={sidebarItemTitleClass} title={p.cmd}>
-                    {name}
-                  </div>
-                  {name !== p.cmd && (
-                    <div className={sidebarItemSubClass} title={p.cmd}>
-                      {p.cmd}
+                  key={p.pid}
+                  data-index={vi.index}
+                  ref={rowVirtualizer.measureElement}
+                  className={`${sidebarItemRowClass} absolute top-0 left-0 w-full`}
+                  style={{ transform: `translateY(${vi.start}px)` }}
+                >
+                  <div
+                    className={`mt-1 size-1.5 shrink-0 rounded-full ${
+                      p.cpu >= 30
+                        ? "bg-destructive"
+                        : p.cpu >= 10
+                          ? "bg-primary"
+                          : "bg-success"
+                    }`}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className={sidebarItemTitleClass} title={p.cmd}>
+                      {name}
                     </div>
-                  )}
-                  <div className={sidebarItemSubClass}>
-                    PID {p.pid} · CPU {p.cpu.toFixed(1)}% · MEM{" "}
-                    {p.mem.toFixed(1)}%
-                  </div>
-                  {tags.length > 0 && (
-                    <div className={sidebarTagRowClass}>
-                      {tags.map((tag) => (
-                        <Badge
-                          key={tag.id}
-                          size="sm"
-                          variant={badgeVariant(tag.tone)}
-                        >
-                          {tag.label}
-                        </Badge>
-                      ))}
+                    {name !== p.cmd && (
+                      <div className={sidebarItemSubClass} title={p.cmd}>
+                        {p.cmd}
+                      </div>
+                    )}
+                    <div className={sidebarItemSubClass}>
+                      PID {p.pid} · CPU {p.cpu.toFixed(1)}% · MEM{" "}
+                      {p.mem.toFixed(1)}%
                     </div>
-                  )}
+                    {tags.length > 0 && (
+                      <div className={sidebarTagRowClass}>
+                        {tags.map((tag) => (
+                          <Badge
+                            key={tag.id}
+                            size="sm"
+                            variant={badgeVariant(tag.tone)}
+                          >
+                            {tag.label}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        size="icon-xs"
+                        variant="ghost"
+                        aria-label={t("termTab.tipTerm")}
+                        onClick={() => signal(p.pid, "TERM")}
+                      >
+                        <XCircle size={SIDEBAR_ICON} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t("termTab.tipTerm")}</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        size="icon-xs"
+                        variant="ghost"
+                        aria-label={t("termTab.tipKill")}
+                        onClick={() => signal(p.pid, "KILL")}
+                      >
+                        <Skull size={SIDEBAR_ICON} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t("termTab.tipKill")}</TooltipContent>
+                  </Tooltip>
                 </div>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      size="icon-xs"
-                      variant="ghost"
-                      aria-label={t("termTab.tipTerm")}
-                      onClick={() => signal(p.pid, "TERM")}
-                    >
-                      <XCircle size={SIDEBAR_ICON} />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>{t("termTab.tipTerm")}</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      size="icon-xs"
-                      variant="ghost"
-                      aria-label={t("termTab.tipKill")}
-                      onClick={() => signal(p.pid, "KILL")}
-                    >
-                      <Skull size={SIDEBAR_ICON} />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>{t("termTab.tipKill")}</TooltipContent>
-                </Tooltip>
-              </div>
-            );
-          })
+              );
+            })}
+          </div>
         )}
       </div>
     </div>

@@ -481,7 +481,7 @@ export function NotesConsole() {
                   ))
                 )
                   return;
-                for (const id of ids) await deleteNote(id);
+                await Promise.all(ids.map((id) => deleteNote(id)));
                 setSelectedIds(new Set());
                 const rows = await reload();
                 if (activeId != null && ids.includes(activeId)) {
