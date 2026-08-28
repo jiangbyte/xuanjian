@@ -107,15 +107,12 @@ jobs:
           releaseBody: |
             ## Highlights
 
-            ### Performance
-            - Fix Hosts/Scripts reload loops; parallel list loads and batch deletes
-            - Lazy terminal shell + aggressive heavy-module preload (tabs keep-alive)
-            - Virtualized SFTP / process / AI lists; memoized streaming chat
+            ### Product focus
+            - Remove mobile companion / Android APK line
+            - Remove Docker Compose/Dockerfile studio (`/docker`)
+            - Keep terminal Docker pane and Agent `docker_*` tools
 
-            ### Build / CI
-            - Browser shim for `agent-loop-guard` so production `pnpm build` succeeds
-
-            Full notes: [docs/release-notes/v1.3.1.md](https://github.com/jiangbyte/xuanjian/blob/main/docs/release-notes/v1.3.1.md)
+            Full notes: [docs/release-notes/v1.3.2.md](https://github.com/jiangbyte/xuanjian/blob/main/docs/release-notes/v1.3.2.md)
 
             ## Installers
 
