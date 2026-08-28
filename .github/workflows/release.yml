@@ -1,4 +1,4 @@
-# Release：标题仅用 tag（如 v0.1.1），正文见 RELEASE_NOTES.md
+# Release：标题用 tag；正文自动读取 docs/release-notes/vX.Y.Z.md
 #
 # Author: Charlie
 #
@@ -94,6 +94,31 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Load release notes
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.tag || github.ref_name }}"
+          VER="${TAG#v}"
+          FILE="docs/release-notes/v${VER}.md"
+          if [ ! -f "$FILE" ]; then
+            echo "Missing release notes: $FILE" >&2
+            exit 1
+          fi
+          DELIM="NOTES_EOF_$(openssl rand -hex 8)"
+          {
+            echo "body<<${DELIM}"
+            # Skip the leading H1 — GitHub Release title is already the tag
+            if head -n1 "$FILE" | grep -qE '^# '; then
+              tail -n +2 "$FILE"
+            else
+              cat "$FILE"
+            fi
+            echo "${DELIM}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Loaded release notes from $FILE"
+
       - name: Build and upload to Release
         uses: tauri-apps/tauri-action@v1
         env:
@@ -104,30 +129,7 @@ jobs:
           # 标题与 tag 一致：v0.1.1（不带品牌名前缀）
           tagName: ${{ inputs.tag || github.ref_name }}
           releaseName: ${{ inputs.tag || github.ref_name }}
-          releaseBody: |
-            ## Highlights
-
-            ### Product focus
-            - Remove mobile companion / Android APK line
-            - Remove Docker Compose/Dockerfile studio (`/docker`)
-            - Keep terminal Docker pane and Agent `docker_*` tools
-
-            Full notes: [docs/release-notes/v1.3.2.md](https://github.com/jiangbyte/xuanjian/blob/main/docs/release-notes/v1.3.2.md)
-
-            ## Installers
-
-            | Platform | Artifacts |
-            | --- | --- |
-            | Windows x64 | `*_x64-setup.exe` (NSIS), `*_x64_en-US.msi` |
-            | macOS Apple Silicon | `aarch64` `.dmg` / `.app` |
-            | macOS Intel | `x64` `.dmg` / `.app` |
-            | Linux x64 | `.deb`, `.AppImage`, `.rpm` |
-
-            Installers do not include user data. Windows requires [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
-
-            ## Feedback
-
-            [Issues](https://github.com/jiangbyte/xuanjian/issues)
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
