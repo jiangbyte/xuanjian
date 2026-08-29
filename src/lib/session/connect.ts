@@ -154,7 +154,7 @@ export async function reconnectTermTab(
   tabId: string,
   opts?: { cols?: number; rows?: number },
 ): Promise<void> {
-  const { tabs, agentTabs, updateTab, updateAgentTab } = useUiStore.getState();
+  const { tabs, agentTabs, updateTab } = useUiStore.getState();
   const agentTab = agentTabs.find((t) => t.id === tabId);
   if (agentTab) {
     await reconnectAgentTermTab(agentTab, opts);
