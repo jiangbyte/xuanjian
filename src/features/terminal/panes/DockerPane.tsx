@@ -18,6 +18,7 @@ import {
   Square,
   Terminal,
   Trash2,
+  WrapText,
 } from "lucide-react";
 import {
   useCallback,
@@ -45,6 +46,7 @@ import {
 import { clipboardWriteText } from "@/lib/ui/clipboard";
 import { dialogs } from "@/lib/ui/dialogs";
 import { api, onSessionExecOutput } from "@/lib/tauri";
+import { cn } from "@/lib/utils";
 import {
   SIDEBAR_ICON,
   sidebarItemRowClass,
@@ -207,6 +209,7 @@ export function DockerPane({
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsLive, setLogsLive] = useState(false);
   const [logsFollow, setLogsFollow] = useState(true);
+  const [logsWrap, setLogsWrap] = useState(true);
   const logsJobRef = useRef<string | null>(null);
   const logsScrollRef = useRef<HTMLDivElement | null>(null);
   const stickBottomRef = useRef(true);
@@ -1018,6 +1021,7 @@ export function DockerPane({
           onClose={closeLogs}
           initialWidth={820}
           initialHeight={560}
+          allowFullscreen
           bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden p-0"
           headerActions={
             <div className="flex items-center gap-1">
@@ -1037,6 +1041,17 @@ export function DockerPane({
                   {t("termTab.dockerLogsJumpBottom")}
                 </Button>
               ) : null}
+              <Button
+                type="button"
+                size="xs"
+                variant={logsWrap ? "secondary" : "outline"}
+                aria-pressed={logsWrap}
+                title={t("termTab.dockerLogsWrap")}
+                onClick={() => setLogsWrap((v) => !v)}
+              >
+                <WrapText size={12} />
+                {t("termTab.dockerLogsWrap")}
+              </Button>
               <Button
                 type="button"
                 size="xs"
@@ -1085,7 +1100,14 @@ export function DockerPane({
                 {t("termTab.dockerLogsLoading")}
               </div>
             ) : (
-              <pre className="select-text whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-zinc-200">
+              <pre
+                className={cn(
+                  "select-text font-mono text-[12px] leading-relaxed text-zinc-200",
+                  logsWrap
+                    ? "whitespace-pre-wrap break-words"
+                    : "whitespace-pre",
+                )}
+              >
                 {logsView.body || t("termTab.dockerLogsEmpty")}
               </pre>
             )}

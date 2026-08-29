@@ -39,7 +39,16 @@ export type TransferJob = {
   error?: string;
   createdAt: number;
   updatedAt: number;
+  /** 批量/文件夹分组：同组共享 id */
+  groupId?: string;
+  /** 分组展示名（通常为文件夹名） */
+  groupName?: string;
 };
+
+export type TransferEnqueueInput = Omit<
+  TransferJob,
+  "id" | "bytesDone" | "bytesTotal" | "status" | "createdAt" | "updatedAt"
+> & { bytesTotal?: number };
 
 export type TransferFilter =
   | "all"
@@ -55,16 +64,16 @@ type TransferState = {
   concurrency: number;
   runningCount: number;
   setFilter: (f: TransferFilter) => void;
-  enqueue: (
-    input: Omit<
-      TransferJob,
-      "id" | "bytesDone" | "bytesTotal" | "status" | "createdAt" | "updatedAt"
-    > & { bytesTotal?: number },
-  ) => string;
+  enqueue: (input: TransferEnqueueInput) => string;
+  /** 一次入队多条，只打开面板并 kick 一次（批量上传用） */
+  enqueueMany: (inputs: TransferEnqueueInput[]) => string[];
   pause: (id: string) => void;
   resume: (id: string) => void;
   pauseAll: () => void;
   resumeAll: () => void;
+  pauseGroup: (groupId: string) => void;
+  resumeGroup: (groupId: string) => void;
+  cancelGroup: (groupId: string) => void;
   cancel: (id: string) => void;
   retry: (id: string) => void;
   remove: (id: string) => void;
@@ -176,9 +185,14 @@ export const useTransferStore = create<TransferState>((set, get) => ({
   runningCount: 0,
   setFilter: (filter) => set({ filter }),
   enqueue: (input) => {
-    const id = crypto.randomUUID();
-    const job: TransferJob = {
-      id,
+    const ids = get().enqueueMany([input]);
+    return ids[0]!;
+  },
+  enqueueMany: (inputs) => {
+    if (!inputs.length) return [];
+    const t = now();
+    const jobs: TransferJob[] = inputs.map((input) => ({
+      id: crypto.randomUUID(),
       kind: input.kind,
       sessionId: input.sessionId,
       destSessionId: input.destSessionId,
@@ -187,14 +201,16 @@ export const useTransferStore = create<TransferState>((set, get) => ({
       name: input.name || basename(input.remotePath || input.localPath),
       bytesDone: 0,
       bytesTotal: input.bytesTotal ?? 0,
-      status: "queued",
-      createdAt: now(),
-      updatedAt: now(),
-    };
-    set((s) => ({ jobs: [job, ...s.jobs] }));
+      status: "queued" as const,
+      createdAt: t,
+      updatedAt: t,
+      groupId: input.groupId,
+      groupName: input.groupName,
+    }));
+    set((s) => ({ jobs: [...jobs, ...s.jobs] }));
     useUiStore.getState().setTransferOpen(true);
     queueMicrotask(() => get().kick());
-    return id;
+    return jobs.map((j) => j.id);
   },
   pause: (id) => {
     const job = get().jobs.find((j) => j.id === id);
@@ -237,6 +253,38 @@ export const useTransferStore = create<TransferState>((set, get) => ({
       ),
     }));
     get().kick();
+  },
+  pauseGroup: (groupId) => {
+    const ids = get()
+      .jobs.filter(
+        (j) =>
+          j.groupId === groupId &&
+          (j.status === "queued" || j.status === "running"),
+      )
+      .map((j) => j.id);
+    for (const id of ids) get().pause(id);
+  },
+  resumeGroup: (groupId) => {
+    set((s) => ({
+      jobs: s.jobs.map((j) =>
+        j.groupId === groupId && j.status === "paused"
+          ? { ...j, status: "queued", error: undefined, updatedAt: now() }
+          : j,
+      ),
+    }));
+    get().kick();
+  },
+  cancelGroup: (groupId) => {
+    const ids = get()
+      .jobs.filter(
+        (j) =>
+          j.groupId === groupId &&
+          (j.status === "queued" ||
+            j.status === "running" ||
+            j.status === "paused"),
+      )
+      .map((j) => j.id);
+    for (const id of ids) get().cancel(id);
   },
   cancel: (id) => {
     const job = get().jobs.find((j) => j.id === id);
@@ -459,6 +507,7 @@ export function enqueueUpload(
   localPath: string,
   remotePath: string,
   size?: number,
+  group?: { groupId: string; groupName: string },
 ) {
   return useTransferStore.getState().enqueue({
     kind: "upload",
@@ -467,6 +516,8 @@ export function enqueueUpload(
     remotePath,
     name: basename(localPath),
     bytesTotal: size,
+    groupId: group?.groupId,
+    groupName: group?.groupName,
   });
 }
 
@@ -549,6 +600,7 @@ export function enqueueDownload(
   remotePath: string,
   localPath: string,
   size?: number,
+  group?: { groupId: string; groupName: string },
 ) {
   return useTransferStore.getState().enqueue({
     kind: "download",
@@ -557,6 +609,8 @@ export function enqueueDownload(
     remotePath,
     name: basename(remotePath),
     bytesTotal: size,
+    groupId: group?.groupId,
+    groupName: group?.groupName,
   });
 }
 
@@ -570,6 +624,7 @@ export function enqueueRemoteCopy(
   remotePath: string,
   destRemotePath: string,
   size?: number,
+  group?: { groupId: string; groupName: string },
 ) {
   return useTransferStore.getState().enqueue({
     kind: "copy",
@@ -579,6 +634,8 @@ export function enqueueRemoteCopy(
     remotePath,
     name: basename(remotePath),
     bytesTotal: size,
+    groupId: group?.groupId,
+    groupName: group?.groupName,
   });
 }
 

@@ -295,11 +295,14 @@ export function OverviewPane({
   kind,
   hostId,
   shellId,
+  active = true,
 }: {
   sessionId: string | null;
   kind: "local" | "ssh" | null;
   hostId?: number | null;
   shellId?: string | null;
+  /** 侧栏 keep-alive 时：非激活不轮询 */
+  active?: boolean;
 }) {
   const { t } = useTranslation();
   const [metrics, setMetrics] = useState<Metrics | null>(null);
@@ -388,6 +391,7 @@ export function OverviewPane({
   }, [sessionId, hostId, t, env, shellId]);
 
   useEffect(() => {
+    if (!active) return;
     const tick = () => {
       if (document.visibilityState === "hidden") return;
       refresh().catch(() => undefined);
@@ -402,7 +406,7 @@ export function OverviewPane({
       window.clearInterval(id);
       document.removeEventListener("visibilitychange", onVis);
     };
-  }, [refresh]);
+  }, [refresh, active]);
 
   const memPct = pct(metrics?.memUsed ?? 0, metrics?.memTotal ?? 0);
   const diskPct = pct(metrics?.diskUsed ?? 0, metrics?.diskTotal ?? 0);

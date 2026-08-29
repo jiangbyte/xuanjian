@@ -2,16 +2,19 @@
  * @file 主机列表行
  * @author Charlie
  * @description 紧凑列表项：勾选、名称与连接串、标签；悬停显示连接/编辑，删除走右键或批量栏。
+ * 主机名称与连接串支持点击 / 右键复制。
  */
 
 import { Cable, Pencil, Server, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { openContextMenu, useContextMenu } from "@/components/ContextMenu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { deleteHost, HostRow } from "@/lib/db";
 import { dialogs } from "@/lib/ui/dialogs";
+import { clipboardWriteText } from "@/lib/ui/clipboard";
 import { selectionCheckboxClass, selectionRow } from "@/lib/core/selection";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +37,17 @@ export function HostCard({
   const { t } = useTranslation();
   const { open: openMenu } = useContextMenu();
   const tags = (host.tags || "").split(",").filter(Boolean);
+  const displayName = host.name || host.host;
+  const address = `${host.username}@${host.host}:${host.port}`;
+
+  const copyText = async (text: string) => {
+    try {
+      await clipboardWriteText(text);
+      toast.success(t("hosts.copied"));
+    } catch {
+      toast.error(t("hosts.copyFail"));
+    }
+  };
 
   const remove = async () => {
     if (
@@ -75,6 +89,21 @@ export function HostCard({
           },
           "sep",
           {
+            id: "copy-name",
+            label: t("hosts.copyName"),
+            onClick: () => {
+              void copyText(displayName);
+            },
+          },
+          {
+            id: "copy-address",
+            label: t("hosts.copyAddress"),
+            onClick: () => {
+              void copyText(address);
+            },
+          },
+          "sep",
+          {
             id: "delete",
             label: t("context.delete"),
             danger: true,
@@ -108,12 +137,28 @@ export function HostCard({
 
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <span className="truncate text-sm font-medium">
-            {host.name || host.host}
-          </span>
-          <span className="truncate font-mono text-xs text-muted-foreground">
-            {host.username}@{host.host}:{host.port}
-          </span>
+          <button
+            type="button"
+            className="max-w-full truncate rounded-sm text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            title={t("hosts.copyName")}
+            onClick={(e) => {
+              e.stopPropagation();
+              void copyText(displayName);
+            }}
+          >
+            {displayName}
+          </button>
+          <button
+            type="button"
+            className="max-w-full truncate rounded-sm font-mono text-xs text-muted-foreground hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            title={t("hosts.copyAddress")}
+            onClick={(e) => {
+              e.stopPropagation();
+              void copyText(address);
+            }}
+          >
+            {address}
+          </button>
         </div>
         {(host.remark || host.group_name || tags.length > 0) && (
           <div className="mt-0.5 flex min-w-0 items-center gap-1.5">

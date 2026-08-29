@@ -2,8 +2,7 @@
  * @file 终端左侧边栏
  * @author Charlie
  * @description 左侧图标轨切换文件、脚本、历史、概览、进程、端口、Docker 等面板。
- * 文件标签复用 TerminalSidePanel；其余 pane 按需懒加载（启动预热仍会后台拉齐）。
- * 需传入当前会话 sessionId / kind，供各子面板探测远程或本地环境。
+ * 已访问过的面板 keep-alive（隐藏不卸载），避免切换后状态丢失。
  */
 
 import {
@@ -15,7 +14,7 @@ import {
   Network,
   Zap,
 } from "lucide-react";
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
@@ -71,6 +70,28 @@ function PaneFallback() {
   return <div className="h-full w-full bg-background" aria-hidden />;
 }
 
+function KeepAlivePane({
+  active,
+  children,
+}: {
+  active: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className="absolute inset-0"
+      style={{
+        visibility: active ? "visible" : "hidden",
+        pointerEvents: active ? "auto" : "none",
+        zIndex: active ? 1 : 0,
+      }}
+      aria-hidden={!active}
+    >
+      {children}
+    </div>
+  );
+}
+
 /**
  * 终端左侧栏：图标轨 + 对应功能面板内容区。
  */
@@ -87,6 +108,16 @@ export function TerminalLeftPanel({
 }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<LeftTabId>("files");
+  const [visited, setVisited] = useState<Set<LeftTabId>>(() => new Set(["files"]));
+
+  useEffect(() => {
+    setVisited((prev) => {
+      if (prev.has(tab)) return prev;
+      const next = new Set(prev);
+      next.add(tab);
+      return next;
+    });
+  }, [tab]);
 
   const tabs = useMemo(
     () =>
@@ -112,7 +143,6 @@ export function TerminalLeftPanel({
 
   return (
     <div className="flex h-full min-w-0 overflow-hidden">
-      {/* —— 左侧图标轨 —— */}
       <nav
         className="flex w-11 shrink-0 flex-col items-center gap-1 border-r border-border bg-background py-2"
         aria-label={t("termTab.rail")}
@@ -141,40 +171,58 @@ export function TerminalLeftPanel({
         })}
       </nav>
 
-      {/* —— 当前标签内容 —— */}
-      <div className="h-full min-w-0 flex-1 overflow-hidden">
+      <div className="relative h-full min-w-0 flex-1 overflow-hidden">
         <Suspense fallback={<PaneFallback />}>
-          {tab === "files" && (
-            <TerminalSidePanel
-              sessionId={sessionId}
-              kind={kind}
-              hostId={hostId}
-              shellId={shellId}
-            />
-          )}
-          {tab === "scripts" && <ScriptsPane sessionId={sessionId} />}
-          {tab === "history" && <HistoryPane sessionId={sessionId} />}
-          {tab === "overview" && (
-            <OverviewPane
-              sessionId={sessionId}
-              kind={kind}
-              hostId={hostId}
-              shellId={shellId}
-            />
-          )}
-          {tab === "processes" && (
-            <ProcessesPane
-              sessionId={sessionId}
-              kind={kind}
-              shellId={shellId}
-            />
-          )}
-          {tab === "ports" && (
-            <PortsPane sessionId={sessionId} kind={kind} shellId={shellId} />
-          )}
-          {tab === "docker" && (
-            <DockerPane sessionId={sessionId} kind={kind} shellId={shellId} />
-          )}
+          {visited.has("files") ? (
+            <KeepAlivePane active={tab === "files"}>
+              <TerminalSidePanel
+                sessionId={sessionId}
+                kind={kind}
+                hostId={hostId}
+                shellId={shellId}
+              />
+            </KeepAlivePane>
+          ) : null}
+          {visited.has("scripts") ? (
+            <KeepAlivePane active={tab === "scripts"}>
+              <ScriptsPane sessionId={sessionId} />
+            </KeepAlivePane>
+          ) : null}
+          {visited.has("history") ? (
+            <KeepAlivePane active={tab === "history"}>
+              <HistoryPane sessionId={sessionId} />
+            </KeepAlivePane>
+          ) : null}
+          {visited.has("overview") ? (
+            <KeepAlivePane active={tab === "overview"}>
+              <OverviewPane
+                sessionId={sessionId}
+                kind={kind}
+                hostId={hostId}
+                shellId={shellId}
+                active={tab === "overview"}
+              />
+            </KeepAlivePane>
+          ) : null}
+          {visited.has("processes") ? (
+            <KeepAlivePane active={tab === "processes"}>
+              <ProcessesPane
+                sessionId={sessionId}
+                kind={kind}
+                shellId={shellId}
+              />
+            </KeepAlivePane>
+          ) : null}
+          {visited.has("ports") ? (
+            <KeepAlivePane active={tab === "ports"}>
+              <PortsPane sessionId={sessionId} kind={kind} shellId={shellId} />
+            </KeepAlivePane>
+          ) : null}
+          {visited.has("docker") ? (
+            <KeepAlivePane active={tab === "docker"}>
+              <DockerPane sessionId={sessionId} kind={kind} shellId={shellId} />
+            </KeepAlivePane>
+          ) : null}
         </Suspense>
       </div>
     </div>

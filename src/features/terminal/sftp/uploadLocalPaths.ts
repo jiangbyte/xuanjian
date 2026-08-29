@@ -1,22 +1,22 @@
 /**
  * @file 本地路径批量上传到远程目录
  * @author Charlie
+ * @description 批量路径先全部收集再一次性入队；文件夹带分组便于控制进度。
  */
 
 import { joinPath } from "@/features/terminal/sftp/pathUtils";
 import type { SideEndpoint } from "@/features/terminal/sftp/types";
-import { enqueueTransferTree } from "@/features/terminal/sftp/transferEnqueue";
+import { collectTransferTree } from "@/features/terminal/sftp/transferEnqueue";
 import { api } from "@/lib/tauri";
 import { dialogs } from "@/lib/ui/dialogs";
+import type { ConflictCtx } from "@/lib/transfer/conflict";
 import {
-  askOverwrite,
-  type ConflictCtx,
-  type DestEndpoint,
-  findDestEntry,
-  prepareOverwrite,
-} from "@/lib/transfer/conflict";
-import { enqueueUpload, waitForTransferJobs } from "@/stores/transfer";
+  type TransferEnqueueInput,
+  useTransferStore,
+  waitForTransferJobs,
+} from "@/stores/transfer";
 import { useUiStore } from "@/stores/ui";
+import { toast } from "sonner";
 
 async function isLocalDir(path: string): Promise<boolean> {
   try {
@@ -25,6 +25,12 @@ async function isLocalDir(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function basename(path: string) {
+  const p = path.replace(/\\/g, "/");
+  const i = p.lastIndexOf("/");
+  return i >= 0 ? p.slice(i + 1) : path;
 }
 
 /** 将本地文件/文件夹上传到远程 cwd，支持冲突询问与等待完成 */
@@ -40,59 +46,65 @@ export async function uploadLocalPathsToRemote(opts: {
   if (!localPaths.length) return { enqueued: 0, jobIds: [] };
 
   const conflict: ConflictCtx = { mode: "ask" };
-  const destEp: DestEndpoint = { remote: true, sessionId };
   const src: SideEndpoint = { remote: false, sessionId: null, cwd: "" };
   const dst: SideEndpoint = { remote: true, sessionId, cwd };
-  const jobIds: string[] = [];
+  const jobs: TransferEnqueueInput[] = [];
   let enqueued = 0;
 
   useUiStore.getState().setTransferOpen(true);
+  const preparing =
+    localPaths.length > 1
+      ? toast.loading(t("transfer.preparingQueue"))
+      : undefined;
 
-  for (const p of localPaths) {
-    const name = p.replace(/\\/g, "/").split("/").pop();
-    if (!name) continue;
-    const destPath = joinPath(cwd, name, true);
-    const isDir = await isLocalDir(p);
+  try {
+    for (const p of localPaths) {
+      const name = basename(p);
+      if (!name) continue;
+      const destPath = joinPath(cwd, name, true);
+      const isDir = await isLocalDir(p);
 
-    if (isDir) {
-      const result = await enqueueTransferTree(
+      const result = await collectTransferTree(
         src,
         dst,
         p,
         destPath,
-        true,
+        isDir,
         undefined,
         dialogs,
         t,
         conflict,
+        jobs,
+        isDir
+          ? { groupId: crypto.randomUUID(), groupName: name }
+          : undefined,
       );
       if (result === "abort") break;
       enqueued += 1;
-      continue;
     }
 
-    const existing = await findDestEntry(destEp, cwd, name);
-    if (existing) {
-      const decision = await askOverwrite(
-        dialogs,
-        t,
-        conflict,
-        destPath,
-        existing.isDir,
-        false,
-      );
-      if (decision === "abort") break;
-      if (decision === "skip") continue;
-      await prepareOverwrite(destEp, destPath, existing, false);
+    if (localPaths.length > 1) {
+      const looseGroupId = crypto.randomUUID();
+      const looseName = t("transfer.folder");
+      for (const job of jobs) {
+        if (!job.groupId) {
+          job.groupId = looseGroupId;
+          job.groupName = looseName;
+        }
+      }
     }
-    jobIds.push(enqueueUpload(sessionId, p, destPath));
-    enqueued += 1;
-  }
 
-  if (wait && jobIds.length) {
-    await waitForTransferJobs(jobIds, 10 * 60_000);
-  }
-  if (onReload) await onReload();
+    const jobIds = jobs.length
+      ? useTransferStore.getState().enqueueMany(jobs)
+      : [];
 
-  return { enqueued, jobIds };
+    if (wait && jobIds.length) {
+      await waitForTransferJobs(jobIds, 10 * 60_000);
+    }
+    if (onReload) await onReload();
+
+    return { enqueued, jobIds };
+  } finally {
+    if (preparing !== undefined) toast.dismiss(preparing);
+  }
 }

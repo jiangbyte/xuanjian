@@ -1,11 +1,21 @@
 /**
  * @file 传输任务列表面板
  * @author Charlie
- * @description 展示上传/下载/复制任务队列；筛选与操作用 Tabs / 卡片行。
+ * @description 展示上传/下载/复制任务队列；支持文件夹分组进度控制。
  */
 
-import { ArrowDownUp, Pause, Play, RotateCcw, Trash2, X } from "lucide-react";
-import { useMemo } from "react";
+import {
+  ArrowDownUp,
+  ChevronDown,
+  ChevronRight,
+  Folder,
+  Pause,
+  Play,
+  RotateCcw,
+  Trash2,
+  X,
+} from "lucide-react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   type ContextMenuItem,
@@ -59,6 +69,45 @@ function statusLabel(status: TransferJob["status"], t: (k: string) => string) {
   }
 }
 
+function jobPct(job: TransferJob) {
+  if (job.bytesTotal > 0) {
+    return Math.min(100, Math.round((job.bytesDone / job.bytesTotal) * 100));
+  }
+  if (job.status === "completed") return 100;
+  if (job.status === "running") return 5;
+  return 0;
+}
+
+type ListEntry =
+  | { type: "job"; job: TransferJob }
+  | { type: "group"; groupId: string; groupName: string; jobs: TransferJob[] };
+
+/** 将筛选后的任务按 groupId 折叠为列表条目 */
+function buildListEntries(jobs: TransferJob[]): ListEntry[] {
+  const entries: ListEntry[] = [];
+  const seenGroups = new Set<string>();
+  for (const job of jobs) {
+    if (!job.groupId) {
+      entries.push({ type: "job", job });
+      continue;
+    }
+    if (seenGroups.has(job.groupId)) continue;
+    seenGroups.add(job.groupId);
+    const groupJobs = jobs.filter((j) => j.groupId === job.groupId);
+    if (groupJobs.length === 1) {
+      entries.push({ type: "job", job: groupJobs[0]! });
+      continue;
+    }
+    entries.push({
+      type: "group",
+      groupId: job.groupId,
+      groupName: job.groupName || job.groupId,
+      jobs: groupJobs,
+    });
+  }
+  return entries;
+}
+
 function TransferRow({ job }: { job: TransferJob }) {
   const { t } = useTranslation();
   const { open: openMenu } = useContextMenu();
@@ -68,14 +117,7 @@ function TransferRow({ job }: { job: TransferJob }) {
   const retry = useTransferStore((s) => s.retry);
   const remove = useTransferStore((s) => s.remove);
 
-  const pct =
-    job.bytesTotal > 0
-      ? Math.min(100, Math.round((job.bytesDone / job.bytesTotal) * 100))
-      : job.status === "completed"
-        ? 100
-        : job.status === "running"
-          ? 5
-          : 0;
+  const pct = jobPct(job);
 
   return (
     <div
@@ -231,6 +273,135 @@ function TransferRow({ job }: { job: TransferJob }) {
   );
 }
 
+function TransferGroupCard({
+  groupId,
+  groupName,
+  jobs,
+}: {
+  groupId: string;
+  groupName: string;
+  jobs: TransferJob[];
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(true);
+  const pauseGroup = useTransferStore((s) => s.pauseGroup);
+  const resumeGroup = useTransferStore((s) => s.resumeGroup);
+  const cancelGroup = useTransferStore((s) => s.cancelGroup);
+
+  const bytesDone = jobs.reduce((a, j) => a + j.bytesDone, 0);
+  const bytesTotal = jobs.reduce((a, j) => a + (j.bytesTotal || 0), 0);
+  const doneCount = jobs.filter((j) => j.status === "completed").length;
+  const hasActive = jobs.some(
+    (j) =>
+      j.status === "running" || j.status === "queued" || j.status === "paused",
+  );
+  const hasPaused = jobs.some((j) => j.status === "paused");
+  const hasRunnable = jobs.some(
+    (j) => j.status === "running" || j.status === "queued",
+  );
+  const pct =
+    bytesTotal > 0
+      ? Math.min(100, Math.round((bytesDone / bytesTotal) * 100))
+      : Math.round((doneCount / Math.max(1, jobs.length)) * 100);
+  const kind = jobs[0]?.kind ?? "upload";
+  const failed = jobs.some((j) => j.status === "failed");
+
+  return (
+    <div className="rounded-md border border-border bg-muted/30 p-2">
+      <div className="flex items-start gap-2">
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          className="mt-0.5"
+          title={open ? t("transfer.folderCollapse") : t("transfer.folderExpand")}
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </Button>
+        <div className="min-w-0 flex-1 space-y-0.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <Folder size={14} className="shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1 truncate text-sm font-medium">
+              {groupName}
+            </span>
+            <Badge variant="secondary">{kindLabel(kind, t)}</Badge>
+            <span className="text-xs text-muted-foreground">
+              {t("transfer.folderFiles", {
+                done: doneCount,
+                total: jobs.length,
+              })}
+            </span>
+          </div>
+          <Progress
+            value={pct}
+            className={cn(
+              "h-1.5",
+              failed && "[&_[data-slot=progress-indicator]]:bg-destructive",
+              doneCount === jobs.length &&
+                "[&_[data-slot=progress-indicator]]:bg-success",
+            )}
+          />
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>
+              {formatBytes(bytesDone)}
+              {bytesTotal > 0 ? ` / ${formatBytes(bytesTotal)}` : ""}
+            </span>
+            <span>{pct}%</span>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-0.5">
+          {hasRunnable ? (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              title={t("transfer.folderPause")}
+              aria-label={t("transfer.folderPause")}
+              onClick={() => pauseGroup(groupId)}
+            >
+              <Pause size={13} />
+            </Button>
+          ) : null}
+          {hasPaused ? (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              title={t("transfer.folderResume")}
+              aria-label={t("transfer.folderResume")}
+              onClick={() => resumeGroup(groupId)}
+            >
+              <Play size={13} />
+            </Button>
+          ) : null}
+          {hasActive ? (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              className="text-destructive hover:text-destructive"
+              title={t("transfer.folderCancel")}
+              aria-label={t("transfer.folderCancel")}
+              onClick={() => cancelGroup(groupId)}
+            >
+              <X size={13} />
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      {open ? (
+        <div className="mt-2 space-y-1.5 border-t border-border/60 pt-2 pl-1">
+          {jobs.map((job) => (
+            <TransferRow key={job.id} job={job} />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /** 传输队列面板 */
 export function TransferPanel() {
   const { t } = useTranslation();
@@ -241,6 +412,7 @@ export function TransferPanel() {
   const resumeAll = useTransferStore((s) => s.resumeAll);
   const clearFinished = useTransferStore((s) => s.clearFinished);
   const filtered = useMemo(() => filterJobs(jobs, filter), [jobs, filter]);
+  const entries = useMemo(() => buildListEntries(filtered), [filtered]);
 
   const counts = useMemo(() => {
     const c: Record<TransferFilter, number> = {
@@ -326,7 +498,7 @@ export function TransferPanel() {
             value={tab.id}
             className="min-h-0 flex-1 overflow-auto p-2"
           >
-            {filtered.length === 0 ? (
+            {entries.length === 0 ? (
               <div className="flex min-h-40 flex-col items-center justify-center gap-2 py-8">
                 <ArrowDownUp size={28} className="opacity-40" />
                 <p className="text-sm text-muted-foreground">
@@ -335,9 +507,18 @@ export function TransferPanel() {
               </div>
             ) : (
               <div className="space-y-2">
-                {filtered.map((job) => (
-                  <TransferRow key={job.id} job={job} />
-                ))}
+                {entries.map((entry) =>
+                  entry.type === "group" ? (
+                    <TransferGroupCard
+                      key={entry.groupId}
+                      groupId={entry.groupId}
+                      groupName={entry.groupName}
+                      jobs={entry.jobs}
+                    />
+                  ) : (
+                    <TransferRow key={entry.job.id} job={entry.job} />
+                  ),
+                )}
               </div>
             )}
           </TabsContent>

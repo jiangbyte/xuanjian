@@ -17,7 +17,7 @@ import {
 import { HostPicker } from "@/features/terminal/sftp/HostPicker";
 import { hostTitle, joinPath } from "@/features/terminal/sftp/pathUtils";
 import { TransferPane } from "@/features/terminal/sftp/TransferPane";
-import { enqueueTransferTree } from "@/features/terminal/sftp/transferEnqueue";
+import { collectTransferTree } from "@/features/terminal/sftp/transferEnqueue";
 import type {
   PaneTab,
   Side,
@@ -27,6 +27,10 @@ import { HostRow, listHosts } from "@/lib/db";
 import { dialogs } from "@/lib/ui/dialogs";
 import type { SftpEntry } from "@/lib/tauri";
 import type { ConflictCtx } from "@/lib/transfer/conflict";
+import {
+  type TransferEnqueueInput,
+  useTransferStore,
+} from "@/stores/transfer";
 
 /** SFTP 双栏文件传输模态框 */
 export function SftpTransferModal({
@@ -129,10 +133,11 @@ export function SftpTransferModal({
       if (!items.length) throw new Error(t("terminal.pickFileFirst"));
 
       const conflict: ConflictCtx = { mode: "ask" };
+      const jobs: TransferEnqueueInput[] = [];
       let queued = 0;
       for (const item of items) {
         const destPath = joinPath(dst.cwd, item.name, dst.remote);
-        const result = await enqueueTransferTree(
+        const result = await collectTransferTree(
           src,
           dst,
           item.path,
@@ -142,6 +147,10 @@ export function SftpTransferModal({
           dialogs,
           t,
           conflict,
+          jobs,
+          item.isDir
+            ? { groupId: crypto.randomUUID(), groupName: item.name }
+            : undefined,
         );
         if (result === "abort") {
           setOk(false);
@@ -150,6 +159,20 @@ export function SftpTransferModal({
           return;
         }
         queued += 1;
+      }
+      // 散文件（无 group）若批量选择则补一组，便于统一暂停/继续
+      if (items.length > 1) {
+        const looseGroupId = crypto.randomUUID();
+        const looseName = t("transfer.folder");
+        for (const job of jobs) {
+          if (!job.groupId) {
+            job.groupId = looseGroupId;
+            job.groupName = looseName;
+          }
+        }
+      }
+      if (jobs.length) {
+        useTransferStore.getState().enqueueMany(jobs);
       }
       setOk(true);
       setMessage(`${t("transfer.queued")} (${queued} ${t("terminal.items")})`);
