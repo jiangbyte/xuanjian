@@ -7979,7 +7979,7 @@ checksum = "ea6fc2961e4ef194dcbfe56bb845534d0dc8098940c7e5c012a258bfec6701bd"
 
 [[package]]
 name = "xuanjian"
-version = "1.3.4"
+version = "1.3.5"
 dependencies = [
  "aes-gcm",
  "anyhow",

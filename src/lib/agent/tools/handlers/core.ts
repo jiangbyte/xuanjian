@@ -54,8 +54,8 @@ async function runVisibleAgentCommand(
     label: opts?.historyLabel,
   });
   const wait =
-    typeof args.wait_ms === "number"
-      ? Math.min(Math.max(args.wait_ms, 200), 600_000)
+    asNum(args.wait_ms) != null
+      ? Math.min(Math.max(asNum(args.wait_ms)!, 200), 600_000)
       : (opts?.defaultWaitMs ?? 900);
   const waited = await waitForTerminalIdle({
     sessionId: sid,
@@ -76,11 +76,13 @@ async function runVisibleAgentCommand(
     auto_opened: provisioned,
     command: cmd,
     waited_ms: waited.waited_ms,
+    requested_wait_ms: waited.requested_wait_ms,
     finish_reason: waited.finish_reason,
     likely_finished: waited.likely_finished,
     still_running: waited.still_running,
     progress_digest: waited.progress_digest,
     suggested_next_wait_ms: waited.suggested_next_wait_ms,
+    effective_quiet_ms: waited.effective_quiet_ms,
     output: stripAnsi((delta || after).slice(0, 16_000)),
   });
 }
@@ -153,17 +155,18 @@ export async function runToolHandler(
       const target = await activeAgentSessionIdAsync(args);
       if (!target)
         return formatResolveError(args, "No active agent terminal session");
+      const maxCharsRaw = asNum(args.max_chars);
       const maxChars =
-        typeof args.max_chars === "number"
-          ? Math.min(Math.max(args.max_chars, 256), 32_000)
+        maxCharsRaw != null
+          ? Math.min(Math.max(maxCharsRaw, 256), 32_000)
           : 12_000;
+      const waitRaw = asNum(args.wait_ms);
       const waitMs =
-        typeof args.wait_ms === "number"
-          ? Math.min(Math.max(args.wait_ms, 0), 600_000)
-          : 0;
+        waitRaw != null ? Math.min(Math.max(waitRaw, 0), 600_000) : 0;
+      const stableRaw = asNum(args.stable_ms);
       const stableMs =
-        typeof args.stable_ms === "number"
-          ? Math.min(Math.max(args.stable_ms, 500), 30_000)
+        stableRaw != null
+          ? Math.min(Math.max(stableRaw, 500), 30_000)
           : 1500;
 
       const waited = await waitForTerminalIdle({
@@ -180,11 +183,13 @@ export async function runToolHandler(
         tab_id: target.parentTab.id,
         agent_tab_id: target.tab.id,
         waited_ms: waited.waited_ms,
+        requested_wait_ms: waited.requested_wait_ms,
         finish_reason: waited.finish_reason,
         likely_finished: waited.likely_finished,
         still_running: waited.still_running,
         progress_digest: waited.progress_digest,
         suggested_next_wait_ms: waited.suggested_next_wait_ms,
+        effective_quiet_ms: waited.effective_quiet_ms,
         chars: waited.output.length,
         output: waited.output || "(empty transcript)",
       });
@@ -358,9 +363,10 @@ export async function runToolHandler(
         sessionId: sid,
         label: script.name,
       });
+      const waitRaw = asNum(args.wait_ms);
       const wait =
-        typeof args.wait_ms === "number"
-          ? Math.min(Math.max(args.wait_ms, 200), 600_000)
+        waitRaw != null
+          ? Math.min(Math.max(waitRaw, 200), 600_000)
           : 3000;
       const waited = await waitForTerminalIdle({
         sessionId: sid,
@@ -379,11 +385,13 @@ export async function runToolHandler(
         script_id: script.id,
         script_name: script.name,
         waited_ms: waited.waited_ms,
+        requested_wait_ms: waited.requested_wait_ms,
         finish_reason: waited.finish_reason,
         likely_finished: waited.likely_finished,
         still_running: waited.still_running,
         progress_digest: waited.progress_digest,
         suggested_next_wait_ms: waited.suggested_next_wait_ms,
+        effective_quiet_ms: waited.effective_quiet_ms,
         output: stripAnsi((delta || after).slice(0, 16_000)),
       });
     }

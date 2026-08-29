@@ -42,7 +42,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
     function: {
       name: "terminal_tail",
       description:
-        "读取 Agent 下栏终端最近输出（与 terminal_run/session_exec 同一会话）。长任务请设较大 wait_ms 单次等待；若返回 still_running=true，按 suggested_next_wait_ms 加大 wait，禁止无进展短轮询。",
+        "读取 Agent 下栏终端最近输出。wait_ms 为最长阻塞等待：出现 shell 提示符或错误静默则提前返回；长任务（≥5s）不会因短暂无输出提前结束。优先一次给足 wait_ms（如 60000~180000）；仅当 still_running=true 且已等到 deadline 时再按 suggested_next_wait_ms 加大单次等待。禁止短间隔反复调用。",
       parameters: {
         type: "object",
         properties: {
@@ -51,11 +51,13 @@ export const TOOL_DEFS: AgentToolDef[] = [
           max_chars: { type: "number", description: "默认 12000" },
           wait_ms: {
             type: "number",
-            description: "最长等待毫秒数（0=立即快照，最大 600000）",
+            description:
+              "最长阻塞等待毫秒（0=立即快照，最大 600000）。长任务请一次给足，工具会等到提示符或截止。",
           },
           stable_ms: {
             type: "number",
-            description: "输出连续不变多少毫秒视为静默（默认 1500）",
+            description:
+              "短等待时：输出连续不变多少毫秒视为静默（默认 1500）。长 wait_ms 下静默阈值会自动抬到整段等待窗口。",
           },
         },
       },
@@ -137,7 +139,7 @@ export const TOOL_DEFS: AgentToolDef[] = [
     function: {
       name: "terminal_run",
       description:
-        "在【Agent 下栏终端】中执行命令（用户可见）。长任务一次给足 wait_ms；若 still_running=true，按 suggested_next_wait_ms 再等，勿高频短轮询。",
+        "在【Agent 下栏终端】中执行命令（用户可见）。长任务一次给足 wait_ms（≥预计耗时）；工具阻塞到提示符或截止，不会因短暂无输出提前结束。仅 still_running 且 deadline 时再加大 wait，勿高频短轮询。",
       parameters: {
         type: "object",
         properties: {

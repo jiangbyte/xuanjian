@@ -15,11 +15,19 @@ import type {
   StopReason,
 } from "./types";
 
-function stableArgsKey(args: Record<string, unknown>): string {
+function stableArgsKey(
+  args: Record<string, unknown>,
+  toolName?: string,
+): string {
   const sorted = Object.keys(args).sort();
   const o: Record<string, unknown> = {};
+  // terminal_tail：忽略 wait/stable，防止靠加大 wait_ms 绕开 REPEATED_CALL 无限轮询
+  const omit =
+    toolName === "terminal_tail"
+      ? new Set(["wait_ms", "stable_ms", "max_chars"])
+      : null;
   for (const k of sorted) {
-    // wait_ms 参与签名：短轮询同参可被 REPEATED_CALL 拦住；加大 wait 视为不同策略
+    if (omit?.has(k)) continue;
     o[k] = args[k];
   }
   try {
@@ -34,7 +42,7 @@ function defaultCallSignature(
   args: unknown,
 ): string {
   if (args && typeof args === "object" && !Array.isArray(args)) {
-    return `${toolName}::${stableArgsKey(args as Record<string, unknown>)}`;
+    return `${toolName}::${stableArgsKey(args as Record<string, unknown>, toolName)}`;
   }
   return `${toolName}::${String(args)}`;
 }

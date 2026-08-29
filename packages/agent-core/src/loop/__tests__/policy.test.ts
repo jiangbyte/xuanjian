@@ -99,4 +99,29 @@ describe("LoopPolicy", () => {
     }
     expect(p.stopReason).toBe("loop_budget");
   });
+
+  it("treats terminal_tail with different wait_ms as the same call for repeat detection", () => {
+    const p = new LoopPolicy({ maxCalls: 50, softBeforeHard: 2 });
+    const result = JSON.stringify({
+      ok: true,
+      progress_digest: "d1:10",
+      finish_reason: "deadline",
+      still_running: true,
+      output: "sleeping",
+    });
+
+    expect(p.beforeTool("terminal_tail", { wait_ms: 25_000 }).action).toBe(
+      "run",
+    );
+    p.afterTool("terminal_tail", { wait_ms: 25_000 }, result);
+
+    expect(p.beforeTool("terminal_tail", { wait_ms: 50_000 }).action).toBe(
+      "run",
+    );
+    p.afterTool("terminal_tail", { wait_ms: 50_000 }, result);
+
+    // 第 3 次仅靠加大 wait_ms 仍算重复
+    const soft = p.beforeTool("terminal_tail", { wait_ms: 90_000 });
+    expect(soft.action).toBe("observe");
+  });
 });

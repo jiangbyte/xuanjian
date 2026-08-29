@@ -13,14 +13,15 @@ import {
   startRecordingForOpenTab,
 } from "@/lib/session/recorder";
 import { api, type SessionInfo, type SshConnectParams } from "@/lib/tauri";
-import { type TermTab, useUiStore } from "@/stores/ui";
+import { type AgentTermTab, type TermTab, useUiStore } from "@/stores/ui";
 
 export const SSH_HOST_KEY_UNKNOWN = "SSH_HOST_KEY_UNKNOWN";
 export const SSH_HOST_KEY_MISMATCH = "SSH_HOST_KEY_MISMATCH";
 
-/** 判断标签是否具备重连所需信息（SSH 需有 hostId） */
+/** 判断标签是否具备重连所需信息（SSH / Agent-SSH 需有 hostId；本地与 WSL 均可） */
 export function canReconnect(tab: TermTab): boolean {
   if (tab.kind === "ssh") return tab.hostId != null;
+  // local（含 WSL）：有 shellId 或可回退到默认本地 Shell
   return true;
 }
 
@@ -146,13 +147,20 @@ export async function connectSshHost(
 
 /**
  * 就地重连已有标签（保留滚动回滚缓冲）。
+ * 支持主标签与 Agent 下栏；SSH / 本地 / WSL 统一走此入口。
  * 会先结束旧会话录制并关闭旧 session，再开新会话并启动录制。
  */
 export async function reconnectTermTab(
   tabId: string,
   opts?: { cols?: number; rows?: number },
 ): Promise<void> {
-  const { tabs, updateTab } = useUiStore.getState();
+  const { tabs, agentTabs, updateTab, updateAgentTab } = useUiStore.getState();
+  const agentTab = agentTabs.find((t) => t.id === tabId);
+  if (agentTab) {
+    await reconnectAgentTermTab(agentTab, opts);
+    return;
+  }
+
   const tab = tabs.find((t) => t.id === tabId);
   if (!tab) return;
   if (tab.status === "connecting") return;
@@ -199,6 +207,76 @@ export async function reconnectTermTab(
     await recording;
   } catch (e) {
     updateTab(tabId, { status: "error", sessionId: null });
+    throw e;
+  }
+}
+
+/** Agent 下栏就地重连（与主标签同一套 SSH / 本地 / WSL 逻辑） */
+async function reconnectAgentTermTab(
+  agentTab: AgentTermTab,
+  opts?: { cols?: number; rows?: number },
+): Promise<void> {
+  const { tabs, updateAgentTab } = useUiStore.getState();
+  if (agentTab.status === "connecting") return;
+
+  const probe: TermTab = {
+    id: agentTab.id,
+    title: agentTab.title,
+    kind: agentTab.kind,
+    sessionId: agentTab.sessionId,
+    hostId: agentTab.hostId,
+    shellId: agentTab.shellId,
+    logId: agentTab.logId,
+    status: agentTab.status,
+  };
+  if (!canReconnect(probe)) {
+    throw new Error("Cannot reconnect: missing host or shell info");
+  }
+
+  if (agentTab.sessionId) {
+    await endSessionRecording(agentTab.sessionId, "closed");
+    await api.sessionClose(agentTab.sessionId).catch(() => undefined);
+  }
+
+  updateAgentTab(agentTab.id, {
+    status: "connecting",
+    sessionId: null,
+    logId: undefined,
+  });
+
+  try {
+    if (agentTab.kind === "ssh") {
+      const { session } = await connectSshHost(agentTab.hostId!, {
+        cols: opts?.cols,
+        rows: opts?.rows,
+        runStartup: false,
+      });
+      const recording = startRecordingForOpenTab(agentTab.id, session.id);
+      updateAgentTab(agentTab.id, {
+        sessionId: session.id,
+        status: "open",
+      });
+      await recording;
+      return;
+    }
+
+    let shellId = agentTab.shellId;
+    if (!shellId) {
+      const parent = tabs.find((t) => t.id === agentTab.parentTabId);
+      shellId = parent
+        ? await resolveShellId(parent)
+        : await resolveShellId(probe);
+    }
+    const session = await api.localShellOpen(shellId, opts?.cols, opts?.rows);
+    const recording = startRecordingForOpenTab(agentTab.id, session.id);
+    updateAgentTab(agentTab.id, {
+      sessionId: session.id,
+      status: "open",
+      shellId,
+    });
+    await recording;
+  } catch (e) {
+    updateAgentTab(agentTab.id, { status: "error", sessionId: null });
     throw e;
   }
 }

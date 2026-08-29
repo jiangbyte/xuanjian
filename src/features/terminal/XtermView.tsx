@@ -4,6 +4,7 @@
  * @description 单标签页的 xterm.js 封装：会话 IO、尺寸适配、剪贴板与重连。
  * 使用 Tauri 剪贴板 API，避免浏览器 clipboard 权限弹窗。
  * 非激活标签隐藏但仍挂载，切换时 fit + focus。
+ * 断线后（SSH / 本地 / WSL / Agent 下栏）按任意键直接重连，不依赖弹窗。
  */
 
 import { FitAddon } from "@xterm/addon-fit";
@@ -42,16 +43,25 @@ export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const sessionRef = useRef<string | null>(tab.sessionId);
+  /** 断线后 sessionId 会被清空，仍用此 id 匹配 session-closed 事件写 banner */
+  const lastSessionIdRef = useRef<string | null>(tab.sessionId);
   const activeRef = useRef(active);
   const statusRef = useRef(tab.status);
   const wasReconnectRef = useRef(false);
   const hydratedSessionRef = useRef<string | null>(null);
+  const closedHintShownRef = useRef(false);
   const tRef = useRef(t);
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const tabRef = useRef(tab);
+  const doReconnectRef = useRef<() => Promise<void>>(async () => undefined);
 
   activeRef.current = active;
   tRef.current = t;
   sessionRef.current = tab.sessionId;
+  if (tab.sessionId) lastSessionIdRef.current = tab.sessionId;
+  tabRef.current = tab;
+  busyRef.current = busy;
 
   const safeFit = (resizePty: boolean) => {
     if (!activeRef.current) return;
@@ -121,11 +131,22 @@ export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
     };
     el.addEventListener("paste", onPaste);
 
-    // —— 按行缓冲输入，写入命令历史 ——
+    // —— 按行缓冲输入，写入命令历史；断线时任意键触发重连 ——
     const lineBuf = { current: "" };
     const onData = term.onData((data) => {
       const sid = sessionRef.current;
-      if (!sid) return;
+      if (!sid) {
+        const st = statusRef.current;
+        const current = tabRef.current;
+        if (
+          (st === "closed" || st === "error") &&
+          !busyRef.current &&
+          canReconnect(current)
+        ) {
+          void doReconnectRef.current();
+        }
+        return;
+      }
       api.sessionWrite(sid, data).catch(console.error);
       for (const ch of data) {
         if (ch === "\r" || ch === "\n") {
@@ -161,9 +182,20 @@ export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
       unOut = u;
     });
     onSessionClosed((p) => {
-      if (p.sessionId === sessionRef.current) {
+      if (
+        p.sessionId !== sessionRef.current &&
+        p.sessionId !== lastSessionIdRef.current
+      ) {
+        return;
+      }
+      if (closedHintShownRef.current) return;
+      closedHintShownRef.current = true;
+      term.writeln(
+        `\r\n\x1b[90m${tRef.current("terminal.sessionClosedBanner")}\x1b[0m`,
+      );
+      if (canReconnect(tabRef.current)) {
         term.writeln(
-          `\r\n\x1b[90m${tRef.current("terminal.sessionClosedBanner")}\x1b[0m`,
+          `\x1b[90m${tRef.current("terminal.sessionClosedPressKey")}\x1b[0m`,
         );
       }
     }).then((u) => {
@@ -213,8 +245,25 @@ export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
     }
     if (tab.status === "open") {
       promptedClosed.delete(tab.id);
+      closedHintShownRef.current = false;
     }
-  }, [tab.status, t, tab.id]);
+    // 若 session-closed 事件与 store 清空竞态导致未写 banner，状态切到 closed 时补写
+    if (
+      (tab.status === "closed" || tab.status === "error") &&
+      (prev === "open" || prev === "connecting") &&
+      !closedHintShownRef.current
+    ) {
+      closedHintShownRef.current = true;
+      term.writeln(
+        `\r\n\x1b[90m${t("terminal.sessionClosedBanner")}\x1b[0m`,
+      );
+      if (canReconnect(tab)) {
+        term.writeln(
+          `\x1b[90m${t("terminal.sessionClosedPressKey")}\x1b[0m`,
+        );
+      }
+    }
+  }, [tab.status, t, tab.id, tab]);
 
   useEffect(() => {
     if (!tab.sessionId || !active) return;
@@ -248,21 +297,26 @@ export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
   }, [active]);
 
   const doReconnect = useCallback(async () => {
-    if (busy || !canReconnect(tab)) return;
+    if (busyRef.current || !canReconnect(tabRef.current)) return;
+    const current = tabRef.current;
+    if (current.status !== "closed" && current.status !== "error") return;
     setBusy(true);
+    busyRef.current = true;
     try {
       const cols = termRef.current?.cols;
       const rows = termRef.current?.rows;
-      await reconnectTermTab(tab.id, { cols, rows });
+      await reconnectTermTab(current.id, { cols, rows });
     } catch (e) {
       await dialogs.alert(String(e));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
-  }, [busy, tab]);
+  }, []);
+  doReconnectRef.current = doReconnect;
 
   const askReconnect = useCallback(async () => {
-    if (busy || !canReconnect(tab)) return;
+    if (busyRef.current || !canReconnect(tab)) return;
     if (tab.status !== "closed" && tab.status !== "error") return;
     const ok = await dialogs.confirm(t("terminal.reconnectConfirm"), {
       title:
@@ -274,7 +328,7 @@ export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
     });
     if (!ok) return;
     await doReconnect();
-  }, [busy, tab, t, doReconnect]);
+  }, [tab, t, doReconnect]);
 
   // 本标签断线（或激活时已断线）时弹出一次重连确认
   useEffect(() => {
@@ -344,7 +398,7 @@ export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
               id: "reconnect",
               label: t("terminal.reconnect"),
               onClick: () => {
-                askReconnect().catch(() => undefined);
+                void doReconnect();
               },
             });
           }

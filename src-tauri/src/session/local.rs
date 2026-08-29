@@ -394,7 +394,9 @@ pub async fn exec_with_shell(
                 .map(|w| w[1].as_str())
                 .unwrap_or(distro);
             let mut cmd = tokio::process::Command::new("wsl.exe");
-            cmd.args(["-d", distro, "--", "sh", "-lc", command]);
+            // 必须用 --exec：`-- sh -lc` 会经发行版默认 shell 再解析，导致 `$var` / `;` 脚本被吃空
+            // （表现为 wsl_list_dir 等返回空列表）。--exec 直接 exec sh。
+            cmd.args(["-d", distro, "--exec", "sh", "-lc", command]);
             crate::win_process::hide_console_tokio(&mut cmd);
             cmd.output().await.context("wsl exec")?
         } else if shell_id == "local:git-bash"
@@ -477,7 +479,8 @@ pub async fn exec_stream_with_shell(
                 .map(|w| w[1].as_str())
                 .unwrap_or(distro);
             let mut c = tokio::process::Command::new("wsl.exe");
-            c.args(["-d", distro, "--", "sh", "-lc", command]);
+            // 同 exec_with_shell：必须 --exec，避免默认 shell 二次解析破坏脚本
+            c.args(["-d", distro, "--exec", "sh", "-lc", command]);
             c
         } else if shell_id == "local:git-bash"
             || shell_path.to_ascii_lowercase().contains("bash.exe")

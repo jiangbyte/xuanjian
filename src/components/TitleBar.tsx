@@ -121,21 +121,13 @@ export function TitleBar() {
                 }}
                 onContextMenu={(e) =>
                   openContextMenu(e, openMenu, [
-                    ...(canReconnect(tab)
+                    ...(canReconnect(tab) &&
+                    (tab.status === "closed" || tab.status === "error")
                       ? [
                           {
                             id: "reconnect",
                             label: t("terminal.reconnect"),
                             onClick: async () => {
-                              const ok = await dialogs.confirm(
-                                t("terminal.reconnectConfirm"),
-                                {
-                                  title: t("terminal.disconnected"),
-                                  confirmLabel: t("terminal.reconnect"),
-                                  cancelLabel: t("dialog.cancel"),
-                                },
-                              );
-                              if (!ok) return;
                               try {
                                 await reconnectTermTab(tab.id);
                               } catch (err) {
