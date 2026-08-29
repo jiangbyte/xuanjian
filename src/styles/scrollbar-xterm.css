@@ -12,3 +12,9 @@
 .xterm-viewport {
   overflow-y: auto !important;
 }
+
+/* BEL 视觉响铃：短暂边框高亮，避免依赖系统蜂鸣 */
+.terminal-surface.terminal-bell-flash {
+  box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--primary) 70%, transparent);
+  transition: box-shadow 0.05s ease;
+}

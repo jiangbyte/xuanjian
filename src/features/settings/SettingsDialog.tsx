@@ -71,6 +71,7 @@ import {
   resolveTermFontFamily,
   useSettingsStore,
 } from "@/stores/settings";
+import { resolveTermBellMode } from "@/lib/ui/terminalBell";
 
 type SectionId =
   | "appearance"
@@ -129,6 +130,7 @@ export function SettingsDialog({
   const defaultLocalShell = useSettingsStore((s) => s.defaultLocalShell);
   const termFontSize = useSettingsStore((s) => s.termFontSize);
   const termFontFamily = useSettingsStore((s) => s.termFontFamily);
+  const termBellMode = useSettingsStore((s) => s.termBellMode);
   const editorFontSize = useSettingsStore((s) => s.editorFontSize);
   const editorWordWrap = useSettingsStore((s) => s.editorWordWrap);
   const editorTheme = useSettingsStore((s) => s.editorTheme);
@@ -139,6 +141,7 @@ export function SettingsDialog({
   const setDefaultLocalShell = useSettingsStore((s) => s.setDefaultLocalShell);
   const setTermFontSize = useSettingsStore((s) => s.setTermFontSize);
   const setTermFontFamily = useSettingsStore((s) => s.setTermFontFamily);
+  const setTermBellMode = useSettingsStore((s) => s.setTermBellMode);
   const setEditorFontSize = useSettingsStore((s) => s.setEditorFontSize);
   const setEditorWordWrap = useSettingsStore((s) => s.setEditorWordWrap);
   const setEditorTheme = useSettingsStore((s) => s.setEditorTheme);
@@ -154,6 +157,7 @@ export function SettingsDialog({
       const shellVal = await getSetting("default_local_shell");
       const termSize = await getSetting("term_font_size");
       const termFamily = await getSetting("term_font_family");
+      const termBell = await getSetting("term_bell_mode");
       const resolvedTermFamily = resolveTermFontFamily(
         termFamily ?? useSettingsStore.getState().termFontFamily,
       );
@@ -174,6 +178,9 @@ export function SettingsDialog({
         defaultLocalShell: shellVal || "",
         termFontSize: termSize ? Number(termSize) : undefined,
         termFontFamily: resolvedTermFamily,
+        termBellMode: termBell
+          ? resolveTermBellMode(termBell)
+          : undefined,
         editorFontSize: edSize ? Number(edSize) : undefined,
         editorWordWrap:
           edWrap == null ? undefined : edWrap === "1" || edWrap === "true",
@@ -439,6 +446,37 @@ export function SettingsDialog({
                       />
                       <span className="text-sm text-muted-foreground">px</span>
                     </div>
+                  </SettingRow>
+                  <SettingRow
+                    label={t("settings.termBell")}
+                    hint={t("settings.termBellHint")}
+                  >
+                    <Select
+                      value={termBellMode}
+                      onValueChange={async (value) => {
+                        const mode = resolveTermBellMode(value);
+                        setTermBellMode(mode);
+                        await setSetting("term_bell_mode", mode);
+                      }}
+                    >
+                      <SelectTrigger className="w-full max-w-md">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(
+                          [
+                            ["none", "settings.termBellNone"],
+                            ["visual", "settings.termBellVisual"],
+                            ["sound", "settings.termBellSound"],
+                            ["both", "settings.termBellBoth"],
+                          ] as const
+                        ).map(([id, labelKey]) => (
+                          <SelectItem key={id} value={id}>
+                            {t(labelKey)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </SettingRow>
                   <SettingRow
                     label={t("settings.termWordWrap")}

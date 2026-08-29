@@ -25,6 +25,7 @@ import { modKeyLabel } from "@/lib/core/platform";
 import { canReconnect, reconnectTermTab } from "@/lib/session/connect";
 import { getTranscriptTail } from "@/lib/session/recorder";
 import { api, onSessionClosed, onSessionOutput } from "@/lib/tauri";
+import { handleTerminalBell } from "@/lib/ui/terminalBell";
 import { useSettingsStore } from "@/stores/settings";
 import type { TermTab } from "@/stores/ui";
 
@@ -106,6 +107,13 @@ export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
     termRef.current = term;
     fitRef.current = fit;
     requestAnimationFrame(() => safeFitRef.current(true));
+
+    const onBell = term.onBell(() => {
+      handleTerminalBell(
+        useSettingsStore.getState().termBellMode,
+        containerRef.current,
+      );
+    });
 
     const pasteToSession = async (text: string) => {
       const sid = sessionRef.current;
@@ -203,6 +211,7 @@ export function XtermView({ tab, active }: { tab: TermTab; active: boolean }) {
     });
 
     return () => {
+      onBell.dispose();
       onData.dispose();
       ro.disconnect();
       el.removeEventListener("paste", onPaste);

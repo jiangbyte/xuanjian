@@ -370,6 +370,13 @@ export default {
     termFont: "Font",
     termFontHint: "Shared by terminal and log replay",
     termFontSize: "Font size",
+    termBell: "Bell",
+    termBellHint:
+      "Feedback for terminal BEL (e.g. failed completion). Default is a visual flash; optional soft sound or off.",
+    termBellNone: "Off",
+    termBellVisual: "Visual flash",
+    termBellSound: "Soft sound",
+    termBellBoth: "Flash + sound",
     termWordWrap: "Word wrap",
     termWordWrapHint:
       "Applies to code editors (scripts / remote files); the terminal wraps by columns",

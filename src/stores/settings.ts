@@ -7,6 +7,10 @@
 
 import { startTransition } from "react";
 import { create } from "zustand";
+import {
+  resolveTermBellMode,
+  type TermBellMode,
+} from "@/lib/ui/terminalBell";
 
 /** 应用主题：亮 / 暗 / 跟随系统 */
 export type ThemeMode = "light" | "dark" | "system";
@@ -16,6 +20,8 @@ export type EditorThemeMode = "follow" | "vs-dark" | "light" | "hc-black";
 
 /** Markdown 预览色模式 */
 export type EditorPreviewMode = "follow" | "dark" | "light";
+
+export type { TermBellMode };
 
 const TERM_FONT_MIN = 10;
 const TERM_FONT_MAX = 28;
@@ -43,6 +49,7 @@ type SettingsState = {
   defaultLocalShell: string;
   termFontSize: number;
   termFontFamily: string;
+  termBellMode: TermBellMode;
   editorFontSize: number;
   editorWordWrap: boolean;
   editorTheme: EditorThemeMode;
@@ -52,6 +59,7 @@ type SettingsState = {
   setDefaultLocalShell: (id: string) => void;
   setTermFontSize: (size: number) => void;
   setTermFontFamily: (family: string) => void;
+  setTermBellMode: (mode: TermBellMode) => void;
   setEditorFontSize: (size: number) => void;
   setEditorWordWrap: (wrap: boolean) => void;
   setEditorTheme: (theme: EditorThemeMode) => void;
@@ -65,6 +73,7 @@ type SettingsState = {
         | "defaultLocalShell"
         | "termFontSize"
         | "termFontFamily"
+        | "termBellMode"
         | "editorFontSize"
         | "editorWordWrap"
         | "editorTheme"
@@ -171,6 +180,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   termFontFamily: resolveTermFontFamily(
     localStorage.getItem("xuanjian.termFontFamily"),
   ),
+  termBellMode: resolveTermBellMode(
+    localStorage.getItem("xuanjian.termBellMode"),
+  ),
   editorFontSize: clamp(
     readNum("xuanjian.editorFontSize", 12),
     EDITOR_FONT_MIN,
@@ -202,6 +214,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     localStorage.setItem("xuanjian.termFontFamily", next);
     set({ termFontFamily: next });
   },
+  setTermBellMode: (mode) => {
+    const next = resolveTermBellMode(mode);
+    localStorage.setItem("xuanjian.termBellMode", next);
+    set({ termBellMode: next });
+  },
   setEditorFontSize: (size) => {
     const next = clamp(Math.round(size), EDITOR_FONT_MIN, EDITOR_FONT_MAX);
     localStorage.setItem("xuanjian.editorFontSize", String(next));
@@ -227,15 +244,23 @@ export const useSettingsStore = create<SettingsState>((set) => ({
         data.termFontFamily != null && data.termFontFamily.trim() !== ""
           ? resolveTermFontFamily(data.termFontFamily)
           : s.termFontFamily;
+      const termBellMode =
+        data.termBellMode != null
+          ? resolveTermBellMode(data.termBellMode)
+          : s.termBellMode;
 
       if (data.termFontFamily != null && data.termFontFamily.trim() !== "") {
         localStorage.setItem("xuanjian.termFontFamily", termFontFamily);
+      }
+      if (data.termBellMode != null) {
+        localStorage.setItem("xuanjian.termBellMode", termBellMode);
       }
 
       return {
         ...s,
         ...data,
         termFontFamily,
+        termBellMode,
         termFontSize:
           data.termFontSize != null
             ? clamp(data.termFontSize, TERM_FONT_MIN, TERM_FONT_MAX)

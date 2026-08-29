@@ -3,6 +3,7 @@
  * @author Charlie
  * @description 遮罩层上的可移动 / 八向缩放浮动面板。
  * 用于表单弹层等；点击遮罩关闭，标题栏拖动，边缘手柄缩放；可选全屏。
+ * 通过 Portal 挂到 body，避免被终端侧栏 / Resizable / xterm 画布层级盖住。
  */
 
 import { Maximize2, Minimize2, X } from "lucide-react";
@@ -14,6 +15,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -197,8 +199,11 @@ export function FloatingWindow({
     window.addEventListener("pointerup", endDrag);
   };
 
-  return (
-    <div className="fixed inset-0 z-[70] bg-black/40" onClick={onClose}>
+  return createPortal(
+    <div
+      className="fixed inset-0 isolate z-[70] bg-black/40"
+      onClick={onClose}
+    >
       <div
         className="floating-window absolute flex flex-col overflow-hidden"
         style={{
@@ -265,6 +270,7 @@ export function FloatingWindow({
             ))
           : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
