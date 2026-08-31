@@ -6,11 +6,12 @@
  * 无会话时提示需先连接。
  */
 
-import { RefreshCw, Search, Skull, XCircle } from "lucide-react";
+import { ListTree, RefreshCw, Search, Skull, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { FloatingWindow } from "@/components/FloatingWindow";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,8 +25,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { dialogs } from "@/lib/ui/dialogs";
-import { killCmd, processesCmd, resolveProbeEnv } from "@/lib/session/probeEnv";
+import { killCmd, processTreeListCmd, processesCmd, resolveProbeEnv } from "@/lib/session/probeEnv";
 import { api } from "@/lib/tauri";
+import { ProcessTreeView } from "./ProcessTreeView";
+import { buildProcTree, type ProcTreeNode, parsePsWithPpid } from "./processTree";
 import {
   SIDEBAR_ICON,
   sidebarItemRowClass,
@@ -138,8 +141,10 @@ export function ProcessesPane({
   const [sort, setSort] = useState<"cpu" | "mem" | "pid">("cpu");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [treeOpen, setTreeOpen] = useState(false);
+  const [treeRoots, setTreeRoots] = useState<ProcTreeNode[]>([]);
+  const [treeLoading, setTreeLoading] = useState(false);
   const env = resolveProbeEnv(kind, shellId);
-
   const refresh = useCallback(async () => {
     if (!sessionId) {
       setError(t("scripts.needSessionShort"));
@@ -160,6 +165,32 @@ export function ProcessesPane({
   useEffect(() => {
     refresh().catch(() => undefined);
   }, [refresh]);
+
+  const loadProcessTree = useCallback(async () => {
+    if (!sessionId) {
+      setError(t("scripts.needSessionShort"));
+      return;
+    }
+    setTreeLoading(true);
+    try {
+      const raw = await api.sessionExec(
+        sessionId,
+        processTreeListCmd(env, shellId),
+      );
+      setTreeRoots(buildProcTree(parsePsWithPpid(raw)));
+      setError(null);
+    } catch (e) {
+      setTreeRoots([]);
+      toast.error(String(e));
+    } finally {
+      setTreeLoading(false);
+    }
+  }, [sessionId, t, env, shellId]);
+
+  const openProcessTree = useCallback(async () => {
+    setTreeOpen(true);
+    await loadProcessTree();
+  }, [loadProcessTree]);
 
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase();
@@ -192,16 +223,23 @@ export function ProcessesPane({
   const signal = async (pid: string, sig: "TERM" | "KILL") => {
     if (!sessionId) return;
     const ok = await dialogs.confirm(t("termTab.killConfirm", { pid, sig }), {
-      danger: true,
+      danger: sig === "KILL",
+      confirmLabel:
+        sig === "KILL" ? t("termTab.killForce") : t("termTab.killTerm"),
     });
     if (!ok) return;
     try {
       await api.sessionExec(sessionId, killCmd(env, pid, sig));
       toast.success(t("termTab.signalOk", { pid, sig }));
       await refresh();
+      if (treeOpen) await loadProcessTree();
     } catch (e) {
       toast.error(String(e));
     }
+  };
+
+  const treeSignal = async (pid: string, sig: "TERM" | "KILL") => {
+    await signal(pid, sig);
   };
 
   return (
@@ -219,6 +257,21 @@ export function ProcessesPane({
               size="icon-xs"
               variant="ghost"
               className="ml-auto"
+              aria-label={t("termTab.procTree")}
+              disabled={!sessionId || kind == null}
+              onClick={() => void openProcessTree()}
+            >
+              <ListTree size={SIDEBAR_ICON} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{t("termTab.procTree")}</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="ghost"
               aria-label={t("terminal.refresh")}
               onClick={() => refresh()}
             >
@@ -361,6 +414,38 @@ export function ProcessesPane({
           </div>
         )}
       </div>
+
+      {treeOpen ? (
+        <FloatingWindow
+          title={t("termTab.procTreeTitle")}
+          onClose={() => setTreeOpen(false)}
+          initialWidth={920}
+          initialHeight={680}
+          allowFullscreen
+          bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden p-0"
+          headerActions={
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              disabled={treeLoading}
+              onClick={() => void loadProcessTree()}
+            >
+              <RefreshCw
+                size={12}
+                className={treeLoading ? "animate-spin" : ""}
+              />
+              {t("termTab.procTreeRefresh")}
+            </Button>
+          }
+        >
+          <ProcessTreeView
+            roots={treeRoots}
+            loading={treeLoading}
+            onSignal={treeSignal}
+          />
+        </FloatingWindow>
+      ) : null}
     </div>
   );
 }

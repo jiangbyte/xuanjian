@@ -83,7 +83,7 @@ export function PaneBrowser({
   const [loading, setLoading] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [query, setQuery] = useState("");
-  const [showHidden, setShowHidden] = useState(false);
+  const [showHidden, setShowHidden] = useState(true);
   const [permTarget, setPermTarget] = useState<SftpEntry | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const ephemeralRef = useRef(false);

@@ -8,6 +8,8 @@
 
 import {
   ArrowDown,
+  ChevronDown,
+  ChevronRight,
   Copy,
   Loader2,
   Play,
@@ -68,6 +70,13 @@ type ContainerRow = {
   status: string;
   state: string;
   ports: string;
+  composeProject: string;
+  composeService: string;
+};
+
+type DockerConfirmOpts = {
+  danger?: boolean;
+  confirmLabel?: string;
 };
 
 type ImageRow = {
@@ -107,6 +116,48 @@ function parseJsonLines<T>(raw: string): T[] {
     }
   }
   return out;
+}
+
+/** docker ps Labels 可能是 map 或逗号分隔 key=value 字符串 */
+function parseDockerLabels(raw: unknown): Record<string, string> {
+  if (!raw) return {};
+  if (typeof raw === "object" && !Array.isArray(raw)) {
+    return raw as Record<string, string>;
+  }
+  if (typeof raw !== "string") return {};
+  const out: Record<string, string> = {};
+  for (const part of raw.split(",")) {
+    const eq = part.indexOf("=");
+    if (eq <= 0) continue;
+    out[part.slice(0, eq).trim()] = part.slice(eq + 1).trim();
+  }
+  return out;
+}
+
+function normalizeDockerName(names: unknown): string {
+  if (typeof names === "string") {
+    return names.replace(/^\//, "").split(",")[0]?.trim() || "";
+  }
+  if (Array.isArray(names)) {
+    return String(names[0] || "")
+      .replace(/^\//, "")
+      .trim();
+  }
+  return "";
+}
+
+function mapContainerRow(row: Record<string, unknown>): ContainerRow {
+  const labels = parseDockerLabels(row.Labels);
+  return {
+    id: String(row.ID || row.Id || ""),
+    name: normalizeDockerName(row.Names ?? row.Name),
+    image: String(row.Image || ""),
+    status: String(row.Status || ""),
+    state: String(row.State || ""),
+    ports: String(row.Ports || ""),
+    composeProject: labels["com.docker.compose.project"] || "",
+    composeService: labels["com.docker.compose.service"] || "",
+  };
 }
 
 /** 判断输出是否像 Docker 守护进程/命令不可用错误 */
@@ -182,6 +233,219 @@ function isLogSelecting(): boolean {
   return Boolean(sel && sel.type === "Range" && !sel.isCollapsed);
 }
 
+function sortContainers(list: ContainerRow[]): ContainerRow[] {
+  return [...list].sort((a, b) => {
+    const svc = (a.composeService || a.name).localeCompare(
+      b.composeService || b.name,
+    );
+    if (svc !== 0) return svc;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+function groupContainers(list: ContainerRow[]) {
+  const standalone: ContainerRow[] = [];
+  const compose = new Map<string, ContainerRow[]>();
+  for (const c of list) {
+    if (c.composeProject) {
+      const bucket = compose.get(c.composeProject) ?? [];
+      bucket.push(c);
+      compose.set(c.composeProject, bucket);
+    } else {
+      standalone.push(c);
+    }
+  }
+  const composeGroups = [...compose.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([project, items]) => ({
+      project,
+      items: sortContainers(items),
+    }));
+  return {
+    standalone: sortContainers(standalone),
+    composeGroups,
+  };
+}
+
+type ContainerListItemProps = {
+  c: ContainerRow;
+  busy: string | null;
+  t: (key: string, opts?: Record<string, string>) => string;
+  onStop: (c: ContainerRow) => void;
+  onStart: (c: ContainerRow) => void;
+  onRestart: (c: ContainerRow) => void;
+  onRemove: (c: ContainerRow) => void;
+  onShell: (id: string) => void;
+  onLogs: (id: string, name: string) => void;
+  onCopy: (text: string) => void;
+};
+
+function ContainerListItem({
+  c,
+  busy,
+  t,
+  onStop,
+  onStart,
+  onRestart,
+  onRemove,
+  onShell,
+  onLogs,
+  onCopy,
+}: ContainerListItemProps) {
+  const displayName =
+    c.composeService && c.name.includes(c.composeService)
+      ? c.composeService
+      : c.name || shortId(c.id);
+  return (
+    <div className="flex flex-col gap-0.5 rounded-md px-1.5 py-1 hover:bg-accent">
+      <div className="flex w-full min-w-0 items-start gap-2">
+        <div
+          className={`mt-1 size-1.5 shrink-0 rounded-full ${
+            isRunning(c.state)
+              ? "bg-success"
+              : c.state.toLowerCase() === "exited"
+                ? "bg-destructive"
+                : "bg-primary"
+          }`}
+        />
+        <div className="min-w-0 flex-1">
+          <div className={sidebarItemTitleClass} title={c.name}>
+            {displayName}
+          </div>
+          {displayName !== c.name && c.name ? (
+            <div className={sidebarItemSubClass} title={c.name}>
+              {c.name}
+            </div>
+          ) : null}
+          <div className={sidebarItemSubClass} title={c.image}>
+            {c.image}
+          </div>
+          <div className={sidebarItemSubClass}>
+            {shortId(c.id)}
+            {c.ports ? ` · ${c.ports}` : ""}
+          </div>
+          <div className={sidebarTagRowClass}>
+            <Badge size="sm" variant={badgeVariant(stateTone(c.state))}>
+              {c.state || "?"}
+            </Badge>
+            <Badge size="sm" variant="secondary" title={c.status}>
+              {c.status || "-"}
+            </Badge>
+          </div>
+        </div>
+      </div>
+      <div className="mt-1 flex flex-wrap gap-0.5 pl-[11px]">
+        {isRunning(c.state) ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                size="icon-xs"
+                variant="ghost"
+                aria-label={t("termTab.dockerStop")}
+                disabled={busy === c.id}
+                onClick={() => onStop(c)}
+              >
+                <Square size={SIDEBAR_ICON} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t("termTab.dockerStop")}</TooltipContent>
+          </Tooltip>
+        ) : (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                size="icon-xs"
+                variant="ghost"
+                aria-label={t("termTab.dockerStart")}
+                disabled={busy === c.id}
+                onClick={() => onStart(c)}
+              >
+                <Play size={SIDEBAR_ICON} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t("termTab.dockerStart")}</TooltipContent>
+          </Tooltip>
+        )}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="ghost"
+              aria-label={t("termTab.dockerRestart")}
+              disabled={busy === c.id}
+              onClick={() => onRestart(c)}
+            >
+              <RotateCcw size={SIDEBAR_ICON} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{t("termTab.dockerRestart")}</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="ghost"
+              aria-label={t("termTab.dockerShell")}
+              onClick={() => onShell(c.id)}
+            >
+              <Terminal size={SIDEBAR_ICON} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{t("termTab.dockerShell")}</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="ghost"
+              aria-label={t("termTab.dockerLogs")}
+              disabled={!!busy}
+              onClick={() => onLogs(c.id, c.name || shortId(c.id))}
+            >
+              <ScrollText size={SIDEBAR_ICON} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{t("termTab.dockerLogs")}</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="ghost"
+              aria-label={t("termTab.dockerCopy")}
+              onClick={() => onCopy(c.name || c.id)}
+            >
+              <Copy size={SIDEBAR_ICON} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{t("termTab.dockerCopy")}</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="ghost"
+              aria-label={t("termTab.dockerRemove")}
+              disabled={busy === c.id}
+              onClick={() => onRemove(c)}
+            >
+              <Trash2 size={SIDEBAR_ICON} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{t("termTab.dockerRemove")}</TooltipContent>
+        </Tooltip>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Docker 侧栏：分区列表、过滤、启停/删除等操作。
  */
@@ -218,6 +482,9 @@ export function DockerPane({
   const [images, setImages] = useState<ImageRow[]>([]);
   const [networks, setNetworks] = useState<NetworkRow[]>([]);
   const [volumes, setVolumes] = useState<VolumeRow[]>([]);
+  const [collapsedCompose, setCollapsedCompose] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   const refresh = useCallback(async () => {
     if (!sessionId) {
@@ -236,14 +503,9 @@ export function DockerPane({
           setError(t("termTab.dockerUnavailable"));
           return;
         }
-        const rows = parseJsonLines<Record<string, string>>(raw).map((row) => ({
-          id: row.ID || row.Id || "",
-          name: (row.Names || row.Name || "").replace(/^\//, ""),
-          image: row.Image || "",
-          status: row.Status || "",
-          state: row.State || "",
-          ports: row.Ports || "",
-        }));
+        const rows = parseJsonLines<Record<string, unknown>>(raw).map(
+          mapContainerRow,
+        );
         setContainers(rows.filter((r) => r.id));
         setError(null);
         return;
@@ -324,10 +586,14 @@ export function DockerPane({
     key: string,
     command: string,
     confirmMsg?: string,
+    confirmOpts?: DockerConfirmOpts,
   ) => {
     if (!sessionId) return;
     if (confirmMsg) {
-      const ok = await dialogs.confirm(confirmMsg, { danger: true });
+      const ok = await dialogs.confirm(confirmMsg, {
+        danger: confirmOpts?.danger,
+        confirmLabel: confirmOpts?.confirmLabel,
+      });
       if (!ok) return;
     }
     setBusy(key);
@@ -358,6 +624,91 @@ export function DockerPane({
     } finally {
       setBusy(null);
     }
+  };
+
+  const removeContainer = async (c: ContainerRow) => {
+    if (!sessionId) return;
+    const name = c.name || shortId(c.id);
+    const ref = safeArg(c.id);
+    if (isRunning(c.state)) {
+      const ok = await dialogs.confirm(
+        t("termTab.dockerRmRunningConfirm", { name }),
+        {
+          danger: true,
+          confirmLabel: t("termTab.dockerStopAndRemove"),
+        },
+      );
+      if (!ok) return;
+      setBusy(c.id);
+      try {
+        let raw = await api.sessionExec(sessionId, `docker stop ${ref} 2>&1`);
+        let text = raw.trim();
+        if (
+          looksLikeDockerError(text) ||
+          /^Error response from daemon:/im.test(text) ||
+          /^Error:/im.test(text)
+        ) {
+          toast.error(text.slice(0, 800) || t("termTab.dockerUnavailable"));
+          return;
+        }
+        raw = await api.sessionExec(sessionId, `docker rm ${ref} 2>&1`);
+        text = raw.trim();
+        if (
+          looksLikeDockerError(text) ||
+          /^Error response from daemon:/im.test(text) ||
+          /^Error:/im.test(text)
+        ) {
+          toast.error(text.slice(0, 800) || t("termTab.dockerUnavailable"));
+          return;
+        }
+        toast.success(t("termTab.dockerOpOk", { action: t("termTab.dockerRemove") }));
+        await refresh();
+      } catch (e) {
+        toast.error(String(e));
+      } finally {
+        setBusy(null);
+      }
+      return;
+    }
+    await runDocker(
+      c.id,
+      `docker rm ${ref}`,
+      t("termTab.dockerRmContainerConfirm", { name }),
+      { danger: true, confirmLabel: t("termTab.dockerRemove") },
+    );
+  };
+
+  const stopContainer = (c: ContainerRow) =>
+    runDocker(
+      c.id,
+      `docker stop ${safeArg(c.id)}`,
+      t("termTab.dockerStopConfirm", { name: c.name || shortId(c.id) }),
+      { confirmLabel: t("termTab.dockerStop") },
+    );
+
+  const startContainer = (c: ContainerRow) =>
+    runDocker(c.id, `docker start ${safeArg(c.id)}`);
+
+  const restartContainer = (c: ContainerRow) =>
+    runDocker(c.id, `docker restart ${safeArg(c.id)}`);
+
+  const removeDockerResource = (
+    key: string,
+    command: string,
+    confirmMsg: string,
+  ) =>
+    runDocker(key, command, confirmMsg, {
+      danger: true,
+      confirmLabel: t("termTab.dockerRemove"),
+    });
+
+  const toggleComposeGroup = (project: string) => {
+    setCollapsedCompose((prev) => {
+      const next = new Set(prev);
+      if (next.has(project)) next.delete(project);
+      else next.add(project);
+      return next;
+    });
   };
 
   const copyText = async (text: string) => {
@@ -494,11 +845,18 @@ export function DockerPane({
           c.image.toLowerCase().includes(query) ||
           c.id.toLowerCase().includes(query) ||
           c.status.toLowerCase().includes(query) ||
-          c.ports.toLowerCase().includes(query),
+          c.ports.toLowerCase().includes(query) ||
+          c.composeProject.toLowerCase().includes(query) ||
+          c.composeService.toLowerCase().includes(query),
       );
     }
     return list;
   }, [containers, q, filter]);
+
+  const containerGroups = useMemo(
+    () => groupContainers(filteredContainers),
+    [filteredContainers],
+  );
 
   const filteredImages = useMemo(() => {
     const query = q.trim().toLowerCase();
@@ -646,179 +1004,78 @@ export function DockerPane({
               {t("termTab.dockerEmpty")}
             </div>
           ) : (
-            filteredContainers.map((c) => (
-              <div
-                key={c.id}
-                className="flex flex-col gap-0.5 rounded-md px-1.5 py-1 hover:bg-accent"
-              >
-                <div className="flex w-full min-w-0 items-start gap-2">
-                  <div
-                    className={`mt-1 size-1.5 shrink-0 rounded-full ${
-                      isRunning(c.state)
-                        ? "bg-success"
-                        : c.state.toLowerCase() === "exited"
-                          ? "bg-destructive"
-                          : "bg-primary"
-                    }`}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className={sidebarItemTitleClass} title={c.name}>
-                      {c.name || shortId(c.id)}
-                    </div>
-                    <div className={sidebarItemSubClass} title={c.image}>
-                      {c.image}
-                    </div>
-                    <div className={sidebarItemSubClass}>
-                      {shortId(c.id)}
-                      {c.ports ? ` · ${c.ports}` : ""}
-                    </div>
-                    <div className={sidebarTagRowClass}>
-                      <Badge
-                        size="sm"
-                        variant={badgeVariant(stateTone(c.state))}
-                      >
-                        {c.state || "?"}
-                      </Badge>
-                      <Badge size="sm" variant="secondary" title={c.status}>
-                        {c.status || "-"}
-                      </Badge>
-                    </div>
+            <>
+              {containerGroups.composeGroups.map(({ project, items }) => {
+                const collapsed = collapsedCompose.has(project);
+                const running = items.filter((c) => isRunning(c.state)).length;
+                return (
+                  <div key={project} className="mb-1">
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-1 rounded-md px-1.5 py-1 text-left hover:bg-accent"
+                      onClick={() => toggleComposeGroup(project)}
+                    >
+                      {collapsed ? (
+                        <ChevronRight size={14} className="shrink-0" />
+                      ) : (
+                        <ChevronDown size={14} className="shrink-0" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className={sidebarItemTitleClass}>
+                          {t("termTab.dockerComposeGroup", { project })}
+                        </div>
+                        <div className={sidebarItemSubClass}>
+                          {t("termTab.dockerComposeMeta", {
+                            count: String(items.length),
+                            running: String(running),
+                          })}
+                        </div>
+                      </div>
+                    </button>
+                    {!collapsed ? (
+                      <div className="ml-2 border-l border-border pl-1">
+                        {items.map((c) => (
+                          <ContainerListItem
+                            key={c.id}
+                            c={c}
+                            busy={busy}
+                            t={t}
+                            onStop={stopContainer}
+                            onStart={startContainer}
+                            onRestart={restartContainer}
+                            onRemove={removeContainer}
+                            onShell={openShell}
+                            onLogs={showLogs}
+                            onCopy={copyText}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
+                );
+              })}
+              {containerGroups.standalone.length > 0 &&
+              containerGroups.composeGroups.length > 0 ? (
+                <div className="px-1.5 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {t("termTab.dockerStandalone")}
                 </div>
-                <div className="mt-1 flex flex-wrap gap-0.5 pl-[11px]">
-                  {isRunning(c.state) ? (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          size="icon-xs"
-                          variant="ghost"
-                          aria-label={t("termTab.dockerStop")}
-                          disabled={busy === c.id}
-                          onClick={() =>
-                            runDocker(
-                              c.id,
-                              `docker stop ${safeArg(c.id)}`,
-                              t("termTab.dockerStopConfirm", {
-                                name: c.name || shortId(c.id),
-                              }),
-                            )
-                          }
-                        >
-                          <Square size={SIDEBAR_ICON} />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>{t("termTab.dockerStop")}</TooltipContent>
-                    </Tooltip>
-                  ) : (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          size="icon-xs"
-                          variant="ghost"
-                          aria-label={t("termTab.dockerStart")}
-                          disabled={busy === c.id}
-                          onClick={() =>
-                            runDocker(c.id, `docker start ${safeArg(c.id)}`)
-                          }
-                        >
-                          <Play size={SIDEBAR_ICON} />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        {t("termTab.dockerStart")}
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        size="icon-xs"
-                        variant="ghost"
-                        aria-label={t("termTab.dockerRestart")}
-                        disabled={busy === c.id}
-                        onClick={() =>
-                          runDocker(c.id, `docker restart ${safeArg(c.id)}`)
-                        }
-                      >
-                        <RotateCcw size={SIDEBAR_ICON} />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {t("termTab.dockerRestart")}
-                    </TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        size="icon-xs"
-                        variant="ghost"
-                        aria-label={t("termTab.dockerShell")}
-                        onClick={() => openShell(c.id)}
-                      >
-                        <Terminal size={SIDEBAR_ICON} />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{t("termTab.dockerShell")}</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        size="icon-xs"
-                        variant="ghost"
-                        aria-label={t("termTab.dockerLogs")}
-                        disabled={!!busy}
-                        onClick={() => showLogs(c.id, c.name || shortId(c.id))}
-                      >
-                        <ScrollText size={SIDEBAR_ICON} />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{t("termTab.dockerLogs")}</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        size="icon-xs"
-                        variant="ghost"
-                        aria-label={t("termTab.dockerCopy")}
-                        onClick={() => copyText(c.name || c.id)}
-                      >
-                        <Copy size={SIDEBAR_ICON} />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{t("termTab.dockerCopy")}</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        size="icon-xs"
-                        variant="ghost"
-                        aria-label={t("termTab.dockerRemove")}
-                        disabled={busy === c.id}
-                        onClick={() =>
-                          runDocker(
-                            c.id,
-                            `docker rm -f ${safeArg(c.id)}`,
-                            t("termTab.dockerRmContainerConfirm", {
-                              name: c.name || shortId(c.id),
-                            }),
-                          )
-                        }
-                      >
-                        <Trash2 size={SIDEBAR_ICON} />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{t("termTab.dockerRemove")}</TooltipContent>
-                  </Tooltip>
-                </div>
-              </div>
-            ))
+              ) : null}
+              {containerGroups.standalone.map((c) => (
+                <ContainerListItem
+                  key={c.id}
+                  c={c}
+                  busy={busy}
+                  t={t}
+                  onStop={stopContainer}
+                  onStart={startContainer}
+                  onRestart={restartContainer}
+                  onRemove={removeContainer}
+                  onShell={openShell}
+                  onLogs={showLogs}
+                  onCopy={copyText}
+                />
+              ))}
+            </>
           )
         ) : section === "images" ? (
           filteredImages.length === 0 ? (
@@ -871,7 +1128,7 @@ export function DockerPane({
                         aria-label={t("termTab.dockerRemove")}
                         disabled={busy === img.id}
                         onClick={() =>
-                          runDocker(
+                          removeDockerResource(
                             img.id,
                             `docker rmi ${safeArg(img.id)}`,
                             t("termTab.dockerRmImageConfirm", { name: ref }),
@@ -935,7 +1192,7 @@ export function DockerPane({
                           aria-label={t("termTab.dockerRemove")}
                           disabled={busy === n.id}
                           onClick={() =>
-                            runDocker(
+                            removeDockerResource(
                               n.id,
                               `docker network rm ${safeArg(n.id)}`,
                               t("termTab.dockerRmNetworkConfirm", {
@@ -997,7 +1254,7 @@ export function DockerPane({
                     aria-label={t("termTab.dockerRemove")}
                     disabled={busy === v.name}
                     onClick={() =>
-                      runDocker(
+                      removeDockerResource(
                         v.name,
                         `docker volume rm ${safeArg(v.name)}`,
                         t("termTab.dockerRmVolumeConfirm", { name: v.name }),

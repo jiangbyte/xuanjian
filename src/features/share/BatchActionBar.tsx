@@ -22,6 +22,7 @@ export function BatchActionBar({
   onClear,
   onExport,
   onDelete,
+  disabled = false,
   className,
 }: {
   selectedCount: number;
@@ -30,6 +31,7 @@ export function BatchActionBar({
   onClear: () => void;
   onExport: () => void;
   onDelete: () => void;
+  disabled?: boolean;
   className?: string;
 }) {
   const { t } = useTranslation();
@@ -40,18 +42,21 @@ export function BatchActionBar({
     <div
       className={cn(
         "flex items-center gap-1 border-b border-border bg-muted px-2 py-1.5",
+        disabled && "opacity-60",
         className,
       )}
     >
       <span
         className={cn(
           "min-w-0 flex-1 truncate text-xs tabular-nums",
-          hasSelection
+          hasSelection && !disabled
             ? "font-medium text-foreground"
             : "text-muted-foreground",
         )}
       >
-        {t("batch.selected", { count: selectedCount })}
+        {disabled
+          ? t("batch.unavailable")
+          : t("batch.selected", { count: selectedCount })}
       </span>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -59,7 +64,7 @@ export function BatchActionBar({
             type="button"
             size="icon-xs"
             variant="ghost"
-            disabled={totalCount === 0 || allSelected}
+            disabled={disabled || totalCount === 0 || allSelected}
             aria-label={t("batch.selectAll")}
             onClick={onSelectAll}
           >
@@ -74,7 +79,7 @@ export function BatchActionBar({
             type="button"
             size="icon-xs"
             variant="ghost"
-            disabled={!hasSelection}
+            disabled={disabled || !hasSelection}
             aria-label={t("batch.clear")}
             onClick={onClear}
           >
@@ -90,7 +95,7 @@ export function BatchActionBar({
             type="button"
             size="icon-xs"
             variant="ghost"
-            disabled={!hasSelection}
+            disabled={disabled || !hasSelection}
             aria-label={t("batch.export")}
             onClick={onExport}
           >
@@ -105,10 +110,10 @@ export function BatchActionBar({
             type="button"
             size="icon-xs"
             variant="ghost"
-            disabled={!hasSelection}
+            disabled={disabled || !hasSelection}
             aria-label={t("batch.delete")}
             className={
-              hasSelection
+              hasSelection && !disabled
                 ? "text-destructive hover:bg-destructive/10 hover:text-destructive"
                 : undefined
             }

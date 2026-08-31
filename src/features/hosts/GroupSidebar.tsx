@@ -27,6 +27,7 @@ import {
   moveGroup,
   renameGroup,
 } from "@/lib/db";
+import { HOST_GROUP_LOCAL, HOST_GROUP_UNGROUPED } from "@/features/hosts/constants";
 import { dialogs } from "@/lib/ui/dialogs";
 
 /** 主机分组侧边栏 */
@@ -34,6 +35,7 @@ export function GroupSidebar({
   groups,
   groupCounts,
   hostTotal,
+  localShellCount,
   groupId,
   onSelectGroup,
   onReload,
@@ -41,8 +43,9 @@ export function GroupSidebar({
   groups: GroupRow[];
   groupCounts: Map<number | "none", number>;
   hostTotal: number;
+  localShellCount: number;
   groupId: number | null | undefined;
-  onSelectGroup: (id: number | null | -1) => void;
+  onSelectGroup: (id: number | null | -1 | -2) => void;
   onReload: () => Promise<void>;
 }) {
   const { t } = useTranslation();
@@ -87,6 +90,12 @@ export function GroupSidebar({
           label={t("hosts.allGroups")}
           count={hostTotal}
           onClick={() => onSelectGroup(null)}
+        />
+        <SectionNavItem
+          active={groupId === HOST_GROUP_LOCAL}
+          label={t("hosts.localShells")}
+          count={localShellCount}
+          onClick={() => onSelectGroup(HOST_GROUP_LOCAL)}
         />
         {groups.map((g, idx) => (
           <SectionNavItem
@@ -157,10 +166,10 @@ export function GroupSidebar({
           />
         ))}
         <SectionNavItem
-          active={groupId === -1}
+          active={groupId === HOST_GROUP_UNGROUPED}
           label={t("hosts.ungrouped")}
           count={groupCounts.get("none") || 0}
-          onClick={() => onSelectGroup(-1)}
+          onClick={() => onSelectGroup(HOST_GROUP_UNGROUPED)}
         />
       </div>
     </aside>

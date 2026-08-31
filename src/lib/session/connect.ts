@@ -12,7 +12,7 @@ import {
   endSessionRecording,
   startRecordingForOpenTab,
 } from "@/lib/session/recorder";
-import { api, type SessionInfo, type SshConnectParams } from "@/lib/tauri";
+import { api, type LocalShellInfo, type SessionInfo, type SshConnectParams } from "@/lib/tauri";
 import { type AgentTermTab, type TermTab, useUiStore } from "@/stores/ui";
 
 export const SSH_HOST_KEY_UNKNOWN = "SSH_HOST_KEY_UNKNOWN";
@@ -143,6 +143,37 @@ export async function connectSshHost(
     await api.sessionWrite(session.id, `${host.startup_cmd.trim()}\n`);
   }
   return { session, host };
+}
+
+/** 打开本地 Shell 标签并建立会话 */
+export async function connectLocalShell(
+  shell: LocalShellInfo,
+): Promise<{ session: SessionInfo; tabId: string }> {
+  const tabId = crypto.randomUUID();
+  const { addTab, updateTab } = useUiStore.getState();
+  addTab({
+    id: tabId,
+    title: shell.name,
+    kind: "local",
+    sessionId: null,
+    shellId: shell.id,
+    status: "connecting",
+  });
+  try {
+    const session = await api.localShellOpen(shell.id);
+    const recording = startRecordingForOpenTab(tabId, session.id);
+    updateTab(tabId, {
+      sessionId: session.id,
+      status: "open",
+      title: session.title,
+      shellId: shell.id,
+    });
+    await recording;
+    return { session, tabId };
+  } catch (e) {
+    updateTab(tabId, { status: "error" });
+    throw e;
+  }
 }
 
 /**

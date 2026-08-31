@@ -189,6 +189,37 @@ export function diskSnapshotCmd(env: ProbeEnv, shellId?: string | null) {
   return wrapForWindowsShell(shellId, WIN_DISK_CMD);
 }
 
+/** Linux 进程树数据（含 PPID） */
+export const LINUX_PS_TREE_CMD =
+  "ps -eo pid,ppid,user,%cpu,%mem,args --sort=pid 2>/dev/null";
+
+/** macOS 进程树数据 */
+export const DARWIN_PS_TREE_CMD =
+  "ps -axo pid,ppid,user,%cpu,%mem,command 2>/dev/null";
+
+/** Windows 进程树数据 */
+export const WIN_PS_TREE_CMD = [
+  "$ErrorActionPreference='SilentlyContinue'",
+  "$os=Get-CimInstance Win32_OperatingSystem",
+  "$total=[double]($os.TotalVisibleMemorySize*1024)",
+  "if($total -le 0){$total=1}",
+  "Write-Output 'PID PPID USER CPU MEM CMD'",
+  "Get-CimInstance Win32_Process | Sort-Object ProcessId | ForEach-Object {",
+  "  $user='-'",
+  "  try{$o=$_.GetOwner(); if($o -and $o.User){$user=$o.User}}catch{}",
+  "  $mem=[math]::Round(($_.WorkingSetSize/$total)*100,1)",
+  "  $cmd=if($_.CommandLine){$_.CommandLine}else{$_.Name}",
+  "  $cmd=($cmd -replace '[\\r\\n\\t]+',' ')",
+  "  Write-Output ('{0} {1} {2} 0.0 {3} {4}' -f $_.ProcessId,$_.ParentProcessId,$user,$mem,$cmd)",
+  "}",
+].join("; ");
+
+export function processTreeListCmd(env: ProbeEnv, shellId?: string | null) {
+  if (env === "linux") return LINUX_PS_TREE_CMD;
+  if (env === "darwin") return DARWIN_PS_TREE_CMD;
+  return wrapForWindowsShell(shellId, WIN_PS_TREE_CMD);
+}
+
 export function killCmd(env: ProbeEnv, pid: string, sig: "TERM" | "KILL") {
   const safe = pid.replace(/[^\d]/g, "");
   if (!safe) throw new Error("invalid pid");

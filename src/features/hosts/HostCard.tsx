@@ -1,8 +1,7 @@
 /**
- * @file 主机列表行
+ * @file 主机卡片
  * @author Charlie
- * @description 紧凑列表项：勾选、名称与连接串、标签；悬停显示连接/编辑，删除走右键或批量栏。
- * 主机名称与连接串支持点击 / 右键复制。
+ * @description 勾选、名称与连接串、标签；悬停显示连接/编辑，删除走右键或批量栏。
  */
 
 import { Cable, Pencil, Server, Trash2 } from "lucide-react";
@@ -18,7 +17,7 @@ import { clipboardWriteText } from "@/lib/ui/clipboard";
 import { selectionCheckboxClass, selectionRow } from "@/lib/core/selection";
 import { cn } from "@/lib/utils";
 
-/** 单个主机列表行 */
+/** 单个主机项 */
 export function HostCard({
   host,
   selected,
@@ -60,6 +59,76 @@ export function HostCard({
     await onReload();
   };
 
+  const menuItems = [
+    {
+      id: "connect",
+      label: t("context.connect"),
+      onClick: () => onConnect(host),
+    },
+    {
+      id: "edit",
+      label: t("context.editHost"),
+      onClick: () => onEdit(host),
+    },
+    "sep" as const,
+    {
+      id: "copy-name",
+      label: t("hosts.copyName"),
+      onClick: () => {
+        void copyText(displayName);
+      },
+    },
+    {
+      id: "copy-address",
+      label: t("hosts.copyAddress"),
+      onClick: () => {
+        void copyText(address);
+      },
+    },
+    "sep" as const,
+    {
+      id: "delete",
+      label: t("context.delete"),
+      danger: true,
+      onClick: () => {
+        void remove();
+      },
+    },
+  ];
+
+  const metaRow =
+    host.remark || host.group_name || tags.length > 0 ? (
+      <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+        {host.remark ? (
+          <span className="min-w-0 truncate text-xs text-muted-foreground">
+            {host.remark}
+          </span>
+        ) : null}
+        {host.group_name ? (
+          <Badge
+            variant="secondary"
+            className="h-5 shrink-0 px-1.5 text-[10px] font-normal"
+          >
+            {host.group_name}
+          </Badge>
+        ) : null}
+        {tags.slice(0, 3).map((tag) => (
+          <Badge
+            key={tag}
+            variant="outline"
+            className="h-5 shrink-0 px-1.5 text-[10px] font-normal"
+          >
+            {tag}
+          </Badge>
+        ))}
+        {tags.length > 3 ? (
+          <span className="text-[10px] text-muted-foreground">
+            +{tags.length - 3}
+          </span>
+        ) : null}
+      </div>
+    ) : null;
+
   return (
     <div
       role="button"
@@ -75,44 +144,7 @@ export function HostCard({
           onConnect(host);
         }
       }}
-      onContextMenu={(e) =>
-        openContextMenu(e, openMenu, [
-          {
-            id: "connect",
-            label: t("context.connect"),
-            onClick: () => onConnect(host),
-          },
-          {
-            id: "edit",
-            label: t("context.editHost"),
-            onClick: () => onEdit(host),
-          },
-          "sep",
-          {
-            id: "copy-name",
-            label: t("hosts.copyName"),
-            onClick: () => {
-              void copyText(displayName);
-            },
-          },
-          {
-            id: "copy-address",
-            label: t("hosts.copyAddress"),
-            onClick: () => {
-              void copyText(address);
-            },
-          },
-          "sep",
-          {
-            id: "delete",
-            label: t("context.delete"),
-            danger: true,
-            onClick: () => {
-              void remove();
-            },
-          },
-        ])
-      }
+      onContextMenu={(e) => openContextMenu(e, openMenu, menuItems)}
     >
       {host.color ? (
         <span
@@ -160,37 +192,7 @@ export function HostCard({
             {address}
           </button>
         </div>
-        {(host.remark || host.group_name || tags.length > 0) && (
-          <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-            {host.remark ? (
-              <span className="min-w-0 truncate text-xs text-muted-foreground">
-                {host.remark}
-              </span>
-            ) : null}
-            {host.group_name ? (
-              <Badge
-                variant="secondary"
-                className="h-5 shrink-0 px-1.5 text-[10px] font-normal"
-              >
-                {host.group_name}
-              </Badge>
-            ) : null}
-            {tags.slice(0, 3).map((tag) => (
-              <Badge
-                key={tag}
-                variant="outline"
-                className="h-5 shrink-0 px-1.5 text-[10px] font-normal"
-              >
-                {tag}
-              </Badge>
-            ))}
-            {tags.length > 3 ? (
-              <span className="text-[10px] text-muted-foreground">
-                +{tags.length - 3}
-              </span>
-            ) : null}
-          </div>
-        )}
+        {metaRow}
       </div>
 
       <div

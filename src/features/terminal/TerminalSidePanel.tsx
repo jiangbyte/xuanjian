@@ -156,7 +156,7 @@ export function TerminalSidePanel({
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
-  const [showHidden, setShowHidden] = useState(false);
+  const [showHidden, setShowHidden] = useState(true);
   const [pathFocus, setPathFocus] = useState(false);
   const [sortAsc, setSortAsc] = useState(true);
   const [transferOpen, setTransferOpen] = useState(false);

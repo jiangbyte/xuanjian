@@ -25,11 +25,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { HOST_COLORS } from "@/features/hosts/hostColors";
+import { LocalShellList } from "@/features/hosts/LocalShellList";
 import { GroupRow, HostInput, HostRow } from "@/lib/db";
 import { sshConnectWithTrust } from "@/lib/session/connect";
-import { api } from "@/lib/tauri";
+import { api, type LocalShellInfo } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 
 const NONE = "none";
@@ -42,6 +44,7 @@ export function HostFormModal({
   hosts,
   onClose,
   onSave,
+  onConnectShell,
 }: {
   initial: HostRow | null;
   prefill?: Partial<HostRow> | null;
@@ -49,8 +52,11 @@ export function HostFormModal({
   hosts: HostRow[];
   onClose: () => void;
   onSave: (input: HostInput) => Promise<void>;
+  onConnectShell?: (shell: LocalShellInfo) => void;
 }) {
   const { t } = useTranslation();
+  const isCreate = !initial;
+  const [tab, setTab] = useState<"remote" | "local">("remote");
   const seed = initial || prefill;
   const [name, setName] = useState(seed?.name || "");
   const [host, setHost] = useState(seed?.host || "");
@@ -151,272 +157,162 @@ export function HostFormModal({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-3xl">
-        <DialogHeader>
+      <DialogContent className="flex h-[min(720px,88vh)] max-h-[88vh] flex-col overflow-hidden sm:max-w-3xl">
+        <DialogHeader className="shrink-0">
           <DialogTitle>
             {initial ? t("hosts.editHost") : t("hosts.newHost")}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="max-h-[70vh] overflow-y-auto pr-1">
-          <Section title={t("hosts.sectionBasic")}>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label={t("hosts.name")}>
-                <Input
-                  value={name}
-                  onChange={(e) => setName(e.currentTarget.value)}
-                />
-              </Field>
-              <div>
-                <Label className="mb-1.5 block">{t("hosts.color")}</Label>
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {HOST_COLORS.map((c) => (
-                    <button
-                      key={c.value || "none"}
-                      type="button"
-                      title={"label" in c ? c.label : t("hosts.colorNone")}
-                      className={cn(
-                        "h-7 w-7 rounded-md border",
-                        color === c.value
-                          ? "border-primary ring-1 ring-primary"
-                          : "border-border",
-                        !c.value && "bg-muted",
-                      )}
-                      style={c.value ? { background: c.value } : undefined}
-                      onClick={() => setColor(c.value)}
-                    />
-                  ))}
-                </div>
-              </div>
-              <Field label={t("hosts.address")}>
-                <Input
-                  value={host}
-                  onChange={(e) => setHost(e.currentTarget.value)}
-                />
-              </Field>
-              <Field label={t("hosts.port")}>
-                <Input
-                  type="number"
-                  min={1}
-                  max={65535}
-                  value={port}
-                  onChange={(e) => setPort(toNumber(e.currentTarget.value, 22))}
-                />
-              </Field>
-              <Field label={t("hosts.username")}>
-                <Input
-                  value={username}
-                  onChange={(e) => setUsername(e.currentTarget.value)}
-                />
-              </Field>
-              <Field label={t("hosts.group")}>
-                <Select
-                  value={groupId === "" ? NONE : String(groupId)}
-                  onValueChange={(v) => setGroupId(v === NONE ? "" : Number(v))}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NONE}>{t("hosts.ungrouped")}</SelectItem>
-                    {groups.map((g) => (
-                      <SelectItem key={g.id} value={String(g.id)}>
-                        {g.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-            </div>
-          </Section>
-
-          <Section title={t("hosts.sectionAuth")}>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label={t("hosts.authType")} className="sm:col-span-2">
-                <Select value={authType} onValueChange={setAuthType}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="password">
-                      {t("hosts.password")}
-                    </SelectItem>
-                    <SelectItem value="privateKey">
-                      {t("hosts.privateKey")}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-              {authType === "password" ? (
-                <Field label={t("hosts.password")} className="sm:col-span-2">
-                  <Input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.currentTarget.value)}
-                    placeholder={initial?.password_enc ? "••••••••" : ""}
-                  />
-                </Field>
-              ) : (
-                <>
-                  <div className="sm:col-span-2">
-                    <Label className="mb-1.5 block">
-                      {t("hosts.privateKey")}
-                    </Label>
-                    <div className="flex flex-nowrap items-end gap-2">
-                      <Input
-                        className="flex-1 font-mono text-xs"
-                        value={privateKeyPath}
-                        onChange={(e) =>
-                          setPrivateKeyPath(e.currentTarget.value)
-                        }
-                      />
-                      <Button variant="outline" onClick={() => void pickKey()}>
-                        {t("hosts.browse")}
-                      </Button>
-                    </div>
-                  </div>
-                  <Field
-                    label={t("hosts.passphrase")}
-                    className="sm:col-span-2"
-                  >
-                    <Input
-                      type="password"
-                      value={passphrase}
-                      onChange={(e) => setPassphrase(e.currentTarget.value)}
-                      placeholder={initial?.passphrase_enc ? "••••••••" : ""}
-                    />
-                  </Field>
-                </>
-              )}
-            </div>
-          </Section>
-
-          <Section title={t("hosts.sectionConn")}>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label={t("hosts.connectTimeout")}>
-                <Input
-                  type="number"
-                  min={1}
-                  value={connectTimeout}
-                  onChange={(e) =>
-                    setConnectTimeout(toNumber(e.currentTarget.value, 30))
-                  }
-                />
-              </Field>
-              <Field label={t("hosts.keepalive")}>
-                <Input
-                  type="number"
-                  min={0}
-                  value={keepalive}
-                  onChange={(e) =>
-                    setKeepalive(toNumber(e.currentTarget.value, 0))
-                  }
-                />
-              </Field>
-              <Field label={t("hosts.terminalType")}>
-                <Select value={terminalType} onValueChange={setTerminalType}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="xterm-256color">
-                      xterm-256color
-                    </SelectItem>
-                    <SelectItem value="xterm">xterm</SelectItem>
-                    <SelectItem value="vt100">vt100</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field label={t("hosts.remotePath")}>
-                <Input
-                  value={remotePath}
-                  onChange={(e) => setRemotePath(e.currentTarget.value)}
-                  placeholder="/home"
-                />
-              </Field>
-              <Field label={t("hosts.startupCmd")} className="sm:col-span-2">
-                <Input
-                  value={startupCmd}
-                  onChange={(e) => setStartupCmd(e.currentTarget.value)}
-                  placeholder="cd /var/log && ls"
-                />
-              </Field>
-              <Field label={t("hosts.jumpHost")} className="sm:col-span-2">
-                <Select
-                  value={jumpHostId === "" ? NONE : String(jumpHostId)}
-                  onValueChange={(v) =>
-                    setJumpHostId(v === NONE ? "" : Number(v))
-                  }
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NONE}>{t("hosts.jumpNone")}</SelectItem>
-                    {jumpOptions.map((h) => (
-                      <SelectItem key={h.id} value={String(h.id)}>
-                        {`${h.name || h.host} (${h.username}@${h.host})`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field label={t("hosts.proxyType")}>
-                <Select value={proxyType} onValueChange={setProxyType}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NONE}>{t("hosts.proxyNone")}</SelectItem>
-                    <SelectItem value="socks5">SOCKS5</SelectItem>
-                    <SelectItem value="http">HTTP CONNECT</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field label={t("hosts.proxyHost")}>
-                <Input
-                  value={proxyHost}
-                  disabled={proxyType === NONE}
-                  onChange={(e) => setProxyHost(e.currentTarget.value)}
-                  placeholder="127.0.0.1"
-                />
-              </Field>
-              <Field label={t("hosts.proxyPort")}>
-                <Input
-                  type="number"
-                  min={1}
-                  max={65535}
-                  disabled={proxyType === NONE}
-                  value={proxyPort}
-                  onChange={(e) =>
-                    setProxyPort(toNumber(e.currentTarget.value, 1080))
-                  }
-                />
-              </Field>
-            </div>
-          </Section>
-
-          <Section title={t("hosts.sectionMeta")} last>
-            <div className="grid grid-cols-1 gap-3">
-              <Field label={t("hosts.tags")}>
-                <Input
-                  value={tags}
-                  onChange={(e) => setTags(e.currentTarget.value)}
-                  placeholder={t("hosts.tagsHint")}
-                />
-              </Field>
-              <Field label={t("hosts.remark")}>
-                <Textarea
-                  value={remark}
-                  onChange={(e) => setRemark(e.currentTarget.value)}
-                  rows={3}
-                />
-              </Field>
-            </div>
-          </Section>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {isCreate ? (
+          <Tabs
+            value={tab}
+            onValueChange={(v) => setTab(v as "remote" | "local")}
+            className="flex min-h-0 flex-1 flex-col gap-3"
+          >
+            <TabsList className="w-full shrink-0">
+              <TabsTrigger value="remote" className="flex-1">
+                {t("hosts.tabRemote")}
+              </TabsTrigger>
+              <TabsTrigger value="local" className="flex-1">
+                {t("hosts.tabLocalShell")}
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent
+              value="remote"
+              className="mt-0 min-h-0 flex-1 overflow-y-auto data-[state=inactive]:hidden"
+            >
+              <HostFormBody
+                t={t}
+                name={name}
+                setName={setName}
+                host={host}
+                setHost={setHost}
+                port={port}
+                setPort={setPort}
+                username={username}
+                setUsername={setUsername}
+                authType={authType}
+                setAuthType={setAuthType}
+                password={password}
+                setPassword={setPassword}
+                privateKeyPath={privateKeyPath}
+                setPrivateKeyPath={setPrivateKeyPath}
+                passphrase={passphrase}
+                setPassphrase={setPassphrase}
+                groupId={groupId}
+                setGroupId={setGroupId}
+                groups={groups}
+                tags={tags}
+                setTags={setTags}
+                color={color}
+                setColor={setColor}
+                remark={remark}
+                setRemark={setRemark}
+                connectTimeout={connectTimeout}
+                setConnectTimeout={setConnectTimeout}
+                keepalive={keepalive}
+                setKeepalive={setKeepalive}
+                terminalType={terminalType}
+                setTerminalType={setTerminalType}
+                startupCmd={startupCmd}
+                setStartupCmd={setStartupCmd}
+                remotePath={remotePath}
+                setRemotePath={setRemotePath}
+                jumpHostId={jumpHostId}
+                setJumpHostId={setJumpHostId}
+                jumpOptions={jumpOptions}
+                proxyType={proxyType}
+                setProxyType={setProxyType}
+                proxyHost={proxyHost}
+                setProxyHost={setProxyHost}
+                proxyPort={proxyPort}
+                setProxyPort={setProxyPort}
+                initial={initial}
+                pickKey={pickKey}
+                toNumber={toNumber}
+              />
+            </TabsContent>
+            <TabsContent
+              value="local"
+              className="mt-0 min-h-0 flex-1 overflow-hidden data-[state=inactive]:hidden"
+            >
+              <LocalShellList
+                className="h-full"
+                onConnect={(shell) => {
+                  onConnectShell?.(shell);
+                  onClose();
+                }}
+              />
+            </TabsContent>
+          </Tabs>
+        ) : (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+          <HostFormBody
+            t={t}
+            name={name}
+            setName={setName}
+            host={host}
+            setHost={setHost}
+            port={port}
+            setPort={setPort}
+            username={username}
+            setUsername={setUsername}
+            authType={authType}
+            setAuthType={setAuthType}
+            password={password}
+            setPassword={setPassword}
+            privateKeyPath={privateKeyPath}
+            setPrivateKeyPath={setPrivateKeyPath}
+            passphrase={passphrase}
+            setPassphrase={setPassphrase}
+            groupId={groupId}
+            setGroupId={setGroupId}
+            groups={groups}
+            tags={tags}
+            setTags={setTags}
+            color={color}
+            setColor={setColor}
+            remark={remark}
+            setRemark={setRemark}
+            connectTimeout={connectTimeout}
+            setConnectTimeout={setConnectTimeout}
+            keepalive={keepalive}
+            setKeepalive={setKeepalive}
+            terminalType={terminalType}
+            setTerminalType={setTerminalType}
+            startupCmd={startupCmd}
+            setStartupCmd={setStartupCmd}
+            remotePath={remotePath}
+            setRemotePath={setRemotePath}
+            jumpHostId={jumpHostId}
+            setJumpHostId={setJumpHostId}
+            jumpOptions={jumpOptions}
+            proxyType={proxyType}
+            setProxyType={setProxyType}
+            proxyHost={proxyHost}
+            setProxyHost={setProxyHost}
+            proxyPort={proxyPort}
+            setProxyPort={setProxyPort}
+            initial={initial}
+            pickKey={pickKey}
+            toNumber={toNumber}
+          />
+          </div>
+        )}
         </div>
 
-        <DialogFooter className="sm:justify-between">
+        {isCreate && tab === "local" ? (
+          <DialogFooter className="shrink-0">
+            <Button variant="outline" onClick={onClose}>
+              {t("hosts.cancel")}
+            </Button>
+          </DialogFooter>
+        ) : null}
+
+        {(!isCreate || tab === "remote") && (
+        <DialogFooter className="shrink-0 sm:justify-between">
           <Button
             type="button"
             variant="outline"
@@ -488,8 +384,350 @@ export function HostFormModal({
             </Button>
           </div>
         </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+type HostFormBodyProps = {
+  t: (key: string) => string;
+  name: string;
+  setName: (v: string) => void;
+  host: string;
+  setHost: (v: string) => void;
+  port: number;
+  setPort: (v: number) => void;
+  username: string;
+  setUsername: (v: string) => void;
+  authType: string;
+  setAuthType: (v: string) => void;
+  password: string;
+  setPassword: (v: string) => void;
+  privateKeyPath: string;
+  setPrivateKeyPath: (v: string) => void;
+  passphrase: string;
+  setPassphrase: (v: string) => void;
+  groupId: number | "";
+  setGroupId: (v: number | "") => void;
+  groups: GroupRow[];
+  tags: string;
+  setTags: (v: string) => void;
+  color: string;
+  setColor: (v: string) => void;
+  remark: string;
+  setRemark: (v: string) => void;
+  connectTimeout: number;
+  setConnectTimeout: (v: number) => void;
+  keepalive: number;
+  setKeepalive: (v: number) => void;
+  terminalType: string;
+  setTerminalType: (v: string) => void;
+  startupCmd: string;
+  setStartupCmd: (v: string) => void;
+  remotePath: string;
+  setRemotePath: (v: string) => void;
+  jumpHostId: number | "";
+  setJumpHostId: (v: number | "") => void;
+  jumpOptions: HostRow[];
+  proxyType: string;
+  setProxyType: (v: string) => void;
+  proxyHost: string;
+  setProxyHost: (v: string) => void;
+  proxyPort: number;
+  setProxyPort: (v: number) => void;
+  initial: HostRow | null;
+  pickKey: () => Promise<void>;
+  toNumber: (v: string | number, fallback: number) => number;
+};
+
+function HostFormBody(props: HostFormBodyProps) {
+  const {
+    t,
+    name,
+    setName,
+    host,
+    setHost,
+    port,
+    setPort,
+    username,
+    setUsername,
+    authType,
+    setAuthType,
+    password,
+    setPassword,
+    privateKeyPath,
+    setPrivateKeyPath,
+    passphrase,
+    setPassphrase,
+    groupId,
+    setGroupId,
+    groups,
+    tags,
+    setTags,
+    color,
+    setColor,
+    remark,
+    setRemark,
+    connectTimeout,
+    setConnectTimeout,
+    keepalive,
+    setKeepalive,
+    terminalType,
+    setTerminalType,
+    startupCmd,
+    setStartupCmd,
+    remotePath,
+    setRemotePath,
+    jumpHostId,
+    setJumpHostId,
+    jumpOptions,
+    proxyType,
+    setProxyType,
+    proxyHost,
+    setProxyHost,
+    proxyPort,
+    setProxyPort,
+    initial,
+    pickKey,
+    toNumber,
+  } = props;
+
+  return (
+    <div className="pr-1">
+      <Section title={t("hosts.sectionBasic")}>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label={t("hosts.name")}>
+            <Input value={name} onChange={(e) => setName(e.currentTarget.value)} />
+          </Field>
+          <div>
+            <Label className="mb-1.5 block">{t("hosts.color")}</Label>
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {HOST_COLORS.map((c) => (
+                <button
+                  key={c.value || "none"}
+                  type="button"
+                  title={"label" in c ? c.label : t("hosts.colorNone")}
+                  className={cn(
+                    "h-7 w-7 rounded-md border",
+                    color === c.value
+                      ? "border-primary ring-1 ring-primary"
+                      : "border-border",
+                    !c.value && "bg-muted",
+                  )}
+                  style={c.value ? { background: c.value } : undefined}
+                  onClick={() => setColor(c.value)}
+                />
+              ))}
+            </div>
+          </div>
+          <Field label={t("hosts.address")}>
+            <Input value={host} onChange={(e) => setHost(e.currentTarget.value)} />
+          </Field>
+          <Field label={t("hosts.port")}>
+            <Input
+              type="number"
+              min={1}
+              max={65535}
+              value={port}
+              onChange={(e) => setPort(toNumber(e.currentTarget.value, 22))}
+            />
+          </Field>
+          <Field label={t("hosts.username")}>
+            <Input
+              value={username}
+              onChange={(e) => setUsername(e.currentTarget.value)}
+            />
+          </Field>
+          <Field label={t("hosts.group")}>
+            <Select
+              value={groupId === "" ? NONE : String(groupId)}
+              onValueChange={(v) => setGroupId(v === NONE ? "" : Number(v))}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE}>{t("hosts.ungrouped")}</SelectItem>
+                {groups.map((g) => (
+                  <SelectItem key={g.id} value={String(g.id)}>
+                    {g.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+        </div>
+      </Section>
+
+      <Section title={t("hosts.sectionAuth")}>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label={t("hosts.authType")} className="sm:col-span-2">
+            <Select value={authType} onValueChange={setAuthType}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="password">{t("hosts.password")}</SelectItem>
+                <SelectItem value="privateKey">
+                  {t("hosts.privateKey")}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          {authType === "password" ? (
+            <Field label={t("hosts.password")} className="sm:col-span-2">
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.currentTarget.value)}
+                placeholder={initial?.password_enc ? "••••••••" : ""}
+              />
+            </Field>
+          ) : (
+            <>
+              <div className="sm:col-span-2">
+                <Label className="mb-1.5 block">{t("hosts.privateKey")}</Label>
+                <div className="flex flex-nowrap items-end gap-2">
+                  <Input
+                    className="flex-1 font-mono text-xs"
+                    value={privateKeyPath}
+                    onChange={(e) => setPrivateKeyPath(e.currentTarget.value)}
+                  />
+                  <Button variant="outline" onClick={() => void pickKey()}>
+                    {t("hosts.browse")}
+                  </Button>
+                </div>
+              </div>
+              <Field label={t("hosts.passphrase")} className="sm:col-span-2">
+                <Input
+                  type="password"
+                  value={passphrase}
+                  onChange={(e) => setPassphrase(e.currentTarget.value)}
+                  placeholder={initial?.passphrase_enc ? "••••••••" : ""}
+                />
+              </Field>
+            </>
+          )}
+        </div>
+      </Section>
+
+      <Section title={t("hosts.sectionConn")}>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label={t("hosts.connectTimeout")}>
+            <Input
+              type="number"
+              min={1}
+              value={connectTimeout}
+              onChange={(e) =>
+                setConnectTimeout(toNumber(e.currentTarget.value, 30))
+              }
+            />
+          </Field>
+          <Field label={t("hosts.keepalive")}>
+            <Input
+              type="number"
+              min={0}
+              value={keepalive}
+              onChange={(e) => setKeepalive(toNumber(e.currentTarget.value, 0))}
+            />
+          </Field>
+          <Field label={t("hosts.terminalType")}>
+            <Select value={terminalType} onValueChange={setTerminalType}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="xterm-256color">xterm-256color</SelectItem>
+                <SelectItem value="xterm">xterm</SelectItem>
+                <SelectItem value="vt100">vt100</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label={t("hosts.remotePath")}>
+            <Input
+              value={remotePath}
+              onChange={(e) => setRemotePath(e.currentTarget.value)}
+              placeholder="/home"
+            />
+          </Field>
+          <Field label={t("hosts.startupCmd")} className="sm:col-span-2">
+            <Input
+              value={startupCmd}
+              onChange={(e) => setStartupCmd(e.currentTarget.value)}
+              placeholder="cd /var/log && ls"
+            />
+          </Field>
+          <Field label={t("hosts.jumpHost")} className="sm:col-span-2">
+            <Select
+              value={jumpHostId === "" ? NONE : String(jumpHostId)}
+              onValueChange={(v) => setJumpHostId(v === NONE ? "" : Number(v))}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE}>{t("hosts.jumpNone")}</SelectItem>
+                {jumpOptions.map((h) => (
+                  <SelectItem key={h.id} value={String(h.id)}>
+                    {`${h.name || h.host} (${h.username}@${h.host})`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label={t("hosts.proxyType")}>
+            <Select value={proxyType} onValueChange={setProxyType}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE}>{t("hosts.proxyNone")}</SelectItem>
+                <SelectItem value="socks5">SOCKS5</SelectItem>
+                <SelectItem value="http">HTTP CONNECT</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label={t("hosts.proxyHost")}>
+            <Input
+              value={proxyHost}
+              disabled={proxyType === NONE}
+              onChange={(e) => setProxyHost(e.currentTarget.value)}
+              placeholder="127.0.0.1"
+            />
+          </Field>
+          <Field label={t("hosts.proxyPort")}>
+            <Input
+              type="number"
+              min={1}
+              max={65535}
+              disabled={proxyType === NONE}
+              value={proxyPort}
+              onChange={(e) => setProxyPort(toNumber(e.currentTarget.value, 1080))}
+            />
+          </Field>
+        </div>
+      </Section>
+
+      <Section title={t("hosts.sectionMeta")} last>
+        <div className="grid grid-cols-1 gap-3">
+          <Field label={t("hosts.tags")}>
+            <Input
+              value={tags}
+              onChange={(e) => setTags(e.currentTarget.value)}
+              placeholder={t("hosts.tagsHint")}
+            />
+          </Field>
+          <Field label={t("hosts.remark")}>
+            <Textarea
+              value={remark}
+              onChange={(e) => setRemark(e.currentTarget.value)}
+              rows={3}
+            />
+          </Field>
+        </div>
+      </Section>
+    </div>
   );
 }
 

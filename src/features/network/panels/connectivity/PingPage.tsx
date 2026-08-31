@@ -18,7 +18,7 @@ import { type PingSample, type PingSummary, pushPingSample } from "./types";
 export function PingPage() {
   const { t } = useTranslation();
   const [target, setTarget] = useState("");
-  const [count, setCount] = useState<number | null>(4);
+  const [count, setCount] = useState<number | null>(null);
   const [countText, setCountText] = useState("");
   const [lines, setLines] = useState<string[]>([]);
   const [samples, setSamples] = useState<PingSample[]>([]);
@@ -83,8 +83,7 @@ export function PingPage() {
     clear();
     setBusy(true);
     try {
-      const effectiveCount =
-        countText.trim() === "" ? 4 : count === null ? 0 : count;
+      const effectiveCount = count === null ? 0 : count;
       const id = await api.networkPing(host, effectiveCount);
       jobRef.current = id;
       setJobId(id);

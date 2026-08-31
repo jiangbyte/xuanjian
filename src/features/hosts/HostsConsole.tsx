@@ -9,9 +9,11 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { GroupSidebar } from "@/features/hosts/GroupSidebar";
+import { HOST_GROUP_LOCAL, HOST_GROUP_UNGROUPED } from "@/features/hosts/constants";
 import { HostCard } from "@/features/hosts/HostCard";
 import { HostFormModal } from "@/features/hosts/HostFormModal";
 import { HostToolbar } from "@/features/hosts/HostToolbar";
+import { LocalShellCard } from "@/features/hosts/LocalShellCard";
 import { BatchActionBar } from "@/features/share/BatchActionBar";
 import {
   createHost,
@@ -26,8 +28,9 @@ import {
 } from "@/lib/db";
 import { dialogs } from "@/lib/ui/dialogs";
 import { startRecordingForOpenTab } from "@/lib/session/recorder";
-import { connectSshHost } from "@/lib/session/connect";
+import { connectLocalShell, connectSshHost } from "@/lib/session/connect";
 import { exportToFile, formatImportToast, importFromFile } from "@/lib/share";
+import { api, type LocalShellInfo } from "@/lib/tauri";
 import {
   findHostByTarget,
   hostMatchesQuery,
@@ -35,11 +38,12 @@ import {
   type SshTarget,
 } from "@/lib/session/sshTarget";
 import { useUiStore } from "@/stores/ui";
-
+import { useSettingsStore } from "@/stores/settings";
 /** 主机管理控制台主组件 */
 export function HostsConsole() {
   const { t } = useTranslation();
   const [hosts, setHosts] = useState<HostRow[]>([]);
+  const [shells, setShells] = useState<LocalShellInfo[]>([]);
   const [groups, setGroups] = useState<GroupRow[]>([]);
   const [tags, setTags] = useState<TagRow[]>([]);
   const [editing, setEditing] = useState<HostRow | null>(null);
@@ -53,16 +57,19 @@ export function HostsConsole() {
   const addTab = useUiStore((s) => s.addTab);
   const updateTab = useUiStore((s) => s.updateTab);
   const navigate = useNavigate();
+  const defaultLocalShell = useSettingsStore((s) => s.defaultLocalShell);
 
   const reload = useCallback(async () => {
-    const [hostRows, groupRows, tagRows] = await Promise.all([
+    const [hostRows, groupRows, tagRows, shellRows] = await Promise.all([
       listHosts(),
       listGroups(),
       listTags(),
+      api.listLocalShells().catch(() => [] as LocalShellInfo[]),
     ]);
     setHosts(hostRows);
     setGroups(groupRows);
     setTags(tagRows);
+    setShells(shellRows);
   }, []);
 
   useEffect(() => {
@@ -85,14 +92,17 @@ export function HostsConsole() {
     return map;
   }, [hosts, groups]);
 
+  const isLocalGroup = filter.groupId === HOST_GROUP_LOCAL;
+
   const filtered = useMemo(() => {
+    if (isLocalGroup) return [];
     let list = [...hosts];
     const q = filter.search.trim();
     const searching = q.length > 0;
 
     if (searching) {
       list = list.filter((h) => hostMatchesQuery(h, q, sshTarget));
-    } else if (filter.groupId === -1) {
+    } else if (filter.groupId === HOST_GROUP_UNGROUPED) {
       list = list.filter((h) => h.group_id == null);
     } else if (filter.groupId != null) {
       list = list.filter((h) => h.group_id === filter.groupId);
@@ -113,7 +123,21 @@ export function HostsConsole() {
       return (a.last_connected_at ? 0 : 1) - (b.last_connected_at ? 0 : 1);
     });
     return list;
-  }, [hosts, filter, sshTarget]);
+  }, [hosts, filter, sshTarget, isLocalGroup]);
+
+  const filteredShells = useMemo(() => {
+    if (!isLocalGroup || filter.tag) return [];
+    const q = filter.search.trim().toLowerCase();
+    if (!q) return shells;
+    return shells.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        s.path.toLowerCase().includes(q) ||
+        s.id.toLowerCase().includes(q),
+    );
+  }, [shells, filter.search, filter.tag, isLocalGroup]);
+
+  const listTotal = isLocalGroup ? filteredShells.length : filtered.length;
 
   const matchedByTarget = useMemo(() => {
     if (!sshTarget) return null;
@@ -143,6 +167,16 @@ export function HostsConsole() {
       await reload();
     } catch (e) {
       updateTab(tabId, { status: "error" });
+      console.error(e);
+      await dialogs.alert(String(e));
+    }
+  };
+
+  const connectShell = async (shell: LocalShellInfo) => {
+    navigate("/terminal");
+    try {
+      await connectLocalShell(shell);
+    } catch (e) {
       console.error(e);
       await dialogs.alert(String(e));
     }
@@ -186,7 +220,8 @@ export function HostsConsole() {
         ? `${sshTarget.username}@${sshTarget.host}:${sshTarget.port}`
         : t("hosts.title");
     }
-    if (filter.groupId === -1) return t("hosts.ungrouped");
+    if (filter.groupId === HOST_GROUP_UNGROUPED) return t("hosts.ungrouped");
+    if (filter.groupId === HOST_GROUP_LOCAL) return t("hosts.localShells");
     if (filter.groupId != null) {
       return (
         groups.find((g) => g.id === filter.groupId)?.name || t("hosts.title")
@@ -237,6 +272,7 @@ export function HostsConsole() {
       />
 
       <BatchActionBar
+        disabled={isLocalGroup}
         selectedCount={selectedIds.size}
         totalCount={filtered.length}
         onSelectAll={() => setSelectedIds(new Set(filtered.map((h) => h.id)))}
@@ -290,6 +326,7 @@ export function HostsConsole() {
           groups={groups}
           groupCounts={groupCounts}
           hostTotal={hosts.length}
+          localShellCount={shells.length}
           groupId={filter.groupId}
           onSelectGroup={(id) => setHostFilter({ groupId: id })}
           onReload={reload}
@@ -301,38 +338,50 @@ export function HostsConsole() {
               {activeGroupLabel}
             </h2>
             <p className="shrink-0 text-xs text-muted-foreground">
-              {t("hosts.hostsCount", { count: filtered.length })}
+              {t("hosts.hostsCount", { count: listTotal })}
             </p>
           </div>
-          {filtered.length === 0 ? (
+          {listTotal === 0 ? (
             <div className="flex flex-1 items-center justify-center p-10">
               <span className="text-sm text-muted-foreground">
-                {t("hosts.empty")}
+                {isLocalGroup ? t("hosts.noLocalShells") : t("hosts.empty")}
               </span>
             </div>
           ) : (
             <div className="min-h-0 flex-1 overflow-auto">
-              {filtered.map((host) => (
-                <HostCard
-                  key={host.id}
-                  host={host}
-                  selected={selectedIds.has(host.id)}
-                  onSelectedChange={(sel) => {
-                    setSelectedIds((prev) => {
-                      const next = new Set(prev);
-                      if (sel) next.add(host.id);
-                      else next.delete(host.id);
-                      return next;
-                    });
-                  }}
-                  onConnect={(h) => connectHost(h).catch(console.error)}
-                  onEdit={(h) => {
-                    setEditing(h);
-                    setCreating(false);
-                  }}
-                  onReload={reload}
-                />
-              ))}
+              {isLocalGroup
+                ? filteredShells.map((shell) => (
+                    <LocalShellCard
+                      key={shell.id}
+                      shell={shell}
+                      isDefault={
+                        shell.id === defaultLocalShell ||
+                        (!defaultLocalShell && shell.isDefault)
+                      }
+                      onConnect={(s) => connectShell(s).catch(console.error)}
+                    />
+                  ))
+                : filtered.map((host) => (
+                    <HostCard
+                      key={host.id}
+                      host={host}
+                      selected={selectedIds.has(host.id)}
+                      onSelectedChange={(sel) => {
+                        setSelectedIds((prev) => {
+                          const next = new Set(prev);
+                          if (sel) next.add(host.id);
+                          else next.delete(host.id);
+                          return next;
+                        });
+                      }}
+                      onConnect={(h) => connectHost(h).catch(console.error)}
+                      onEdit={(h) => {
+                        setEditing(h);
+                        setCreating(false);
+                      }}
+                      onReload={reload}
+                    />
+                  ))}
             </div>
           )}
         </div>
@@ -357,6 +406,11 @@ export function HostsConsole() {
             setCreatePrefill(null);
             setHostFilter({ search: "" });
             await reload();
+          }}
+          onConnectShell={(shell) => {
+            setCreating(false);
+            setCreatePrefill(null);
+            void connectShell(shell);
           }}
         />
       )}
