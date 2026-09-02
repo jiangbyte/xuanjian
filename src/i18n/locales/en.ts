@@ -612,6 +612,8 @@ export default {
     dockerEmpty: "Nothing here",
     dockerUnavailable:
       "Docker is unavailable in this session (not installed, not running, or no permission)",
+    dockerPermissionDenied:
+      "Docker is installed but this process cannot access it. Ensure the daemon is running and your user is in the docker group, then sign in again or restart the app.",
     dockerStart: "Start",
     dockerStop: "Stop",
     dockerRestart: "Restart",

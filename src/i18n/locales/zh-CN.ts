@@ -594,6 +594,8 @@ export default {
     dockerExited: "已退出",
     dockerEmpty: "暂无数据",
     dockerUnavailable: "当前会话无法使用 Docker（未安装、未启动或无权限）",
+    dockerPermissionDenied:
+      "Docker 已安装但当前进程无访问权限。请确认 docker 服务已启动，并将用户加入 docker 组后重新登录（或重启应用）。",
     dockerStart: "启动",
     dockerStop: "停止",
     dockerRestart: "重启",

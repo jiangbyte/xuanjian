@@ -376,6 +376,45 @@ fn output_to_string(output: std::process::Output) -> String {
     text
 }
 
+/// Linux 本地 exec 时，若当前进程未携带 docker 组（常见于加入组后未重新登录），
+/// 通过 `sg docker` 以组成员身份执行 docker CLI。
+#[cfg(not(target_os = "linux"))]
+fn linux_wrap_docker_command(command: &str) -> String {
+    command.to_string()
+}
+
+#[cfg(target_os = "linux")]
+fn linux_wrap_docker_command(command: &str) -> String {
+    let trimmed = command.trim_start();
+    if !(trimmed.starts_with("docker ") || trimmed == "docker") {
+        return command.to_string();
+    }
+    if !linux_user_in_docker_group() {
+        return command.to_string();
+    }
+    let escaped = command.replace('\'', "'\\''");
+    format!("sg docker -c '{escaped}'")
+}
+
+#[cfg(target_os = "linux")]
+fn linux_user_in_docker_group() -> bool {
+    use std::process::Command;
+    let Ok(out) = Command::new("getent").args(["group", "docker"]).output() else {
+        return false;
+    };
+    let text = String::from_utf8_lossy(&out.stdout);
+    let Some(user) = std::env::var_os("USER")
+        .or_else(|| std::env::var_os("LOGNAME"))
+        .or_else(|| std::env::var_os("USERNAME"))
+    else {
+        return false;
+    };
+    let user = user.to_string_lossy();
+    text.split(':')
+        .nth(3)
+        .is_some_and(|members| members.split(',').any(|m| m == user.as_ref()))
+}
+
 /// 按与交互 Shell 同类的环境执行一次性命令（供 session_exec 使用）。
 pub async fn exec_with_shell(
     shell_id: &str,
@@ -426,7 +465,8 @@ pub async fn exec_with_shell(
     #[cfg(not(target_os = "windows"))]
     {
         let _ = (shell_id, shell_args);
-        let output = unix_exec_command(shell_path, command)
+        let command = linux_wrap_docker_command(command);
+        let output = unix_exec_command(shell_path, &command)
             .output()
             .await
             .context("local exec")?;
@@ -513,7 +553,8 @@ pub async fn exec_stream_with_shell(
     #[cfg(not(target_os = "windows"))]
     let mut child = {
         let _ = (shell_id, shell_args);
-        unix_exec_command(shell_path, command)
+        let command = linux_wrap_docker_command(command);
+        unix_exec_command(shell_path, &command)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .kill_on_drop(true)

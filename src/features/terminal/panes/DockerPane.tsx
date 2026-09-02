@@ -167,6 +167,13 @@ function looksLikeDockerError(raw: string) {
   );
 }
 
+function dockerErrorMessage(raw: string, t: (key: string) => string) {
+  if (/permission denied while trying to connect/i.test(raw)) {
+    return t("termTab.dockerPermissionDenied");
+  }
+  return t("termTab.dockerUnavailable");
+}
+
 /** 仅允许可作为裸 shell 参数的 docker ID/名称 */
 function safeArg(value: string): string {
   const v = value.trim();
@@ -500,7 +507,7 @@ export function DockerPane({
         );
         if (looksLikeDockerError(raw) && !raw.includes("{")) {
           setContainers([]);
-          setError(t("termTab.dockerUnavailable"));
+          setError(dockerErrorMessage(raw, t));
           return;
         }
         const rows = parseJsonLines<Record<string, unknown>>(raw).map(
@@ -518,7 +525,7 @@ export function DockerPane({
         );
         if (looksLikeDockerError(raw) && !raw.includes("{")) {
           setImages([]);
-          setError(t("termTab.dockerUnavailable"));
+          setError(dockerErrorMessage(raw, t));
           return;
         }
         const rows = parseJsonLines<Record<string, string>>(raw).map((row) => ({
@@ -540,7 +547,7 @@ export function DockerPane({
         );
         if (looksLikeDockerError(raw) && !raw.includes("{")) {
           setNetworks([]);
-          setError(t("termTab.dockerUnavailable"));
+          setError(dockerErrorMessage(raw, t));
           return;
         }
         const rows = parseJsonLines<Record<string, string>>(raw).map((row) => ({
@@ -560,7 +567,7 @@ export function DockerPane({
       );
       if (looksLikeDockerError(raw) && !raw.includes("{")) {
         setVolumes([]);
-        setError(t("termTab.dockerUnavailable"));
+        setError(dockerErrorMessage(raw, t));
         return;
       }
       const rows = parseJsonLines<Record<string, string>>(raw).map((row) => ({
